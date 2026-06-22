@@ -16,7 +16,7 @@
   <table>
     <thead>
       <tr>
-        <th>Responsável</th><th>Unidade</th><th>Tipo</th><th>E-mail</th><th>Status</th><th>Ações</th>
+        <th>Responsável</th><th>Unidade</th><th>Tipo</th><th>Usuário</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody>
@@ -25,7 +25,7 @@
         <td>{{ user.responsible_name }}</td>
         <td>{{ user.organization_name }}</td>
         <td>{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
-        <td>{{ user.email }}</td>
+        <td>{{ user.username }}</td>
         <td><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
         <td class="actions-cell">
           {% if user.status == 'pending' and not user.is_admin %}

@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import smtplib
 import sqlite3
 import string
@@ -118,6 +119,7 @@ class User:
     id: int
     responsible_name: str
     organization_name: str
+    username: str
     email: str
     password_hash: str
     role: str
@@ -267,6 +269,29 @@ def now_iso() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def normalize_username(value: str) -> str:
+    value = (value or "").strip().lower()
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    value = re.sub(r"\s+", "_", value)
+    value = re.sub(r"[^a-z0-9._-]", "", value)
+    return value
+
+
+def valid_username(value: str) -> bool:
+    username = normalize_username(value)
+    return 3 <= len(username) <= 40 and bool(re.fullmatch(r"[a-z0-9][a-z0-9._-]*", username))
+
+
+def synthetic_email_for_username(username: str) -> str:
+    safe = normalize_username(username) or "usuario"
+    return f"{safe}@usuario.local"
+
+
+def is_real_email(value: str | None) -> bool:
+    value = (value or "").strip().lower()
+    return "@" in value and not value.endswith("@usuario.local")
+
+
 def row_to_user(row: Any | None) -> User | None:
     if row is None:
         return None
@@ -274,7 +299,8 @@ def row_to_user(row: Any | None) -> User | None:
         id=int(row["id"]),
         responsible_name=row["responsible_name"] or "",
         organization_name=row["organization_name"] or "",
-        email=row["email"] or "",
+        username=(row["username"] if "username" in row.keys() else "") or normalize_username((row["email"] if "email" in row.keys() else "") or row["responsible_name"] or "usuario"),
+        email=(row["email"] if "email" in row.keys() else "") or "",
         password_hash=row["password_hash"] or "",
         role=row["role"] or "base",
         status=row["status"] or "pending",
@@ -348,6 +374,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 responsible_name TEXT NOT NULL,
                 organization_name TEXT NOT NULL,
+                username TEXT NOT NULL UNIQUE,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'base',
@@ -437,6 +464,24 @@ def init_db() -> None:
         if "page_permissions_configured" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN page_permissions_configured INTEGER NOT NULL DEFAULT 0")
 
+        user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "username" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN username TEXT")
+            existing_users = conn.execute("SELECT id, responsible_name, email FROM users").fetchall()
+            used_usernames: set[str] = set()
+            for existing_user in existing_users:
+                base_username = normalize_username((existing_user["email"] or "").split("@")[0] or existing_user["responsible_name"] or f"usuario{existing_user['id']}")
+                if not base_username:
+                    base_username = f"usuario{existing_user['id']}"
+                candidate = base_username
+                suffix = 2
+                while candidate in used_usernames:
+                    candidate = f"{base_username}{suffix}"
+                    suffix += 1
+                used_usernames.add(candidate)
+                conn.execute("UPDATE users SET username = ? WHERE id = ?", (candidate, existing_user["id"]))
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
+
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "min_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN min_stock INTEGER")
@@ -460,17 +505,18 @@ def init_db() -> None:
 
 
 def seed_initial_data() -> None:
-    admin_email = os.getenv("ADMIN_EMAIL", os.getenv("SEED_ADMIN_EMAIL", "admin@jtinsumos.com")).strip().lower()
+    admin_username = normalize_username(os.getenv("ADMIN_USERNAME", os.getenv("SEED_ADMIN_USERNAME", "admin")))
+    admin_email = os.getenv("ADMIN_EMAIL", os.getenv("SEED_ADMIN_EMAIL", synthetic_email_for_username(admin_username))).strip().lower()
     admin_password = os.getenv("ADMIN_PASSWORD", os.getenv("SEED_ADMIN_PASSWORD", "Admin@123"))
     with db_connect() as conn:
         user_count = conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
         if user_count == 0:
             conn.execute(
                 """
-                INSERT INTO users (responsible_name, organization_name, email, password_hash, role, status, created_at)
-                VALUES (?, ?, ?, ?, 'admin', 'approved', ?)
+                INSERT INTO users (responsible_name, organization_name, username, email, password_hash, role, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'admin', 'approved', ?)
                 """,
-                ("Administrador", "J&T Express", admin_email, generate_password_hash(admin_password), now_iso()),
+                ("Administrador", "J&T Express", admin_username, admin_email, generate_password_hash(admin_password), now_iso()),
             )
 
         product_count = conn.execute("SELECT COUNT(*) AS total FROM products").fetchone()["total"]
@@ -510,9 +556,19 @@ def get_user(user_id: int | None) -> User | None:
     return row_to_user(row)
 
 
-def get_user_by_email(email: str) -> User | None:
+def get_user_by_username(username: str) -> User | None:
+    username = normalize_username(username)
+    if not username:
+        return None
     with db_connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE lower(email) = lower(?)", (email.strip(),)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE lower(username) = lower(?)", (username,)).fetchone()
+    return row_to_user(row)
+
+
+def get_user_by_email(email: str) -> User | None:
+    # Mantido apenas para compatibilidade com bancos antigos/rotas antigas.
+    with db_connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE lower(email) = lower(?)", ((email or "").strip().lower(),)).fetchone()
     return row_to_user(row)
 
 
@@ -902,7 +958,7 @@ def send_admin_login_code(user: User, code: str) -> bool:
         "Caso não tenha solicitado, ignore este e-mail."
     )
 
-    if email_is_configured():
+    if email_is_configured() and is_real_email(user.email):
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = MAIL_DEFAULT_SENDER
@@ -930,7 +986,7 @@ def send_admin_login_code(user: User, code: str) -> bool:
             return False
 
     print("=" * 80)
-    print(f"CÓDIGO DE CONFIRMAÇÃO DE LOGIN DEV para {user.email}: {code}")
+    print(f"CÓDIGO DE CONFIRMAÇÃO DE LOGIN DEV para {user.username}: {code}")
     print("=" * 80)
     flash(f"Insira o código para confirmar o seu login: {code}", "info")
     return True
@@ -1113,7 +1169,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     requester = supply_request.user
     requester_name = requester.responsible_name if requester else "-"
     requester_org = requester.organization_name if requester else "-"
-    requester_email = requester.email if requester else "-"
+    requester_username = requester.username if requester else "-"
     requester_role = requester.role if requester else "base"
     show_prices = viewer.is_admin or viewer.role == "franchise"
 
@@ -1125,7 +1181,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
         [Paragraph("SOLICITANTE", styles["JTMetaLabel"]), Paragraph("BASE / FRANQUIA", styles["JTMetaLabel"]), Paragraph("STATUS ATUAL", styles["JTMetaLabel"])],
         [Paragraph(requester_name, styles["JTMeta"]), Paragraph(requester_org, styles["JTMeta"]), Paragraph(status_label(supply_request.status), styles["JTCellBold"])],
         [Paragraph("E-MAIL", styles["JTMetaLabel"]), Paragraph("TIPO DE ACESSO", styles["JTMetaLabel"]), Paragraph("DATA DA SOLICITAÇÃO", styles["JTMetaLabel"])],
-        [Paragraph(requester_email, styles["JTMeta"]), Paragraph("Administrador" if requester_role == "admin" else ("Base" if requester_role == "base" else "Franquia"), styles["JTMeta"]), Paragraph(supply_request.created_at.strftime("%d/%m/%Y %H:%M"), styles["JTMeta"])],
+        [Paragraph(requester_username, styles["JTMeta"]), Paragraph("Administrador" if requester_role == "admin" else ("Base" if requester_role == "base" else "Franquia"), styles["JTMeta"]), Paragraph(supply_request.created_at.strftime("%d/%m/%Y %H:%M"), styles["JTMeta"])],
     ]
     meta_table = Table(meta_data, colWidths=[57 * mm, 57 * mm, 57 * mm])
     meta_table.setStyle(TableStyle([
@@ -1251,12 +1307,12 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+        username = normalize_username(request.form.get("username", ""))
         password = request.form.get("password", "")
-        user = get_user_by_email(email)
+        user = get_user_by_username(username)
 
         if user is None or not check_password_hash(user.password_hash, password):
-            flash("E-mail ou senha inválidos.", "danger")
+            flash("Nome de usuário ou senha inválidos.", "danger")
             return redirect(url_for("login"))
 
         if not user.is_approved:
@@ -1323,7 +1379,7 @@ def verify_admin():
         flash("Código inválido ou expirado.", "danger")
         return redirect(url_for("verify_admin"))
 
-    return render_template("verify_admin.html", email=user.email, minutes=ADMIN_CODE_MINUTES)
+    return render_template("verify_admin.html", username=user.username, minutes=ADMIN_CODE_MINUTES)
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -1332,32 +1388,36 @@ def register():
         responsible_name = request.form.get("responsible_name", "").strip()
         organization_name = request.form.get("organization_name", "").strip()
         role = request.form.get("role", "base").strip()
-        email = request.form.get("email", "").strip().lower()
+        username = normalize_username(request.form.get("username", ""))
+        email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
 
         if role not in ["base", "franchise"]:
             role = "base"
-        if not responsible_name or not organization_name or not email or not password:
+        if not responsible_name or not organization_name or not username or not password:
             flash("Preencha todos os campos obrigatórios.", "warning")
             return redirect(url_for("register"))
-        if get_user_by_email(email) is not None:
-            flash("Já existe cadastro com esse e-mail.", "warning")
+        if not valid_username(username):
+            flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "warning")
+            return redirect(url_for("register"))
+        if get_user_by_username(username) is not None:
+            flash("Já existe cadastro com esse nome de usuário.", "warning")
             return redirect(url_for("register"))
 
         try:
             with db_connect() as conn:
                 conn.execute(
                     """
-                    INSERT INTO users (responsible_name, organization_name, email, password_hash, role, status, created_at)
-                    VALUES (?, ?, ?, ?, ?, 'pending', ?)
+                    INSERT INTO users (responsible_name, organization_name, username, email, password_hash, role, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
                     """,
-                    (responsible_name, organization_name, email, generate_password_hash(password), role, now_iso()),
+                    (responsible_name, organization_name, username, email, generate_password_hash(password), role, now_iso()),
                 )
                 conn.commit()
             flash("Cadastro enviado. Aguarde aprovação de um administrador.", "success")
             return redirect(url_for("login"))
         except sqlite3.IntegrityError:
-            flash("Já existe cadastro com esse e-mail.", "warning")
+            flash("Já existe cadastro com esse nome de usuário.", "warning")
             return redirect(url_for("register"))
 
     return render_template("register.html")
@@ -1506,7 +1566,8 @@ def admin_user_new():
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
         organization_name = request.form.get("organization_name", "").strip()
-        email = request.form.get("email", "").strip().lower()
+        username = normalize_username(request.form.get("username", ""))
+        email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
         role = request.form.get("role", "base").strip()
         status = request.form.get("status", "approved").strip()
@@ -1519,20 +1580,23 @@ def admin_user_new():
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
-        if not responsible_name or not organization_name or not email or not password:
-            flash("Preencha responsável, unidade, e-mail e senha.", "danger")
+        if not responsible_name or not organization_name or not username or not password:
+            flash("Preencha responsável, unidade, nome de usuário e senha.", "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
-        if get_user_by_email(email) is not None:
-            flash("Já existe usuário cadastrado com este e-mail.", "danger")
+        if not valid_username(username):
+            flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+        if get_user_by_username(username) is not None:
+            flash("Já existe usuário cadastrado com este nome de usuário.", "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
 
         with db_connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO users (responsible_name, organization_name, email, password_hash, role, status, created_at, page_permissions_configured)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO users (responsible_name, organization_name, username, email, password_hash, role, status, created_at, page_permissions_configured)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
-                (responsible_name, organization_name, email, generate_password_hash(password), role, status, now_iso()),
+                (responsible_name, organization_name, username, email, generate_password_hash(password), role, status, now_iso()),
             )
             new_user_id = get_cursor_lastrowid(cursor)
             if new_user_id is None:
@@ -1561,7 +1625,8 @@ def admin_user_edit(user_id: int):
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
         organization_name = request.form.get("organization_name", "").strip()
-        email = request.form.get("email", "").strip().lower()
+        username = normalize_username(request.form.get("username", ""))
+        email = synthetic_email_for_username(username)
         role = request.form.get("role", "base").strip()
         status = request.form.get("status", "approved").strip()
         password = request.form.get("password", "")
@@ -1583,36 +1648,39 @@ def admin_user_edit(user_id: int):
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
 
-        if not responsible_name or not organization_name or not email:
-            flash("Preencha responsável, unidade e e-mail.", "danger")
+        if not responsible_name or not organization_name or not username:
+            flash("Preencha responsável, unidade e nome de usuário.", "danger")
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+        if not valid_username(username):
+            flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
             return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
 
         with db_connect() as conn:
             existing = conn.execute(
-                "SELECT id FROM users WHERE lower(email) = lower(?) AND id <> ?",
-                (email, user_id),
+                "SELECT id FROM users WHERE lower(username) = lower(?) AND id <> ?",
+                (username, user_id),
             ).fetchone()
             if existing is not None:
-                flash("Já existe outro usuário cadastrado com este e-mail.", "danger")
+                flash("Já existe outro usuário cadastrado com este nome de usuário.", "danger")
                 return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
 
             if password:
                 conn.execute(
                     """
                     UPDATE users
-                       SET responsible_name = ?, organization_name = ?, email = ?, password_hash = ?, role = ?, status = ?, updated_at = ?
+                       SET responsible_name = ?, organization_name = ?, username = ?, email = ?, password_hash = ?, role = ?, status = ?, updated_at = ?
                      WHERE id = ?
                     """,
-                    (responsible_name, organization_name, email, generate_password_hash(password), role, status, now_iso(), user_id),
+                    (responsible_name, organization_name, username, email, generate_password_hash(password), role, status, now_iso(), user_id),
                 )
             else:
                 conn.execute(
                     """
                     UPDATE users
-                       SET responsible_name = ?, organization_name = ?, email = ?, role = ?, status = ?, updated_at = ?
+                       SET responsible_name = ?, organization_name = ?, username = ?, email = ?, role = ?, status = ?, updated_at = ?
                      WHERE id = ?
                     """,
-                    (responsible_name, organization_name, email, role, status, now_iso(), user_id),
+                    (responsible_name, organization_name, username, email, role, status, now_iso(), user_id),
                 )
             save_user_page_permissions(conn, user_id, role, selected_pages)
             conn.commit()

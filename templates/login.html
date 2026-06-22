@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}Login • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Acesso ao Portal{% endblock %}
-{% block page_subtitle %}Entre com seu e-mail e senha. Se sua conta exigir confirmação, enviaremos um código para concluir o login.{% endblock %}
+{% block page_subtitle %}Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código para concluir o login.{% endblock %}
 {% block content %}
 <section class="auth-card card">
   <form method="post" class="form-grid">
     <label>
-      E-mail
-      <input name="email" type="email" placeholder="seu.email@jt.com" required>
+      Nome de usuário
+      <input name="username" type="text" placeholder="Ex.: admin" autocomplete="username" required>
     </label>
     <label>
       Senha

@@ -14,8 +14,8 @@
       <input name="organization_name" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: MG BHZ / Administração" required>
     </label>
     <label>
-      E-mail de acesso
-      <input name="email" type="email" value="{{ user.email if user else '' }}" placeholder="usuario@jt.com" required>
+      Nome de usuário
+      <input name="username" type="text" value="{{ user.username if user else '' }}" placeholder="Ex.: mg_bhz" autocomplete="username" required>
     </label>
     <label>
       Senha {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
