@@ -359,9 +359,83 @@
 "×": "×"
 };
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
-  const MAX_TEXT_NODES_PER_PASS = 1800;
-  const MAX_ATTR_NODES_PER_PASS = 800;
+  const VIEWPORT_PADDING = 520;
+  const MAX_TEXT_NODES_PER_RUN = 2600;
+  const MAX_ATTR_NODES_PER_RUN = 1800;
+  const originalTitle = document.title;
+  let scheduled = false;
+
+  const fallbackTerms = [
+    ['Solicitações pendentes', '待處理申請'],
+    ['Minhas solicitações', '我的申請'],
+    ['Painel administrativo', '管理面板'],
+    ['Painel admin', '管理面板'],
+    ['Gestão de estoque', '庫存管理'],
+    ['Gestão de Estoque', '庫存管理'],
+    ['Portal de Insumos', '耗材入口網站'],
+    ['Solicitar insumos', '申請耗材'],
+    ['Solicitar cadastro', '申請註冊'],
+    ['Nome de usuário', '使用者名稱'],
+    ['Unidade de medida', '計量單位'],
+    ['Valor unitário', '單價'],
+    ['Estoque disponível', '可用庫存'],
+    ['Limite para franquias', '加盟店限制'],
+    ['Limite para bases', '基地限制'],
+    ['Estoque mínimo', '最低庫存'],
+    ['Estoque máximo', '最高庫存'],
+    ['Novo produto', '新增產品'],
+    ['Editar produto', '編輯產品'],
+    ['Baixar PDF', '下載 PDF'],
+    ['Exportar planilha', '匯出試算表'],
+    ['Importar dados', '匯入資料'],
+    ['Produto ativo', '產品啟用'],
+    ['Confirmação de login', '登入確認'],
+    ['Código de confirmação', '確認代碼'],
+    ['Confirmar login', '確認登入'],
+    ['Usuários', '使用者'],
+    ['Produtos', '產品'],
+    ['Solicitações', '申請單'],
+    ['Pendentes', '待處理'],
+    ['Atendidas', '已處理'],
+    ['Responsável', '負責人'],
+    ['Categoria', '類別'],
+    ['Descrição', '描述'],
+    ['Quantidade', '數量'],
+    ['Observações', '備註'],
+    ['Observação', '備註'],
+    ['Status', '狀態'],
+    ['Unidade', '單位'],
+    ['Produto', '產品'],
+    ['Estoque', '庫存'],
+    ['Limite', '限制'],
+    ['Senha', '密碼'],
+    ['Entrar', '登入'],
+    ['Sair', '登出'],
+    ['Voltar', '返回'],
+    ['Salvar', '儲存'],
+    ['Cancelar', '取消'],
+    ['Editar', '編輯'],
+    ['Excluir', '刪除'],
+    ['Aprovar', '核准'],
+    ['Recusar', '拒絕'],
+    ['Atualizar', '更新'],
+    ['Adicionar', '新增'],
+    ['Limpar', '清除'],
+    ['Data', '日期'],
+    ['Itens', '項目'],
+    ['Total', '總計'],
+    ['Valor', '價格'],
+    ['Ações', '操作'],
+    ['Ação', '操作'],
+    ['Tipo', '類型'],
+    ['Base', '基地'],
+    ['Franquia', '加盟店'],
+    ['Admin', '管理員'],
+    ['Ativo', '啟用'],
+    ['Inativo', '停用']
+  ].sort(function (a, b) { return b[0].length - a[0].length; });
 
   function currentLanguage() {
     return localStorage.getItem(STORAGE_KEY) === 'zh-Hant' ? 'zh-Hant' : 'pt-BR';
@@ -370,6 +444,17 @@
   function withWhitespace(original, translated) {
     const text = String(original || '');
     return (text.match(/^\s*/) || [''])[0] + translated + (text.match(/\s*$/) || [''])[0];
+  }
+
+  function translateFallback(core) {
+    let out = core;
+    let changed = false;
+    fallbackTerms.forEach(function (pair) {
+      if (out.indexOf(pair[0]) === -1) return;
+      out = out.split(pair[0]).join(pair[1]);
+      changed = true;
+    });
+    return changed ? out : core;
   }
 
   function translateCore(core) {
@@ -398,7 +483,7 @@
     if ((match = core.match(/^Mín\.?:\s*(.+)\s*•\s*Máx\.?:\s*(.+)$/))) return `最低：${match[1]} • 最高：${match[2]}`;
     if ((match = core.match(/^Importação concluída:\s*(.+)$/))) return `匯入完成：${match[1]}`;
     if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `庫存不足，無法核准：${match[1]}`;
-    return core;
+    return translateFallback(core);
   }
 
   function t(value) {
@@ -415,7 +500,26 @@
     if (el.closest('[data-no-i18n]')) return true;
     const tag = elementTag(el);
     if (SKIP_TAGS.has(tag)) return true;
-    return !!el.closest('script,style,textarea,noscript,canvas,svg,code,pre');
+    if (el.isContentEditable) return true;
+    return !!el.closest('script,style,textarea,noscript,canvas,svg,code,pre,[data-no-i18n]');
+  }
+
+  function isVisibleOrNear(el) {
+    if (!el || el === document.documentElement || el === document.body) return true;
+    if (shouldSkipElement(el)) return false;
+    const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+    const rects = el.getClientRects ? el.getClientRects() : [];
+    if (!rects || !rects.length) return false;
+    const height = window.innerHeight || document.documentElement.clientHeight || 800;
+    const width = window.innerWidth || document.documentElement.clientWidth || 1200;
+    for (let i = 0; i < rects.length; i += 1) {
+      const r = rects[i];
+      if (r.bottom >= -VIEWPORT_PADDING && r.top <= height + VIEWPORT_PADDING && r.right >= -VIEWPORT_PADDING && r.left <= width + VIEWPORT_PADDING) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function shouldSkipTextNode(node) {
@@ -425,41 +529,55 @@
     return !String(node.nodeValue || '').trim();
   }
 
-  function processTextNode(node, forceStore) {
+  function getOriginalText(node) {
+    if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+    return originalText.get(node) || '';
+  }
+
+  function processTextNode(node) {
     if (shouldSkipTextNode(node)) return;
-    if (forceStore || !originalText.has(node)) originalText.set(node, node.nodeValue);
-    const original = originalText.get(node) || '';
+    const parent = node.parentElement;
+    if (!isVisibleOrNear(parent)) return;
+    const original = getOriginalText(node);
     const next = currentLanguage() === 'zh-Hant' ? t(original) : original;
     if (node.nodeValue !== next) node.nodeValue = next;
   }
 
-  function processAttributes(el, forceStore) {
+  function processAttributes(el) {
     if (!el || !el.getAttribute || shouldSkipElement(el)) return;
+    if (!isVisibleOrNear(el)) return;
     ATTRS.forEach(function (attr) {
       if (!el.hasAttribute(attr)) return;
-      const key = 'data-i18n-original-' + attr;
-      if (forceStore || !el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || '');
+      const key = STORAGE_ATTR_PREFIX + attr;
+      if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || '');
       const original = el.getAttribute(key) || '';
       const next = currentLanguage() === 'zh-Hant' ? t(original) : original;
       if (el.getAttribute(attr) !== next) el.setAttribute(attr, next);
     });
+    const tag = elementTag(el);
+    const type = String(el.getAttribute('type') || '').toLowerCase();
+    if (tag === 'input' && ['button', 'submit', 'reset'].indexOf(type) !== -1 && el.hasAttribute('value')) {
+      const key = STORAGE_ATTR_PREFIX + 'value';
+      if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute('value') || '');
+      const original = el.getAttribute(key) || '';
+      const next = currentLanguage() === 'zh-Hant' ? t(original) : original;
+      if (el.getAttribute('value') !== next) el.setAttribute('value', next);
+    }
   }
 
-  function processNode(node, forceStore) {
-    if (!node) return;
-    const target = node.nodeType === Node.DOCUMENT_NODE ? (document.body || document.documentElement) : node;
-
-    if (target.nodeType === Node.TEXT_NODE) {
-      processTextNode(target, forceStore);
-      return;
-    }
-    if (target.nodeType !== Node.ELEMENT_NODE) return;
+  function processVisible(rootNode) {
+    const target = rootNode && rootNode.nodeType ? rootNode : (document.body || document.documentElement);
+    if (!target) return;
 
     let textCount = 0;
     let attrCount = 0;
 
-    processAttributes(target, forceStore);
-    attrCount += 1;
+    if (target.nodeType === Node.TEXT_NODE) {
+      processTextNode(target);
+      return;
+    }
+
+    if (target.nodeType === Node.ELEMENT_NODE) processAttributes(target);
 
     const walker = document.createTreeWalker(
       target,
@@ -477,14 +595,18 @@
     let current = walker.currentNode;
     while (current) {
       if (current.nodeType === Node.ELEMENT_NODE) {
-        if (attrCount < MAX_ATTR_NODES_PER_PASS) processAttributes(current, forceStore);
+        if (attrCount < MAX_ATTR_NODES_PER_RUN) processAttributes(current);
         attrCount += 1;
       } else if (current.nodeType === Node.TEXT_NODE) {
-        if (textCount < MAX_TEXT_NODES_PER_PASS) processTextNode(current, forceStore);
+        if (textCount < MAX_TEXT_NODES_PER_RUN) processTextNode(current);
         textCount += 1;
       }
       current = walker.nextNode();
     }
+  }
+
+  function updateDocumentTitle() {
+    document.title = currentLanguage() === 'zh-Hant' ? t(originalTitle) : originalTitle;
   }
 
   function updateButton() {
@@ -501,31 +623,68 @@
     root.setAttribute('data-language', currentLanguage());
   }
 
-  function applyLanguage(lang) {
+  function dispatchLanguageChange() {
+    window.dispatchEvent(new CustomEvent('jt-language-change', { detail: { language: currentLanguage() } }));
+  }
+
+  function runVisibleTranslation(rootNode) {
     if (isApplying) return;
     isApplying = true;
     const btn = document.getElementById('languageToggle');
     if (btn) btn.disabled = true;
 
-    localStorage.setItem(STORAGE_KEY, lang === 'zh-Hant' ? 'zh-Hant' : 'pt-BR');
-    setRootLanguage();
-    updateButton();
-
-    window.requestAnimationFrame(function () {
+    const runner = function () {
       try {
-        processNode(document.body || document.documentElement, false);
+        updateDocumentTitle();
+        processVisible(rootNode || document.body || document.documentElement);
       } finally {
         if (btn) btn.disabled = false;
         isApplying = false;
-        window.dispatchEvent(new CustomEvent('jt-language-change', { detail: { language: currentLanguage() } }));
+        dispatchLanguageChange();
       }
-    });
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runner, { timeout: 450 });
+    } else {
+      window.requestAnimationFrame(runner);
+    }
   }
 
-  function refresh() {
-    if (isApplying) return;
-    processNode(document.body || document.documentElement, false);
+  function scheduleVisibleTranslation(rootNode, delay) {
+    if (scheduled) return;
+    scheduled = true;
+    window.setTimeout(function () {
+      scheduled = false;
+      runVisibleTranslation(rootNode);
+    }, typeof delay === 'number' ? delay : 60);
+  }
+
+  function applyLanguage(lang) {
+    localStorage.setItem(STORAGE_KEY, lang === 'zh-Hant' ? 'zh-Hant' : 'pt-BR');
+    setRootLanguage();
     updateButton();
+    runVisibleTranslation(document.body || document.documentElement);
+  }
+
+  function refresh(rootNode) {
+    setRootLanguage();
+    updateButton();
+    scheduleVisibleTranslation(rootNode || document.body || document.documentElement, 20);
+  }
+
+  function installLazyVisibleTranslator() {
+    ['scroll', 'resize'].forEach(function (eventName) {
+      window.addEventListener(eventName, function () {
+        if (currentLanguage() === 'zh-Hant') scheduleVisibleTranslation(document.body || document.documentElement, 80);
+      }, { passive: true });
+    });
+
+    ['click', 'input', 'change', 'keyup'].forEach(function (eventName) {
+      document.addEventListener(eventName, function () {
+        if (currentLanguage() === 'zh-Hant') scheduleVisibleTranslation(document.body || document.documentElement, 90);
+      }, true);
+    });
   }
 
   window.JT_I18N = { t: t, applyLanguage: applyLanguage, refresh: refresh, getLanguage: currentLanguage };
@@ -533,8 +692,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     if (!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY, 'pt-BR');
     setRootLanguage();
-    processNode(document.body || document.documentElement, true);
     updateButton();
+    updateDocumentTitle();
+    installLazyVisibleTranslator();
 
     const btn = document.getElementById('languageToggle');
     if (btn) {
@@ -542,5 +702,7 @@
         applyLanguage(currentLanguage() === 'zh-Hant' ? 'pt-BR' : 'zh-Hant');
       });
     }
+
+    scheduleVisibleTranslation(document.body || document.documentElement, 20);
   });
 })();
