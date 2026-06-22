@@ -3387,3 +3387,6 @@ html[data-theme="light"] .language-toggle:not(.is-zh) .language-pt, html[data-th
 html[data-language="zh-Hant"] body { font-family: "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", "SF Pro Display", Inter, system-ui, sans-serif; }
 body.permission-modal-open .language-toggle { filter: blur(3px) !important; pointer-events: none !important; user-select: none !important; }
 @media (max-width: 760px) { .language-toggle { right: 12px; bottom: 62px; padding: 8px; } .language-toggle-text { display: none; } .language-toggle-track { width: 64px; height: 26px; } .language-toggle-thumb { width: 28px; height: 20px; } .language-toggle.is-zh .language-toggle-thumb { transform: translateX(30px); } }
+
+/* v38 - evita travamento no trigger de idioma */
+.language-toggle:disabled { opacity: .72; cursor: wait; pointer-events: none; }

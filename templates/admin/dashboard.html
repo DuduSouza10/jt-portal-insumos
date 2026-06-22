@@ -56,7 +56,7 @@
         {% for product in low_stock %}
         <tr>
           <td>{{ product.name }}</td>
-          <td><strong>{{ product.stock_quantity }}</strong></td>
+          <td><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
         </tr>
         {% else %}
         <tr><td colspan="2" class="muted center">Sem alerta de estoque baixo.</td></tr>

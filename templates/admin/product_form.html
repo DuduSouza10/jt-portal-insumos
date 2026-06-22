@@ -14,6 +14,10 @@
       <input name="category" value="{{ product.category if product else '' }}" placeholder="Ex.: Embalagens">
     </label>
     <label>
+      Unidade de medida
+      <input name="unit_measure" value="{{ product.unit_measure if product else 'un' }}" placeholder="Ex.: un, caixa, rolo, pacote">
+    </label>
+    <label>
       Estoque disponível
       <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
     </label>

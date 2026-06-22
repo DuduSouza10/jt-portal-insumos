@@ -65,9 +65,11 @@ function renderProducts() {
     card.className = 'product-card card';
     card.style.animationDelay = `${Math.min(index * 0.045, 0.45)}s`;
 
-    const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)}</span>` : '';
-    const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity}</span>` : '';
-    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
+    const unit = product.unit_measure || 'un';
+    const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unit)}</span>` : '';
+    const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unit)}</span>`;
+    const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unit)}</span>` : '';
+    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unit)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
 
     card.innerHTML = `
       <div class="product-head">
@@ -80,6 +82,7 @@ function renderProducts() {
       </div>
       <div class="meta-row">
         ${priceBadge}
+        ${unitBadge}
         ${stockBadge}
         ${limitBadge}
       </div>
@@ -127,7 +130,7 @@ function renderCart() {
     div.innerHTML = `
       <div>
         <strong>${escapeHtml(item.product.name)}</strong>
-        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')}</span>
+        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(item.product.unit_measure || 'un')}</span>
       </div>
       <input type="number" min="1" value="${item.quantity}">
       <button class="btn ghost danger" type="button">×</button>

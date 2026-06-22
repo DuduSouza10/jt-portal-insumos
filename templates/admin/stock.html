@@ -62,7 +62,7 @@
           <strong>{{ row.product.name }}</strong>
           <small>{{ row.label }} • Min {{ row.min if row.min is not none else '-' }} / Máx {{ row.max if row.max is not none else '-' }}</small>
         </div>
-        <b>{{ row.product.stock_quantity }}</b>
+        <b>{{ row.product.stock_quantity }}</b> <small>{{ row.product.unit_measure or 'un' }}</small>
       </article>
       {% else %}
       <p class="muted">Nenhum produto cadastrado.</p>
@@ -93,7 +93,7 @@
         <span style="width: {{ row.percent }}%"></span>
       </div>
       <div class="stock-product-bottom">
-        <span>Atual <b>{{ row.product.stock_quantity }}</b></span>
+        <span>Atual <b>{{ row.product.stock_quantity }}</b> <small>{{ row.product.unit_measure or 'un' }}</small></span>
         <span>Mín. <b>{{ row.min if row.min is not none else '-' }}</b></span>
         <span>Máx. <b>{{ row.max if row.max is not none else '-' }}</b></span>
       </div>
@@ -247,7 +247,8 @@
             min: Number(product.min || 0),
             max: Number(product.max || 0),
             status: product.status || 'normal',
-            subtitle: product.category || tr('Sem categoria')
+            subtitle: product.category || tr('Sem categoria'),
+            unit: product.unit_measure || 'un'
           };
         });
     }
@@ -333,7 +334,7 @@
     function showTooltip(bar, event) {
       if (!tooltip || !bar) return;
       const typeLabel = bar.type === 'category' ? tr('Categoria') : tr('Produto');
-      tooltip.innerHTML = `<strong>${bar.label}</strong><span>${typeLabel} • ${bar.subtitle || '-'}</span><span>${tr('Estoque atual')}: ${bar.value}</span><span>${tr('Mín.')}: ${bar.min || '-'} • ${tr('Máx.')}: ${bar.max || '-'}</span><span>${tr('Clique para filtrar')}</span>`;
+      tooltip.innerHTML = `<strong>${bar.label}</strong><span>${typeLabel} • ${bar.subtitle || '-'}</span><span>${tr('Estoque atual')}: ${bar.value}${bar.unit ? ' ' + bar.unit : ''}</span><span>${tr('Mín.')}: ${bar.min || '-'}${bar.unit ? ' ' + bar.unit : ''} • ${tr('Máx.')}: ${bar.max || '-'}${bar.unit ? ' ' + bar.unit : ''}</span><span>${tr('Clique para filtrar')}</span>`;
       tooltip.classList.remove('hidden');
       const wrap = canvas.parentElement.getBoundingClientRect();
       const left = Math.min(Math.max(12, event.clientX - wrap.left + 14), Math.max(12, wrap.width - 230));

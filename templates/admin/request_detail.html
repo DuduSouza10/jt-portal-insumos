@@ -13,7 +13,7 @@
     <form method="post" action="{{ url_for('admin_request_update_items', request_id=supply_request.id) }}">
     {% endif %}
     <table>
-      <thead><tr><th>Produto</th><th>Qtd.</th><th>Valor unit.</th><th>Subtotal</th><th>Estoque atual</th></tr></thead>
+      <thead><tr><th>Produto</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Subtotal</th><th>Estoque atual</th></tr></thead>
       <tbody>
         {% for item in supply_request.items %}
         <tr>

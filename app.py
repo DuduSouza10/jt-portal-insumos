@@ -142,6 +142,7 @@ class Product:
     id: int = 0
     name: str = ""
     category: str = ""
+    unit_measure: str = "un"
     description: str = ""
     stock_quantity: int = 0
     price_cents: int = 0
@@ -317,6 +318,7 @@ def row_to_product(row: Any | None) -> Product | None:
         id=int(row["id"]),
         name=row["name"] or "",
         category=row["category"] or "",
+        unit_measure=(row["unit_measure"] if "unit_measure" in row.keys() else None) or "un",
         description=row["description"] or "",
         stock_quantity=int(row["stock_quantity"] or 0),
         price_cents=int(row["price_cents"] or 0),
@@ -388,6 +390,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 category TEXT,
+                unit_measure TEXT NOT NULL DEFAULT 'un',
                 description TEXT,
                 stock_quantity INTEGER NOT NULL DEFAULT 0,
                 price_cents INTEGER NOT NULL DEFAULT 0,
@@ -483,6 +486,8 @@ def init_db() -> None:
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username)")
 
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+        if "unit_measure" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'")
         if "min_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN min_stock INTEGER")
         if "max_stock" not in product_columns:
@@ -522,22 +527,22 @@ def seed_initial_data() -> None:
         product_count = conn.execute("SELECT COUNT(*) AS total FROM products").fetchone()["total"]
         if product_count == 0:
             samples = [
-                ("Envelope de segurança P", "Embalagens", "Envelope pequeno para envios leves.", 500, 45, 100, 80, 120, 600),
-                ("Envelope de segurança M", "Embalagens", "Envelope médio para envios padrão.", 400, 65, 80, 60, 100, 500),
-                ("Lacre plástico", "Operacional", "Lacre numerado para controle interno.", 1000, 18, 200, 150, 250, 1200),
-                ("Etiqueta térmica", "Etiquetas", "Rolo de etiqueta para impressora térmica.", 120, 2500, 10, 8, 30, 180),
+                ("Envelope de segurança P", "Embalagens", "un", "Envelope pequeno para envios leves.", 500, 45, 100, 80, 120, 600),
+                ("Envelope de segurança M", "Embalagens", "un", "Envelope médio para envios padrão.", 400, 65, 80, 60, 100, 500),
+                ("Lacre plástico", "Operacional", "un", "Lacre numerado para controle interno.", 1000, 18, 200, 150, 250, 1200),
+                ("Etiqueta térmica", "Etiquetas", "rolo", "Rolo de etiqueta para impressora térmica.", 120, 2500, 10, 8, 30, 180),
             ]
             for item in samples:
                 cursor = conn.execute(
                     """
-                    INSERT INTO products (name, category, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                    INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                     """,
                     (*item, now_iso()),
                 )
                 row_id = get_cursor_lastrowid(cursor)
                 if row_id is not None:
-                    record_stock_movement(conn, row_id, int(item[3]), 0, int(item[3]), "product_created", "Estoque inicial do sistema.")
+                    record_stock_movement(conn, row_id, int(item[4]), 0, int(item[4]), "product_created", "Estoque inicial do sistema.")
         conn.commit()
 
 
@@ -1059,6 +1064,7 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
 def fill_product_from_form(product: Product) -> Product:
     product.name = request.form.get("name", "").strip()
     product.category = request.form.get("category", "").strip()
+    product.unit_measure = request.form.get("unit_measure", "").strip() or "un"
     product.description = request.form.get("description", "").strip()
     product.stock_quantity = parse_required_positive_int(request.form.get("stock_quantity")) or 0
     price_raw = (request.form.get("price") or "0").strip()
@@ -1084,6 +1090,7 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "id": product.id,
         "name": product.name,
         "category": product.category or "Sem categoria",
+        "unit_measure": product.unit_measure or "un",
         "description": product.description or "",
         "price": format_brl(product.price_cents),
         "stock_quantity": product.stock_quantity if show_stock else None,
@@ -1205,7 +1212,8 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
 
     item_rows: list[list[Any]] = [headers]
     for item in supply_request.items:
-        row: list[Any] = [Paragraph(item.product_name_snapshot, styles["JTCell"]), Paragraph(str(item.quantity), styles["JTCell"])]
+        unit_label = item.product.unit_measure if item.product and item.product.unit_measure else "un"
+        row: list[Any] = [Paragraph(item.product_name_snapshot, styles["JTCell"]), Paragraph(f"{item.quantity} {unit_label}", styles["JTCell"])]
         if show_prices:
             row.extend([
                 Paragraph(format_brl(item.price_cents_snapshot), styles["JTCell"]),
@@ -1275,6 +1283,7 @@ def product_row_for_excel(product: Product) -> list[Any]:
         product.id,
         product.name,
         product.category,
+        product.unit_measure,
         product.description,
         product.stock_quantity,
         product.price_brl,
@@ -1764,7 +1773,7 @@ def admin_products_export():
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Produtos"
-    headers = ["ID", "Nome do produto", "Categoria", "Descrição", "Estoque disponível", "Valor unitário", "Limite para bases", "Limite para franquias", "Estoque mínimo", "Estoque máximo", "Ativo"]
+    headers = ["ID", "Nome do produto", "Categoria", "Unidade de medida", "Descrição", "Estoque disponível", "Valor unitário", "Limite para bases", "Limite para franquias", "Estoque mínimo", "Estoque máximo", "Ativo"]
     worksheet.append(headers)
     for product in products:
         worksheet.append(product_row_for_excel(product))
@@ -1851,6 +1860,7 @@ def admin_products_import():
                 continue
 
             category = str(get_header_value(row_values, header_map, ["Categoria"]) or "").strip()
+            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida"]) or "un").strip() or "un"
             description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao"]) or "").strip()
             stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade"])) or 0
             price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco"]))
@@ -1870,11 +1880,11 @@ def admin_products_import():
                 conn.execute(
                     """
                     UPDATE products
-                       SET name = ?, category = ?, description = ?, stock_quantity = ?, price_cents = ?,
+                       SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
                            limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
                      WHERE id = ?
                     """,
-                    (name, category, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso(), int(existing_row["id"])),
+                    (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso(), int(existing_row["id"])),
                 )
                 old_stock = int(existing_row["stock_quantity"] or 0)
                 if old_stock != stock_quantity:
@@ -1892,10 +1902,10 @@ def admin_products_import():
             else:
                 cursor = conn.execute(
                     """
-                    INSERT INTO products (name, category, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (name, category, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso()),
+                    (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso()),
                 )
                 if stock_quantity > 0:
                     row_id = get_cursor_lastrowid(cursor)
@@ -1920,12 +1930,13 @@ def admin_product_new():
         with db_connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO products (name, category, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
                     product.category,
+                    product.unit_measure,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,
@@ -1963,13 +1974,14 @@ def admin_product_edit(product_id: int):
             conn.execute(
                 """
                 UPDATE products
-                SET name = ?, category = ?, description = ?, stock_quantity = ?, price_cents = ?,
+                SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
                     limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     product.name,
                     product.category,
+                    product.unit_measure,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,

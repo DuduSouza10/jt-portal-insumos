@@ -123,6 +123,10 @@
   "Descrição": "描述",
   "Estoque disponível": "可用庫存",
   "Valor unitário": "單價",
+  "Unidade de medida": "計量單位",
+  "Unidade": "單位",
+  "Ex.: un, caixa, rolo, pacote": "例如：個、箱、卷、包",
+  "Colunas aceitas: ID, Nome do produto, Categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Estoque mínimo, Estoque máximo e Ativo.": "接受欄位：ID、產品名稱、類別、計量單位、描述、可用庫存、單價、基地限制、加盟店限制、最低庫存、最高庫存與啟用。",
   "Limite para bases": "基地限制",
   "Limite para franquias": "加盟店限制",
   "Estoque mínimo": "最低庫存",
@@ -355,9 +359,19 @@
 "×": "×"
 };
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
+  const MAX_TEXT_NODES_PER_PASS = 1800;
+  const MAX_ATTR_NODES_PER_PASS = 800;
 
-  function currentLanguage() { return localStorage.getItem(STORAGE_KEY) === 'zh-Hant' ? 'zh-Hant' : 'pt-BR'; }
-  function withWhitespace(original, translated) { const text = String(original || ''); return text.match(/^\s*/)[0] + translated + text.match(/\s*$/)[0]; }
+  function currentLanguage() {
+    return localStorage.getItem(STORAGE_KEY) === 'zh-Hant' ? 'zh-Hant' : 'pt-BR';
+  }
+
+  function withWhitespace(original, translated) {
+    const text = String(original || '');
+    return (text.match(/^\s*/) || [''])[0] + translated + (text.match(/\s*$/) || [''])[0];
+  }
+
   function translateCore(core) {
     if (!core) return core;
     if (zh[core]) return zh[core];
@@ -368,6 +382,7 @@
     if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${match[1]} 已加入申請。`;
     if ((match = core.match(/^Estoque:\s*(.+)$/))) return `庫存：${match[1]}`;
     if ((match = core.match(/^Limite:\s*(.+)$/))) return `限制：${match[1]}`;
+    if ((match = core.match(/^Unidade:\s*(.+)$/))) return `單位：${match[1]}`;
     if ((match = core.match(/^Min\s+(.+)\s+\/\s+Máx\s+(.+)$/))) return `最低 ${match[1]} / 最高 ${match[2]}`;
     if ((match = core.match(/^Mín\.\s*(.+)$/))) return `最低 ${match[1]}`;
     if ((match = core.match(/^Máx\.\s*(.+)$/))) return `最高 ${match[1]}`;
@@ -385,14 +400,147 @@
     if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `庫存不足，無法核准：${match[1]}`;
     return core;
   }
-  function t(value) { const text = String(value == null ? '' : value); return currentLanguage() === 'zh-Hant' ? withWhitespace(text, translateCore(text.trim())) : text; }
-  function shouldSkipTextNode(node) { const p = node.parentElement; if (!p) return true; const tag = p.tagName ? p.tagName.toLowerCase() : ''; return ['script','style','textarea','noscript'].includes(tag); }
-  function processTextNode(node, forceStore) { if (shouldSkipTextNode(node)) return; if (forceStore || !originalText.has(node)) originalText.set(node, node.nodeValue); const original = originalText.get(node) || ''; const next = currentLanguage() === 'zh-Hant' ? t(original) : original; if (node.nodeValue !== next) node.nodeValue = next; }
-  function processAttributes(el, forceStore) { if (!el || !el.getAttribute) return; ATTRS.forEach(function(attr){ if (!el.hasAttribute(attr)) return; const key='data-i18n-original-'+attr; if (forceStore || !el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || ''); const original=el.getAttribute(key)||''; const next=currentLanguage()==='zh-Hant' ? t(original) : original; if (el.getAttribute(attr)!==next) el.setAttribute(attr,next); }); }
-  function processNode(node, forceStore) { if (!node) return; if (node.nodeType === Node.TEXT_NODE) { processTextNode(node, forceStore); return; } if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_NODE) return; if (node.nodeType === Node.ELEMENT_NODE) processAttributes(node, forceStore); const walker=document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, { acceptNode:function(c){ if(c.nodeType===Node.ELEMENT_NODE){const tag=c.tagName?c.tagName.toLowerCase():''; if(['script','style','textarea','noscript'].includes(tag)) return NodeFilter.FILTER_REJECT; return NodeFilter.FILTER_ACCEPT;} return NodeFilter.FILTER_ACCEPT; }}); let cur=walker.currentNode; while(cur){ if(cur.nodeType===Node.ELEMENT_NODE) processAttributes(cur,forceStore); else if(cur.nodeType===Node.TEXT_NODE) processTextNode(cur,forceStore); cur=walker.nextNode(); } }
-  function updateButton(){ const lang=currentLanguage(); const btn=document.getElementById('languageToggle'); if(!btn) return; btn.setAttribute('aria-pressed', String(lang==='zh-Hant')); btn.classList.toggle('is-zh', lang==='zh-Hant'); btn.title = lang==='zh-Hant' ? '切換為葡萄牙文' : 'Mudar para chinês tradicional'; }
-  function applyLanguage(lang){ localStorage.setItem(STORAGE_KEY, lang==='zh-Hant' ? 'zh-Hant' : 'pt-BR'); root.setAttribute('lang', currentLanguage()==='zh-Hant' ? 'zh-Hant' : 'pt-BR'); root.setAttribute('data-language', currentLanguage()); isApplying=true; processNode(document.documentElement,false); updateButton(); isApplying=false; window.dispatchEvent(new CustomEvent('jt-language-change', {detail:{language:currentLanguage()}})); }
-  function refresh(){ isApplying=true; processNode(document.documentElement,false); updateButton(); isApplying=false; }
-  window.JT_I18N = { t:t, applyLanguage:applyLanguage, refresh:refresh, getLanguage:currentLanguage };
-  document.addEventListener('DOMContentLoaded', function(){ if(!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY,'pt-BR'); root.setAttribute('lang', currentLanguage()==='zh-Hant' ? 'zh-Hant' : 'pt-BR'); root.setAttribute('data-language', currentLanguage()); processNode(document.documentElement,true); updateButton(); const btn=document.getElementById('languageToggle'); if(btn){ btn.addEventListener('click', function(){ applyLanguage(currentLanguage()==='zh-Hant' ? 'pt-BR' : 'zh-Hant'); }); } const observer=new MutationObserver(function(muts){ if(isApplying) return; muts.forEach(function(mut){ if(mut.type==='characterData'){ originalText.set(mut.target, mut.target.nodeValue); processTextNode(mut.target,false); } else if(mut.type==='childList'){ mut.addedNodes.forEach(function(n){ processNode(n,true); }); } else if(mut.type==='attributes'){ const attr=mut.attributeName; if(ATTRS.includes(attr)){ mut.target.setAttribute('data-i18n-original-'+attr, mut.target.getAttribute(attr)||''); processAttributes(mut.target,false); } } }); }); observer.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:ATTRS}); });
+
+  function t(value) {
+    const text = String(value == null ? '' : value);
+    return currentLanguage() === 'zh-Hant' ? withWhitespace(text, translateCore(text.trim())) : text;
+  }
+
+  function elementTag(el) {
+    return el && el.tagName ? el.tagName.toLowerCase() : '';
+  }
+
+  function shouldSkipElement(el) {
+    if (!el || !el.closest) return false;
+    if (el.closest('[data-no-i18n]')) return true;
+    const tag = elementTag(el);
+    if (SKIP_TAGS.has(tag)) return true;
+    return !!el.closest('script,style,textarea,noscript,canvas,svg,code,pre');
+  }
+
+  function shouldSkipTextNode(node) {
+    const parent = node && node.parentElement;
+    if (!parent) return true;
+    if (shouldSkipElement(parent)) return true;
+    return !String(node.nodeValue || '').trim();
+  }
+
+  function processTextNode(node, forceStore) {
+    if (shouldSkipTextNode(node)) return;
+    if (forceStore || !originalText.has(node)) originalText.set(node, node.nodeValue);
+    const original = originalText.get(node) || '';
+    const next = currentLanguage() === 'zh-Hant' ? t(original) : original;
+    if (node.nodeValue !== next) node.nodeValue = next;
+  }
+
+  function processAttributes(el, forceStore) {
+    if (!el || !el.getAttribute || shouldSkipElement(el)) return;
+    ATTRS.forEach(function (attr) {
+      if (!el.hasAttribute(attr)) return;
+      const key = 'data-i18n-original-' + attr;
+      if (forceStore || !el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || '');
+      const original = el.getAttribute(key) || '';
+      const next = currentLanguage() === 'zh-Hant' ? t(original) : original;
+      if (el.getAttribute(attr) !== next) el.setAttribute(attr, next);
+    });
+  }
+
+  function processNode(node, forceStore) {
+    if (!node) return;
+    const target = node.nodeType === Node.DOCUMENT_NODE ? (document.body || document.documentElement) : node;
+
+    if (target.nodeType === Node.TEXT_NODE) {
+      processTextNode(target, forceStore);
+      return;
+    }
+    if (target.nodeType !== Node.ELEMENT_NODE) return;
+
+    let textCount = 0;
+    let attrCount = 0;
+
+    processAttributes(target, forceStore);
+    attrCount += 1;
+
+    const walker = document.createTreeWalker(
+      target,
+      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function (candidate) {
+          if (candidate.nodeType === Node.ELEMENT_NODE) {
+            return shouldSkipElement(candidate) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+          }
+          return shouldSkipTextNode(candidate) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+
+    let current = walker.currentNode;
+    while (current) {
+      if (current.nodeType === Node.ELEMENT_NODE) {
+        if (attrCount < MAX_ATTR_NODES_PER_PASS) processAttributes(current, forceStore);
+        attrCount += 1;
+      } else if (current.nodeType === Node.TEXT_NODE) {
+        if (textCount < MAX_TEXT_NODES_PER_PASS) processTextNode(current, forceStore);
+        textCount += 1;
+      }
+      current = walker.nextNode();
+    }
+  }
+
+  function updateButton() {
+    const lang = currentLanguage();
+    const btn = document.getElementById('languageToggle');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(lang === 'zh-Hant'));
+    btn.classList.toggle('is-zh', lang === 'zh-Hant');
+    btn.title = lang === 'zh-Hant' ? '切換為葡萄牙文' : 'Mudar para chinês tradicional';
+  }
+
+  function setRootLanguage() {
+    root.setAttribute('lang', currentLanguage() === 'zh-Hant' ? 'zh-Hant' : 'pt-BR');
+    root.setAttribute('data-language', currentLanguage());
+  }
+
+  function applyLanguage(lang) {
+    if (isApplying) return;
+    isApplying = true;
+    const btn = document.getElementById('languageToggle');
+    if (btn) btn.disabled = true;
+
+    localStorage.setItem(STORAGE_KEY, lang === 'zh-Hant' ? 'zh-Hant' : 'pt-BR');
+    setRootLanguage();
+    updateButton();
+
+    window.requestAnimationFrame(function () {
+      try {
+        processNode(document.body || document.documentElement, false);
+      } finally {
+        if (btn) btn.disabled = false;
+        isApplying = false;
+        window.dispatchEvent(new CustomEvent('jt-language-change', { detail: { language: currentLanguage() } }));
+      }
+    });
+  }
+
+  function refresh() {
+    if (isApplying) return;
+    processNode(document.body || document.documentElement, false);
+    updateButton();
+  }
+
+  window.JT_I18N = { t: t, applyLanguage: applyLanguage, refresh: refresh, getLanguage: currentLanguage };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    if (!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY, 'pt-BR');
+    setRootLanguage();
+    processNode(document.body || document.documentElement, true);
+    updateButton();
+
+    const btn = document.getElementById('languageToggle');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        applyLanguage(currentLanguage() === 'zh-Hant' ? 'pt-BR' : 'zh-Hant');
+      });
+    }
+  });
 })();

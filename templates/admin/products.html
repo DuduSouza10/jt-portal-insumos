@@ -18,12 +18,12 @@
       <input type="file" name="spreadsheet" accept=".xlsx" required>
     </label>
     <button class="btn primary" type="submit">Importar dados</button>
-    <small>Colunas aceitas: ID, Nome do produto, Categoria, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Estoque mínimo, Estoque máximo e Ativo.</small>
+    <small>Colunas aceitas: ID, Nome do produto, Categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Estoque mínimo, Estoque máximo e Ativo.</small>
   </form>
   <table>
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Estoque</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody>
@@ -31,7 +31,8 @@
       <tr>
         <td><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
         <td>{{ product.category or '-' }}</td>
-        <td><strong>{{ product.stock_quantity }}</strong></td>
+        <td>{{ product.unit_measure or 'un' }}</td>
+        <td><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
         <td>{{ product.min_stock if product.min_stock is not none else '-' }}</td>
         <td>{{ product.max_stock if product.max_stock is not none else '-' }}</td>
         <td>{{ format_brl(product.price_cents) }}</td>
@@ -47,7 +48,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="11" class="muted center">Nenhum produto cadastrado.</td></tr>
+      <tr><td colspan="12" class="muted center">Nenhum produto cadastrado.</td></tr>
       {% endfor %}
     </tbody>
   </table>
