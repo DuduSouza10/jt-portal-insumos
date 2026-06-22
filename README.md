@@ -146,3 +146,28 @@ Para abrir fora do VS Code, use `ABRIR_PORTAL.bat`. Ele cria o ambiente local, i
 ## Deploy Cloudflare + Render
 
 Esta versão possui integração com Cloudflare D1 e R2. Veja o arquivo `DEPLOY_CLOUDFLARE_RENDER.md` para o passo a passo resumido.
+
+
+## v31 - Correção SMTP Feishu
+
+- Adicionado suporte a `MAIL_USE_SSL=true` para SMTP na porta 465.
+- Corrigido erro 500 quando o envio do código admin por e-mail falha.
+- Agora o erro SMTP aparece nos Logs do Render com servidor, porta, TLS/SSL e mensagem da exceção.
+
+Configuração recomendada para Feishu/Lark com SSL:
+
+```env
+MAIL_SERVER=smtp.feishu.cn
+MAIL_PORT=465
+MAIL_USE_TLS=false
+MAIL_USE_SSL=true
+MAIL_USERNAME=portal.insumos@seudominio.com
+MAIL_PASSWORD=sua_senha_ou_codigo_de_autorizacao
+MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
+```
+
+
+## Atualização v32
+
+- Mensagens do código alteradas para confirmação de login.
+- Logo do topo substituída pelo SVG enviado.

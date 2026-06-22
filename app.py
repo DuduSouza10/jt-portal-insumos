@@ -103,10 +103,11 @@ DATABASE_DRIVER = os.getenv("DATABASE_DRIVER", "sqlite").strip().lower()
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(INSTANCE_DIR / "jt_insumos.db"))
 ADMIN_CODE_MINUTES = int(os.getenv("ADMIN_CODE_MINUTES", "10"))
 
-# SMTP opcional. Se não configurar, o código admin aparece no terminal e em flash.
+# SMTP opcional. Se não configurar, o código de confirmação de login aparece no terminal e em flash.
 MAIL_SERVER = os.getenv("MAIL_SERVER", "").strip()
 MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
 MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() == "true"
+MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "false").lower() in {"1", "true", "yes", "sim"}
 MAIL_USERNAME = os.getenv("MAIL_USERNAME", "").strip()
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "").strip()
 MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME or "no-reply@jt-insumos.local").strip()
@@ -892,11 +893,11 @@ def email_is_configured() -> bool:
     return bool(MAIL_SERVER and MAIL_USERNAME and MAIL_PASSWORD)
 
 
-def send_admin_login_code(user: User, code: str) -> None:
-    subject = "Código de acesso - Portal de Insumos J&T"
+def send_admin_login_code(user: User, code: str) -> bool:
+    subject = "Código de confirmação de login - Portal de Insumos J&T"
     body = (
         f"Olá, {user.responsible_name}.\n\n"
-        f"Seu código de confirmação para acessar o painel admin é: {code}\n"
+        f"Seu código de confirmação de login é: {code}\n"
         f"Validade: {ADMIN_CODE_MINUTES} minutos.\n\n"
         "Caso não tenha solicitado, ignore este e-mail."
     )
@@ -907,16 +908,32 @@ def send_admin_login_code(user: User, code: str) -> None:
         msg["From"] = MAIL_DEFAULT_SENDER
         msg["To"] = user.email
         msg.set_content(body)
-        with smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=20) as smtp:
-            if MAIL_USE_TLS:
-                smtp.starttls()
-            smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
-            smtp.send_message(msg)
-    else:
-        print("=" * 80)
-        print(f"CÓDIGO ADMIN DEV para {user.email}: {code}")
-        print("=" * 80)
-        flash(f"Modo dev sem SMTP: código admin é {code}", "info")
+        try:
+            if MAIL_USE_SSL:
+                smtp_context = smtplib.SMTP_SSL(MAIL_SERVER, MAIL_PORT, timeout=20)
+            else:
+                smtp_context = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=20)
+            with smtp_context as smtp:
+                if MAIL_USE_TLS and not MAIL_USE_SSL:
+                    smtp.starttls()
+                smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+                smtp.send_message(msg)
+            return True
+        except Exception as exc:
+            print("=" * 80)
+            print("ERRO AO ENVIAR CÓDIGO DE CONFIRMAÇÃO DE LOGIN POR E-MAIL")
+            print(f"Destino: {user.email}")
+            print(f"SMTP: {MAIL_SERVER}:{MAIL_PORT} | TLS={MAIL_USE_TLS} | SSL={MAIL_USE_SSL}")
+            print(f"Erro: {type(exc).__name__} - {exc}")
+            print("=" * 80)
+            flash("Não consegui enviar o código de confirmação por e-mail. Confira as variáveis SMTP no Render e tente novamente.", "danger")
+            return False
+
+    print("=" * 80)
+    print(f"CÓDIGO DE CONFIRMAÇÃO DE LOGIN DEV para {user.email}: {code}")
+    print("=" * 80)
+    flash(f"Modo dev sem SMTP: código de confirmação de login é {code}", "info")
+    return True
 
 
 def product_limit_for(product: Product, user: User) -> int | None:
@@ -1259,7 +1276,10 @@ def login():
                 )
                 conn.commit()
             session["pending_admin_user_id"] = user.id
-            send_admin_login_code(user, code)
+            if not send_admin_login_code(user, code):
+                session.pop("pending_admin_user_id", None)
+                return redirect(url_for("login"))
+            flash("Enviamos um código de confirmação para o seu e-mail. Digite o código para concluir o login.", "info")
             return redirect(url_for("verify_admin"))
 
         session["user_id"] = user.id
@@ -1298,7 +1318,7 @@ def verify_admin():
                     conn.commit()
                     session.pop("pending_admin_user_id", None)
                     session["user_id"] = user.id
-                    flash("Acesso administrativo confirmado.", "success")
+                    flash("Login confirmado com sucesso.", "success")
                     return redirect(url_for("admin_dashboard"))
 
         flash("Código inválido ou expirado.", "danger")
