@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Minhas solicitações • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Minhas solicitações{% endblock %}
+{% block page_subtitle %}Acompanhe os pedidos enviados e o status de aprovação.{% endblock %}
+{% block content %}
+<div class="card table-card">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Data</th>
+        <th>Status</th>
+        <th>Itens</th>
+        {% if current_user.role == 'franchise' or current_user.is_admin %}<th>Total</th>{% endif %}
+        <th>Observação admin</th>
+        <th>PDF</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in requests_list %}
+      <tr>
+        <td>#{{ req.id }}</td>
+        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td>
+          {% for item in req.items %}
+            <div>{{ item.quantity }}x {{ item.product_name_snapshot }}</div>
+          {% endfor %}
+        </td>
+        {% if current_user.role == 'franchise' or current_user.is_admin %}<td>{{ format_brl(req.total_cents) }}</td>{% endif %}
+        <td>{{ req.admin_note or '-' }}</td>
+        <td><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted center">Nenhuma solicitação enviada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

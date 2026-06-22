@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e60012">
+  <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/logo-jt.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <div class="bg-orb orb-one"></div>
+  <div class="bg-orb orb-two"></div>
+
+  <div class="page-shell">
+    <header class="site-header compact-header">
+      <div class="nav-header premium-topbar {% if current_user and not current_user.is_admin %}compact-user-topbar{% endif %}">
+        <a class="brand-top" href="{{ url_for('home') if current_user else url_for('login') }}" aria-label="Portal de Insumos J&T Express">
+          <img
+            id="brandLogoTheme"
+            src="{{ url_for('static', filename='img/logo-jt-white.svg') }}"
+            data-dark-src="{{ url_for('static', filename='img/logo-jt-white.svg') }}"
+            data-light-src="{{ url_for('static', filename='img/logo-jt-red.svg') }}"
+            alt="J&T Express"
+            class="brand-logo-top"
+          >
+          <span class="brand-top-copy">
+            <strong>Portal de Insumos</strong>
+            <small>J&T Express Brazil</small>
+          </span>
+        </a>
+
+        {% if current_user %}
+        <nav class="top-nav" aria-label="Navegação principal">
+          {% if can_access('home') %}
+            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' else '' }}">Solicitar insumos</a>
+          {% endif %}
+          {% if can_access('my_requests') %}
+            <a href="{{ url_for('my_requests') }}" class="{{ 'active' if request.endpoint == 'my_requests' else '' }}">Minhas solicitações</a>
+          {% endif %}
+          {% if current_user.is_admin %}
+            {% if can_access('admin_dashboard') %}<a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' else '' }}">Painel admin</a>{% endif %}
+            {% if can_access('admin_products') %}<a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint in ['admin_products','admin_product_new','admin_product_edit'] else '' }}">Produtos</a>{% endif %}
+            {% if can_access('admin_stock') %}<a href="{{ url_for('admin_stock') }}" class="{{ 'active' if request.endpoint == 'admin_stock' else '' }}">Gestão de estoque</a>{% endif %}
+            {% if can_access('admin_users') %}<a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint in ['admin_users','admin_user_new','admin_user_edit'] else '' }}">Usuários</a>{% endif %}
+            {% if can_access_any(['admin_requests','admin_requests_attended']) %}
+              <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_requests','admin_request_detail','admin_requests_attended'] else '' }}">
+                <button class="nav-drop-toggle" type="button" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle>
+                  Solicitações <span aria-hidden="true">▾</span>
+                </button>
+                <div class="nav-drop-menu" role="menu">
+                  {% if can_access('admin_requests') %}<a role="menuitem" href="{{ url_for('admin_requests', status='pending') }}" class="{{ 'active' if request.endpoint in ['admin_requests','admin_request_detail'] else '' }}">Pendentes</a>{% endif %}
+                  {% if can_access('admin_requests_attended') %}<a role="menuitem" href="{{ url_for('admin_requests_attended') }}" class="{{ 'active' if request.endpoint == 'admin_requests_attended' else '' }}">Atendidas</a>{% endif %}
+                </div>
+              </div>
+            {% endif %}
+          {% endif %}
+        </nav>
+
+        <div class="header-tools account-area">
+          <div class="user-pill compact">
+            <span class="avatar-dot">{{ current_user.responsible_name[:1]|upper }}</span>
+            <span>
+              <strong>{{ current_user.responsible_name }}</strong>
+              <small>{{ 'Admin' if current_user.role == 'admin' else ('Base' if current_user.role == 'base' else 'Franquia') }} • {{ current_user.organization_name }}</small>
+            </span>
+          </div>
+          <a class="logout" href="{{ url_for('logout') }}">Sair</a>
+        </div>
+        {% else %}
+        <div class="public-actions account-area">
+          <a class="btn ghost" href="{{ url_for('login') }}">Entrar</a>
+          <a class="btn primary" href="{{ url_for('register') }}">Solicitar cadastro</a>
+        </div>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="hero-card card">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">J&T Express • Gestão de insumos</span>
+            <h2>{% block page_title %}Portal de Insumos{% endblock %}</h2>
+            <p>{% block page_subtitle %}Solicitação e controle interno de materiais.{% endblock %}</p>
+          </div>
+        </header>
+      </section>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack">
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <div class="dev-credit" aria-label="Informações de segurança e desenvolvimento">
+    <span class="security-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path d="M12 2.75 20 6.1v5.95c0 5.05-3.4 8.95-8 10.2-4.6-1.25-8-5.15-8-10.2V6.1l8-3.35Z"/>
+        <path d="m9.35 12.15 1.75 1.75 3.7-4.05"/>
+      </svg>
+    </span>
+    <span class="dev-copy">
+      <strong>Developed by: Eduardo Rodrigues &amp; Aleffi Silva</strong>
+      <small>J&amp;T Express Brazil • CNPJ: 42.584.754/0092-13</small>
+    </span>
+  </div>
+
+  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema claro ou escuro">
+    <span class="theme-toggle-track">
+      <span class="theme-toggle-thumb"></span>
+    </span>
+    <span class="theme-toggle-text">Tema</span>
+  </button>
+
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const closeDropdowns = function () {
+        document.querySelectorAll('.nav-dropdown.open').forEach(function (item) {
+          item.classList.remove('open');
+          const itemButton = item.querySelector('[data-dropdown-toggle]');
+          if (itemButton) itemButton.setAttribute('aria-expanded', 'false');
+        });
+      };
+
+      document.querySelectorAll('.nav-dropdown').forEach(function (dropdown) {
+        const button = dropdown.querySelector('[data-dropdown-toggle]');
+        dropdown.addEventListener('mouseenter', function () {
+          if (button) button.setAttribute('aria-expanded', 'true');
+        });
+        dropdown.addEventListener('mouseleave', function () {
+          if (!dropdown.classList.contains('open') && button) button.setAttribute('aria-expanded', 'false');
+        });
+      });
+
+      document.querySelectorAll('[data-dropdown-toggle]').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          const dropdown = button.closest('.nav-dropdown');
+          const isOpen = dropdown && dropdown.classList.contains('open');
+          closeDropdowns();
+          if (dropdown && !isOpen) {
+            dropdown.classList.add('open');
+            button.setAttribute('aria-expanded', 'true');
+          }
+        });
+      });
+
+      document.querySelectorAll('.nav-drop-menu').forEach(function (menu) {
+        menu.addEventListener('click', function (event) {
+          event.stopPropagation();
+        });
+      });
+
+      document.addEventListener('click', closeDropdowns);
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeDropdowns();
+      });
+    });
+  </script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

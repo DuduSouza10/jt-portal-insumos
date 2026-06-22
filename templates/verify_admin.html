@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Confirmação Admin • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Confirmação administrativa{% endblock %}
+{% block page_subtitle %}Digite o código enviado para {{ email }}. Validade: {{ minutes }} minutos.{% endblock %}
+{% block content %}
+<section class="auth-card card">
+  <form method="post" class="form-grid">
+    <label>
+      Código de confirmação
+      <input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
+    </label>
+    <button class="btn primary" type="submit">Confirmar acesso</button>
+    <a class="btn ghost" href="{{ url_for('login') }}">Voltar</a>
+  </form>
+</section>
+{% endblock %}

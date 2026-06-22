@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Usuários • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Cadastro de usuários{% endblock %}
+{% block page_subtitle %}Adicione usuários, aprove cadastros, edite acessos ou exclua contas.{% endblock %}
+{% block content %}
+<div class="card table-card">
+  <div class="section-head">
+    <div class="tabs">
+      <a class="tab {{ 'active' if selected_status == '' else '' }}" href="{{ url_for('admin_users') }}">Todos</a>
+      <a class="tab {{ 'active' if selected_status == 'pending' else '' }}" href="{{ url_for('admin_users', status='pending') }}">Pendentes</a>
+      <a class="tab {{ 'active' if selected_status == 'approved' else '' }}" href="{{ url_for('admin_users', status='approved') }}">Aprovados</a>
+      <a class="tab {{ 'active' if selected_status == 'rejected' else '' }}" href="{{ url_for('admin_users', status='rejected') }}">Recusados</a>
+    </div>
+    <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Responsável</th><th>Unidade</th><th>Tipo</th><th>E-mail</th><th>Status</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.responsible_name }}</td>
+        <td>{{ user.organization_name }}</td>
+        <td>{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
+        <td>{{ user.email }}</td>
+        <td><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
+        <td class="actions-cell">
+          {% if user.status == 'pending' and not user.is_admin %}
+            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
+              <input type="hidden" name="action" value="approved">
+              <button class="btn tiny success" type="submit">Aprovar</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
+              <input type="hidden" name="action" value="rejected">
+              <button class="btn tiny danger" type="submit">Recusar</button>
+            </form>
+            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+              <button class="btn tiny ghost" type="submit">Excluir</button>
+            </form>
+          {% elif user.status == 'rejected' and not user.is_admin %}
+            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
+              <input type="hidden" name="action" value="approved">
+              <button class="btn tiny success" type="submit">Aprovar</button>
+            </form>
+            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+              <button class="btn tiny danger" type="submit">Excluir</button>
+            </form>
+          {% else %}
+            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            {% if current_user and user.id != current_user.id %}
+              <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+                <button class="btn tiny danger" type="submit">Excluir</button>
+              </form>
+            {% else %}
+              <span class="muted">Usuário atual</span>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted center">Nenhum usuário encontrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

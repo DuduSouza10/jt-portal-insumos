@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Cadastro • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Solicitar cadastro{% endblock %}
+{% block page_subtitle %}O cadastro só será liberado após aprovação de um administrador.{% endblock %}
+{% block content %}
+<section class="auth-card card wide-card">
+  <form method="post" class="form-grid two-cols">
+    <label>
+      Nome do responsável
+      <input name="responsible_name" placeholder="Ex.: Eduardo Rodrigues" required>
+    </label>
+    <label>
+      Nome da base/franquia
+      <input name="organization_name" placeholder="Ex.: MG BHZ / Franquia Centro" required>
+    </label>
+    <label>
+      Tipo de unidade
+      <select name="role" required>
+        <option value="base">Base</option>
+        <option value="franchise">Franquia</option>
+      </select>
+    </label>
+    <label>
+      E-mail
+      <input name="email" type="email" placeholder="email@empresa.com" required>
+    </label>
+    <label class="full">
+      Senha
+      <input name="password" type="password" placeholder="Crie uma senha segura" required>
+    </label>
+    <div class="full form-actions">
+      <button class="btn primary" type="submit">Enviar cadastro</button>
+      <a class="btn ghost" href="{{ url_for('login') }}">Voltar ao login</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

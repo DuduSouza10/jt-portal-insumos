@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Produtos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Produtos e estoque{% endblock %}
+{% block page_subtitle %}Cadastre insumos, valores, limites e parâmetros de estoque mínimo/máximo.{% endblock %}
+{% block content %}
+<div class="card table-card">
+  <div class="section-head product-tools-head">
+    <h2>Produtos cadastrados</h2>
+    <div class="product-tools">
+      <a class="btn ghost" href="{{ url_for('admin_stock') }}">Gestão de Estoque</a>
+      <a class="btn ghost" href="{{ url_for('admin_products_export') }}">Exportar planilha</a>
+      <a class="btn primary" href="{{ url_for('admin_product_new') }}">Novo produto</a>
+    </div>
+  </div>
+  <form class="import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data">
+    <label>
+      Importar planilha de produtos (.xlsx)
+      <input type="file" name="spreadsheet" accept=".xlsx" required>
+    </label>
+    <button class="btn primary" type="submit">Importar dados</button>
+    <small>Colunas aceitas: ID, Nome do produto, Categoria, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Estoque mínimo, Estoque máximo e Ativo.</small>
+  </form>
+  <table>
+    <thead>
+      <tr>
+        <th>Produto</th><th>Categoria</th><th>Estoque</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for product in products %}
+      <tr>
+        <td><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
+        <td>{{ product.category or '-' }}</td>
+        <td><strong>{{ product.stock_quantity }}</strong></td>
+        <td>{{ product.min_stock if product.min_stock is not none else '-' }}</td>
+        <td>{{ product.max_stock if product.max_stock is not none else '-' }}</td>
+        <td>{{ format_brl(product.price_cents) }}</td>
+        <td>{{ product.limit_base if product.limit_base is not none else 'Sem limite' }}</td>
+        <td>{{ product.limit_franchise if product.limit_franchise is not none else 'Sem limite' }}</td>
+        <td><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
+        <td><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
+        <td class="actions-cell">
+          <a class="btn tiny ghost" href="{{ url_for('admin_product_edit', product_id=product.id) }}">Editar</a>
+          {% if product.active %}
+          <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm('Desativar este produto?')"><button class="btn tiny danger" type="submit">Desativar</button></form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11" class="muted center">Nenhum produto cadastrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

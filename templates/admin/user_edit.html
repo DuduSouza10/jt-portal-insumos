@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block title %}Editar acesso • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Editar acesso{% endblock %}
+{% block page_subtitle %}Cadastre usuários manualmente, defina o nível de acesso e escolha quais páginas estarão liberadas.{% endblock %}
+{% block content %}
+<div class="card wide-card">
+  <form id="userAccessForm" method="post" class="form-grid two-cols">
+    <label>
+      Nome do responsável
+      <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
+    </label>
+    <label>
+      Nome da base/franquia/área
+      <input name="organization_name" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: MG BHZ / Administração" required>
+    </label>
+    <label>
+      E-mail de acesso
+      <input name="email" type="email" value="{{ user.email if user else '' }}" placeholder="usuario@jt.com" required>
+    </label>
+    <label>
+      Senha {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
+      <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Nova senha opcional' }}" {% if is_new %}required{% endif %}>
+    </label>
+    <label>
+      Tipo de acesso
+      <select name="role" required>
+        <option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>
+        <option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>
+        <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>
+      </select>
+    </label>
+    <label>
+      Status do cadastro
+      <select name="status" required>
+        <option value="pending" {% if user and user.status == 'pending' %}selected{% endif %}>Pendente</option>
+        <option value="approved" {% if not user or user.status == 'approved' %}selected{% endif %}>Aprovado</option>
+        <option value="rejected" {% if user and user.status == 'rejected' %}selected{% endif %}>Recusado</option>
+      </select>
+    </label>
+
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Páginas liberadas</strong>
+        <span>Defina exatamente quais telas esse usuário poderá acessar.</span>
+      </div>
+      <button class="btn ghost" type="button" data-open-permission-modal>Editar páginas</button>
+    </div>
+
+    <div id="permissionModal" class="permission-modal" aria-hidden="true">
+      <div class="permission-backdrop" data-close-permission-modal></div>
+      <section class="permission-card card" role="dialog" aria-modal="true" aria-labelledby="permissionTitle">
+        <div class="permission-card-head">
+          <div>
+            <span class="eyebrow">Controle de acesso</span>
+            <h2 id="permissionTitle">Páginas do usuário</h2>
+            <p>Marque as páginas que ficarão disponíveis para este cadastro. As páginas administrativas só funcionam para usuários com tipo de acesso Administrador.</p>
+          </div>
+          <button class="permission-close" type="button" data-close-permission-modal aria-label="Fechar">×</button>
+        </div>
+
+        <div class="permission-grid">
+          {% for option in permission_options %}
+            <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}" data-admin-only="{{ 'true' if option.admin_only else 'false' }}">
+              <input
+                type="checkbox"
+                form="userAccessForm"
+                name="page_permissions"
+                value="{{ option.key }}"
+                {% if option.key in selected_permissions %}checked{% endif %}
+              >
+              <span>
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.description }}</small>
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+
+        <div class="permission-actions">
+          <button class="btn ghost" type="button" data-select-basic-pages>Permissões básicas</button>
+          <button class="btn ghost" type="button" data-select-all-pages>Marcar tudo</button>
+          <button class="btn primary" type="button" data-close-permission-modal>Concluir</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="full form-actions">
+      <button class="btn primary" type="submit">{{ 'Adicionar usuário' if is_new else 'Salvar acesso' }}</button>
+      <a class="btn ghost" href="{{ url_for('admin_users') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const modal = document.getElementById('permissionModal');
+  const roleSelect = document.querySelector('select[name="role"]');
+  const openButton = document.querySelector('[data-open-permission-modal]');
+  const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
+  const allButton = document.querySelector('[data-select-all-pages]');
+  const basicButton = document.querySelector('[data-select-basic-pages]');
+
+  // Move the permissions modal out of the page layout/form container.
+  // This makes it behave like a real floating window above the entire site.
+  if (modal && modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+
+  function openModal() {
+    if (!modal) return;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('permission-modal-open');
+  }
+
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('permission-modal-open');
+  }
+
+  function syncRolePermissions() {
+    const isAdmin = roleSelect && roleSelect.value === 'admin';
+    document.querySelectorAll('.permission-option[data-admin-only="true"]').forEach(function (item) {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      item.classList.toggle('disabled', !isAdmin);
+      if (checkbox) {
+        checkbox.disabled = !isAdmin;
+        if (!isAdmin) checkbox.checked = false;
+      }
+    });
+  }
+
+  const permissionCard = modal ? modal.querySelector('.permission-card') : null;
+
+  if (permissionCard) {
+    permissionCard.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+  }
+
+  if (openButton) openButton.addEventListener('click', function () {
+    openModal();
+    window.setTimeout(function () {
+      const firstCheckbox = modal ? modal.querySelector('input[type="checkbox"]') : null;
+      if (firstCheckbox) firstCheckbox.focus({ preventScroll: true });
+    }, 60);
+  });
+  closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  if (roleSelect) roleSelect.addEventListener('change', syncRolePermissions);
+  if (allButton) {
+    allButton.addEventListener('click', function () {
+      const isAdmin = roleSelect && roleSelect.value === 'admin';
+      document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
+        const isAdminOnly = checkbox.closest('.permission-option').dataset.adminOnly === 'true';
+        if (!isAdminOnly || isAdmin) checkbox.checked = true;
+      });
+    });
+  }
+  if (basicButton) {
+    basicButton.addEventListener('click', function () {
+      document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
+        const isAdminOnly = checkbox.closest('.permission-option').dataset.adminOnly === 'true';
+        checkbox.checked = !isAdminOnly;
+      });
+    });
+  }
+  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeModal(); });
+  syncRolePermissions();
+})();
+</script>
+{% endblock %}

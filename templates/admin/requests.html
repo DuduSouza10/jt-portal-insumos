@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Solicitações • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Solicitações de insumos{% endblock %}
+{% block page_subtitle %}Aprove, recuse ou exclua pedidos. O estoque é descontado somente na aprovação.{% endblock %}
+{% block content %}
+<div class="card table-card">
+  <div class="section-head">
+    <div class="tabs">
+      <a class="tab {{ 'active' if selected_status == '' else '' }}" href="{{ url_for('admin_requests') }}">Todas</a>
+      <a class="tab {{ 'active' if selected_status == 'pending' else '' }}" href="{{ url_for('admin_requests', status='pending') }}">Pendentes</a>
+      <a class="tab {{ 'active' if selected_status == 'approved' else '' }}" href="{{ url_for('admin_requests', status='approved') }}">Aprovadas</a>
+      <a class="tab {{ 'active' if selected_status == 'rejected' else '' }}" href="{{ url_for('admin_requests', status='rejected') }}">Recusadas</a>
+      <a class="tab {{ 'active' if selected_status == 'deleted' else '' }}" href="{{ url_for('admin_requests', status='deleted') }}">Excluídas</a>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in requests_list %}
+      <tr>
+        <td>#{{ req.id }}</td>
+        <td>{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
+        <td>{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
+        <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td>{{ req.items|length }}</td>
+        <td>{{ format_brl(req.total_cents) }}</td>
+        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="actions-cell"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted center">Nenhuma solicitação encontrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

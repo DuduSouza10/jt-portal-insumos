@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Solicitar insumos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Solicitar insumos{% endblock %}
+{% block page_subtitle %}
+Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
+{% endblock %}
+{% block content %}
+<section class="portal-layout">
+  <div class="products-area">
+    <div class="search-card card">
+      <div class="search-line">
+        <input id="productSearch" placeholder="Pesquisar por insumo, categoria ou descrição..." autocomplete="off">
+        <button id="refreshProducts" class="btn ghost" type="button">Atualizar</button>
+      </div>
+      {% if current_user.role == 'base' %}
+        <p class="hint">Perfil base: valores e estoque não são exibidos.</p>
+      {% elif current_user.role == 'franchise' %}
+        <p class="hint">Perfil franquia: valores aparecem; estoque permanece oculto.</p>
+      {% else %}
+        <p class="hint">Perfil admin: você visualiza preço, estoque e limites.</p>
+      {% endif %}
+    </div>
+
+    <div id="productGrid" class="product-grid"></div>
+    <div id="emptyState" class="empty-state card hidden">Nenhum insumo encontrado.</div>
+  </div>
+
+  <aside class="cart-panel card">
+    <div class="cart-head">
+      <div>
+        <strong>Lista de solicitação</strong>
+        <span id="cartCount">0 itens</span>
+      </div>
+      <button id="clearCart" class="btn danger ghost" type="button">Limpar</button>
+    </div>
+    <div id="cartItems" class="cart-items"></div>
+    <label class="cart-note">
+      Observação opcional
+      <textarea id="requestNote" rows="3" placeholder="Ex.: urgência, rota, responsável pela retirada..."></textarea>
+    </label>
+    <div class="cart-actions">
+      <button id="submitRequest" class="btn primary full-btn" type="button">Enviar solicitação</button>
+      <a id="downloadLastPdf" class="btn ghost full-btn hidden" href="#" target="_blank" rel="noopener">Baixar PDF da solicitação</a>
+      <p id="cartMessage" class="cart-message"></p>
+    </div>
+  </aside>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

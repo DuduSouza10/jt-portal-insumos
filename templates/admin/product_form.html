@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if product else 'Novo' }} produto • Portal de Insumos J&T{% endblock %}
+{% block page_title %}{{ 'Editar produto' if product else 'Novo produto' }}{% endblock %}
+{% block page_subtitle %}Defina estoque, valor, limites de solicitação e estoque mínimo/máximo.{% endblock %}
+{% block content %}
+<div class="card wide-card">
+  <form method="post" class="form-grid two-cols">
+    <label>
+      Nome do produto
+      <input name="name" value="{{ product.name if product else '' }}" required>
+    </label>
+    <label>
+      Categoria
+      <input name="category" value="{{ product.category if product else '' }}" placeholder="Ex.: Embalagens">
+    </label>
+    <label>
+      Estoque disponível
+      <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
+    </label>
+    <label>
+      Valor unitário
+      <input name="price" inputmode="decimal" value="{{ ('%.2f' % product.price_brl).replace('.', ',') if product else '0,00' }}" required>
+    </label>
+    <label>
+      Limite para bases
+      <input name="limit_base" type="number" min="0" value="{{ product.limit_base if product and product.limit_base is not none else '' }}" placeholder="Vazio = sem limite">
+    </label>
+    <label>
+      Limite para franquias
+      <input name="limit_franchise" type="number" min="0" value="{{ product.limit_franchise if product and product.limit_franchise is not none else '' }}" placeholder="Vazio = sem limite">
+    </label>
+    <label>
+      Estoque mínimo
+      <input name="min_stock" type="number" min="0" value="{{ product.min_stock if product and product.min_stock is not none else '' }}" placeholder="Ex.: 100">
+    </label>
+    <label>
+      Estoque máximo
+      <input name="max_stock" type="number" min="0" value="{{ product.max_stock if product and product.max_stock is not none else '' }}" placeholder="Ex.: 500">
+    </label>
+    <label class="full">
+      Descrição
+      <textarea name="description" rows="4">{{ product.description if product else '' }}</textarea>
+    </label>
+    <label class="checkbox-line full">
+      <input type="checkbox" name="active" {% if not product or product.active %}checked{% endif %}>
+      Produto ativo para solicitação
+    </label>
+    <div class="full form-actions">
+      <button class="btn primary" type="submit">Salvar produto</button>
+      <a class="btn ghost" href="{{ url_for('admin_products') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

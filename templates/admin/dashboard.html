@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Painel admin • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Painel administrativo{% endblock %}
+{% block page_subtitle %}Controle geral de cadastros, solicitações, produtos e estoque.{% endblock %}
+{% block content %}
+<section class="stats-grid">
+  <a class="stat-card card" href="{{ url_for('admin_users', status='pending') }}">
+    <span>Cadastros pendentes</span>
+    <strong>{{ counts.users_pending }}</strong>
+  </a>
+  <a class="stat-card card" href="{{ url_for('admin_requests', status='pending') }}">
+    <span>Solicitações pendentes</span>
+    <strong>{{ counts.requests_pending }}</strong>
+  </a>
+  <a class="stat-card card" href="{{ url_for('admin_products') }}">
+    <span>Produtos cadastrados</span>
+    <strong>{{ counts.products }}</strong>
+  </a>
+  <a class="stat-card card" href="{{ url_for('admin_products') }}">
+    <span>Estoque total</span>
+    <strong>{{ counts.stock_total }}</strong>
+  </a>
+</section>
+
+<section class="admin-split">
+  <div class="card table-card">
+    <div class="section-head">
+      <h2>Últimas solicitações</h2>
+      <a href="{{ url_for('admin_requests') }}">Ver todas</a>
+    </div>
+    <table>
+      <thead><tr><th>#</th><th>Unidade</th><th>Status</th><th>Data</th></tr></thead>
+      <tbody>
+        {% for req in latest_requests %}
+        <tr>
+          <td><a href="{{ url_for('admin_request_detail', request_id=req.id) }}">#{{ req.id }}</a></td>
+          <td>{{ req.user.organization_name }}</td>
+          <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+          <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted center">Nenhuma solicitação.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card table-card">
+    <div class="section-head">
+      <h2>Estoque baixo</h2>
+      <a href="{{ url_for('admin_products') }}">Gerenciar</a>
+    </div>
+    <table>
+      <thead><tr><th>Produto</th><th>Estoque</th></tr></thead>
+      <tbody>
+        {% for product in low_stock %}
+        <tr>
+          <td>{{ product.name }}</td>
+          <td><strong>{{ product.stock_quantity }}</strong></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="2" class="muted center">Sem alerta de estoque baixo.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

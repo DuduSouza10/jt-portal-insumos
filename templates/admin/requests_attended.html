@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Solicitações atendidas • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Solicitações atendidas{% endblock %}
+{% block page_subtitle %}Histórico de solicitações aprovadas e já descontadas do estoque.{% endblock %}
+{% block content %}
+<div class="card table-card">
+  <div class="section-head">
+    <h2>Pedidos atendidos</h2>
+    <a class="btn ghost" href="{{ url_for('admin_requests') }}">Ver todas as solicitações</a>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for req in requests_list %}
+      <tr>
+        <td>#{{ req.id }}</td>
+        <td>{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
+        <td>{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
+        <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td>{{ req.items|length }}</td>
+        <td>{{ format_brl(req.total_cents) }}</td>
+        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

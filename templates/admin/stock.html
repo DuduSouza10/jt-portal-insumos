@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+{% block title %}Gestão de Estoque • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Gestão de Estoque{% endblock %}
+{% block page_subtitle %}Painel de controle com níveis mínimos e máximos, saúde do estoque e movimentações registradas.{% endblock %}
+{% block content %}
+<section class="stock-hero card">
+  <div class="stock-hero-copy">
+    <span class="eyebrow">Controle operacional</span>
+    <h2>Visão geral do estoque</h2>
+    <p>Acompanhe produtos críticos, estoque saudável, faixa mínima/máxima e todo o histórico de movimentações.</p>
+  </div>
+  <div class="stock-hero-kpis">
+    <div><span>Produtos</span><strong>{{ totals.products }}</strong></div>
+    <div><span>Itens totais</span><strong>{{ totals.stock_total }}</strong></div>
+    <div class="danger"><span>Críticos</span><strong>{{ totals.critical }}</strong></div>
+    <div class="success"><span>Saudáveis</span><strong>{{ totals.healthy }}</strong></div>
+  </div>
+</section>
+
+<section class="stock-modern-grid">
+  <div class="card stock-panel stock-chart-panel">
+    <div class="section-head stock-panel-head">
+      <div>
+        <h2>Estoque atual por produto</h2>
+        <p class="hint">Sem pesquisa, o gráfico mostra o estoque agrupado por categoria. Pesquise um produto para visualizar somente ele.</p>
+      </div>
+      <a class="btn tiny ghost" href="{{ url_for('admin_products') }}">Editar produtos</a>
+    </div>
+    <div class="stock-search-row">
+      <div class="stock-search-autocomplete">
+        <input id="stockSearchInput" type="search" placeholder="Pesquisar produto..." autocomplete="off" aria-label="Pesquisar produto no estoque">
+        <div id="stockSearchSuggestions" class="stock-search-suggestions hidden" role="listbox" aria-label="Produtos disponíveis"></div>
+      </div>
+      <button class="btn tiny ghost" id="clearStockSearch" type="button">Limpar pesquisa</button>
+    </div>
+    <div class="stock-filter-status" id="stockFilterStatus">
+      <span>Visualização por categoria</span>
+      <button class="btn tiny ghost hidden" id="clearStockFilter" type="button">Limpar filtro</button>
+    </div>
+    <div class="stock-chart-wrap">
+      <canvas id="stockChart" height="320" aria-label="Gráfico de estoque atual por produto"></canvas>
+      <div id="stockChartTooltip" class="stock-chart-tooltip hidden"></div>
+    </div>
+    <div class="stock-legend">
+      <span><i class="legend-dot critical"></i> Atenção</span>
+      <span><i class="legend-dot normal"></i> Dentro da faixa</span>
+      <span><i class="legend-dot good"></i> Saudável</span>
+    </div>
+  </div>
+
+  <aside class="card stock-panel stock-risk-panel">
+    <div class="section-head stock-panel-head">
+      <div>
+        <h2>Prioridade de reposição</h2>
+        <p class="hint">Produtos que exigem acompanhamento mais próximo.</p>
+      </div>
+    </div>
+    <div class="stock-priority-list">
+      {% for row in risk_rows %}
+      <article class="stock-priority-item {{ row.status }}" data-stock-product="{{ row.product.name|e }}" data-stock-category="{{ (row.product.category or 'Sem categoria')|e }}">
+        <div>
+          <strong>{{ row.product.name }}</strong>
+          <small>{{ row.label }} • Min {{ row.min if row.min is not none else '-' }} / Máx {{ row.max if row.max is not none else '-' }}</small>
+        </div>
+        <b>{{ row.product.stock_quantity }}</b>
+      </article>
+      {% else %}
+      <p class="muted">Nenhum produto cadastrado.</p>
+      {% endfor %}
+    </div>
+    <p id="stockPriorityEmpty" class="stock-filter-empty hidden">Nenhum item encontrado para este produto.</p>
+  </aside>
+</section>
+
+<section class="card stock-board">
+  <div class="section-head stock-panel-head">
+    <div>
+      <h2>Mapa de estoque</h2>
+      <p class="hint">Comparativo rápido entre estoque atual, mínimo e máximo definido.</p>
+    </div>
+  </div>
+  <div class="stock-board-grid">
+    {% for row in stock_rows %}
+    <article class="stock-product-card {{ row.status }}" data-stock-product="{{ row.product.name|e }}" data-stock-category="{{ (row.product.category or 'Sem categoria')|e }}">
+      <div class="stock-product-top">
+        <div>
+          <strong>{{ row.product.name }}</strong>
+          <small>{{ row.product.category or 'Sem categoria' }}</small>
+        </div>
+        <span class="stock-pill {{ row.status }}">{{ row.label }}</span>
+      </div>
+      <div class="stock-meter" aria-hidden="true">
+        <span style="width: {{ row.percent }}%"></span>
+      </div>
+      <div class="stock-product-bottom">
+        <span>Atual <b>{{ row.product.stock_quantity }}</b></span>
+        <span>Mín. <b>{{ row.min if row.min is not none else '-' }}</b></span>
+        <span>Máx. <b>{{ row.max if row.max is not none else '-' }}</b></span>
+      </div>
+    </article>
+    {% else %}
+    <p class="muted">Nenhum produto cadastrado.</p>
+    {% endfor %}
+  </div>
+  <p id="stockBoardEmpty" class="stock-filter-empty hidden">Nenhum card encontrado para este produto.</p>
+</section>
+
+<section class="card table-card stock-movements-card">
+  <div class="section-head stock-panel-head">
+    <div>
+      <h2>Movimentações de estoque</h2>
+      <p class="hint">Entradas, saídas por solicitação, ajustes manuais e importações.</p>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th><th>Produto</th><th>Tipo</th><th>Mov.</th><th>Antes</th><th>Depois</th><th>Solicitação</th><th>Responsável</th><th>Observação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for mov in movement_rows %}
+      <tr data-stock-product="{{ (mov.product_name or '')|e }}" data-stock-category="{{ (mov.product_category or 'Sem categoria')|e }}">
+        <td>{{ mov.created_at }}</td>
+        <td><strong>{{ mov.product_name or '-' }}</strong></td>
+        <td>{{ movement_type_label(mov.movement_type) }}</td>
+        <td><span class="movement-delta {{ 'positive' if mov.quantity_delta > 0 else 'negative' }}">{{ '+' if mov.quantity_delta > 0 else '' }}{{ mov.quantity_delta }}</span></td>
+        <td>{{ mov.stock_before }}</td>
+        <td>{{ mov.stock_after }}</td>
+        <td>{% if mov.request_id %}<a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>{% else %}-{% endif %}</td>
+        <td>{{ mov.created_by_name or '-' }}</td>
+        <td>{{ mov.note or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted center">Nenhuma movimentação registrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p id="stockMovementsEmpty" class="stock-filter-empty hidden">Nenhuma movimentação encontrada para este produto.</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.stockChartData = {
+    products: {{ chart_products|tojson }},
+    categories: {{ chart_categories|tojson }}
+  };
+
+  (function () {
+    const canvas = document.getElementById('stockChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const data = window.stockChartData || { products: [], categories: [] };
+    const tooltip = document.getElementById('stockChartTooltip');
+    const statusBox = document.getElementById('stockFilterStatus');
+    const clearButton = document.getElementById('clearStockFilter');
+    const searchInput = document.getElementById('stockSearchInput');
+    const clearSearchButton = document.getElementById('clearStockSearch');
+    const suggestionsBox = document.getElementById('stockSearchSuggestions');
+    let bars = [];
+    let lockedFilter = null;
+    let searchQuery = '';
+
+    function normalize(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function cssVar(name, fallback) {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return value || fallback;
+    }
+
+    function closeSuggestions() {
+      if (!suggestionsBox) return;
+      suggestionsBox.classList.add('hidden');
+    }
+
+    function renderSuggestions() {
+      if (!suggestionsBox || !searchInput) return;
+      const query = normalize(searchInput.value || '');
+      const source = (data.products || [])
+        .filter(function (product) {
+          if (!query) return true;
+          return normalize(product.name).includes(query) || normalize(product.category).includes(query);
+        })
+        .sort(function (a, b) {
+          return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+        });
+
+      if (!source.length) {
+        suggestionsBox.innerHTML = '<div class="stock-suggestion-empty">Nenhum produto encontrado.</div>';
+        suggestionsBox.classList.remove('hidden');
+        return;
+      }
+
+      suggestionsBox.innerHTML = source.map(function (product) {
+        const safeName = String(product.name || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+        const safeCategory = String(product.category || 'Sem categoria').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+        const safeStatus = String(product.label || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+        return `<button type="button" class="stock-suggestion-item" data-product="${safeName}" data-category="${safeCategory}"><strong>${safeName}</strong><span>${safeCategory} • ${safeStatus}</span></button>`;
+      }).join('');
+      suggestionsBox.classList.remove('hidden');
+    }
+
+    function selectSuggestedProduct(name, category) {
+      if (!searchInput) return;
+      searchInput.value = name || '';
+      searchQuery = searchInput.value;
+      lockedFilter = name ? { type: 'product', label: name, product: name, category: category || 'Sem categoria' } : null;
+      closeSuggestions();
+      applyFilter();
+      draw();
+      hideTooltip();
+    }
+
+    function currentItems() {
+      const query = normalize(searchQuery);
+      if (!query) {
+        return (data.categories || []).map(function (item) {
+          const status = item.critical > 0 ? 'critical' : (item.good >= item.products ? 'good' : 'normal');
+          return {
+            type: 'category',
+            label: item.category || 'Sem categoria',
+            category: item.category || 'Sem categoria',
+            value: Number(item.stock || 0),
+            min: Number(item.min || 0),
+            max: Number(item.max || 0),
+            status,
+            subtitle: `${item.products || 0} produto(s)`
+          };
+        });
+      }
+
+      return (data.products || [])
+        .filter(function (product) {
+          return normalize(product.name).includes(query) || normalize(product.category).includes(query);
+        })
+        .map(function (product) {
+          return {
+            type: 'product',
+            label: product.name,
+            product: product.name,
+            category: product.category || 'Sem categoria',
+            value: Number(product.stock || 0),
+            min: Number(product.min || 0),
+            max: Number(product.max || 0),
+            status: product.status || 'normal',
+            subtitle: product.category || 'Sem categoria'
+          };
+        });
+    }
+
+    function setStatus() {
+      if (!statusBox) return;
+      const text = statusBox.querySelector('span');
+      if (!text) return;
+
+      if (lockedFilter) {
+        const prefix = lockedFilter.type === 'category' ? 'Categoria' : 'Produto';
+        text.textContent = `${prefix}: ${lockedFilter.label}`;
+      } else if (searchQuery.trim()) {
+        text.textContent = `Pesquisa: ${searchQuery.trim()}`;
+      } else {
+        text.textContent = 'Visualização por categoria';
+      }
+      if (clearButton) clearButton.classList.toggle('hidden', !lockedFilter && !searchQuery.trim());
+    }
+
+    function itemMatchesFilter(element) {
+      const product = normalize(element.dataset.stockProduct);
+      const category = normalize(element.dataset.stockCategory);
+      const query = normalize(searchQuery);
+
+      if (lockedFilter) {
+        if (lockedFilter.type === 'product') return product === normalize(lockedFilter.product || lockedFilter.label);
+        if (lockedFilter.type === 'category') return category === normalize(lockedFilter.category || lockedFilter.label);
+      }
+
+      if (query) {
+        return product.includes(query) || category.includes(query);
+      }
+
+      return true;
+    }
+
+    function applyFilter() {
+      let priorityVisible = 0;
+      let boardVisible = 0;
+      let movementVisible = 0;
+
+      document.querySelectorAll('.stock-priority-item[data-stock-product]').forEach(function (item) {
+        const visible = itemMatchesFilter(item);
+        item.classList.toggle('stock-filter-hidden', !visible);
+        if (visible) priorityVisible += 1;
+      });
+
+      document.querySelectorAll('.stock-product-card[data-stock-product]').forEach(function (item) {
+        const visible = itemMatchesFilter(item);
+        const selected = lockedFilter && lockedFilter.type === 'product' && normalize(item.dataset.stockProduct) === normalize(lockedFilter.product || lockedFilter.label);
+        item.classList.toggle('stock-filter-hidden', !visible);
+        item.classList.toggle('selected', !!selected);
+        if (visible) boardVisible += 1;
+      });
+
+      document.querySelectorAll('.stock-movements-card tbody tr[data-stock-product]').forEach(function (item) {
+        const visible = itemMatchesFilter(item);
+        item.classList.toggle('stock-filter-hidden', !visible);
+        if (visible) movementVisible += 1;
+      });
+
+      const priorityEmpty = document.getElementById('stockPriorityEmpty');
+      const boardEmpty = document.getElementById('stockBoardEmpty');
+      const movementsEmpty = document.getElementById('stockMovementsEmpty');
+      if (priorityEmpty) priorityEmpty.classList.toggle('hidden', priorityVisible > 0);
+      if (boardEmpty) boardEmpty.classList.toggle('hidden', boardVisible > 0);
+      if (movementsEmpty) movementsEmpty.classList.toggle('hidden', movementVisible > 0);
+      setStatus();
+    }
+
+    function findBar(event) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = (canvas._drawWidth || rect.width) / rect.width;
+      const scaleY = (canvas._drawHeight || rect.height) / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+      return bars.find(function (bar) {
+        return x >= bar.x && x <= bar.x + bar.width && y >= bar.hitTop && y <= bar.hitBottom;
+      }) || null;
+    }
+
+    function showTooltip(bar, event) {
+      if (!tooltip || !bar) return;
+      const typeLabel = bar.type === 'category' ? 'Categoria' : 'Produto';
+      tooltip.innerHTML = `<strong>${bar.label}</strong><span>${typeLabel} • ${bar.subtitle || '-'}</span><span>Estoque atual: ${bar.value}</span><span>Mín.: ${bar.min || '-'} • Máx.: ${bar.max || '-'}</span><span>Clique para filtrar</span>`;
+      tooltip.classList.remove('hidden');
+      const wrap = canvas.parentElement.getBoundingClientRect();
+      const left = Math.min(Math.max(12, event.clientX - wrap.left + 14), Math.max(12, wrap.width - 230));
+      const top = Math.max(12, event.clientY - wrap.top - 96);
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+
+    function hideTooltip() {
+      if (tooltip) tooltip.classList.add('hidden');
+    }
+
+    function draw() {
+      const items = currentItems();
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(760, rect.width || 760);
+      const height = 320;
+      canvas._drawWidth = width;
+      canvas._drawHeight = height;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      bars = [];
+
+      if (!items.length) {
+        ctx.fillStyle = cssVar('--muted', '#777');
+        ctx.font = '700 14px system-ui';
+        ctx.fillText(searchQuery.trim() ? 'Nenhum produto encontrado para a pesquisa.' : 'Nenhuma categoria cadastrada.', 24, 44);
+        return;
+      }
+
+      const pad = { left: 44, right: 26, top: 28, bottom: 30 };
+      const plotW = width - pad.left - pad.right;
+      const plotH = height - pad.top - pad.bottom;
+      const maxValue = Math.max(1, ...items.map(item => item.value), ...items.map(item => item.max), ...items.map(item => item.min));
+      const barGap = Math.max(12, Math.min(26, plotW / items.length * .18));
+      const barWidth = Math.max(18, Math.min(64, (plotW - (items.length - 1) * barGap) / items.length));
+      const totalW = items.length * barWidth + (items.length - 1) * barGap;
+      const startX = pad.left + Math.max(0, (plotW - totalW) / 2);
+
+      ctx.strokeStyle = 'rgba(148,163,184,.20)';
+      ctx.lineWidth = 1;
+      ctx.fillStyle = cssVar('--muted', '#777');
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'left';
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.top + plotH * i / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(width - pad.right, y);
+        ctx.stroke();
+        const labelValue = Math.round(maxValue - (maxValue * i / 4));
+        ctx.fillText(String(labelValue), 8, y + 4);
+      }
+
+      items.forEach((item, i) => {
+        const x = startX + i * (barWidth + barGap);
+        const value = Number(item.value || 0);
+        const min = Number(item.min || 0);
+        const max = Number(item.max || 0);
+        const isLocked = lockedFilter && lockedFilter.type === item.type && normalize(lockedFilter.label) === normalize(item.label);
+        const nearMin = item.status === 'critical' || (min && value <= min + Math.max(1, Math.round((Math.max(max, min + 1) - min) * .15)));
+        const healthy = item.status === 'good' || (max ? value >= max : (min && value > min));
+        const barHeight = Math.max(5, plotH * value / maxValue);
+        const y = pad.top + plotH - barHeight;
+        const color = nearMin ? '#e60012' : (healthy ? '#13a35b' : '#9ca3af');
+
+        if (isLocked) {
+          ctx.fillStyle = 'rgba(230,0,18,.10)';
+          ctx.beginPath();
+          ctx.roundRect(x - 8, pad.top - 8, barWidth + 16, plotH + 16, 16);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = lockedFilter && !isLocked ? .34 : 1;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barWidth, barHeight, 10);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        if (min) {
+          const minY = pad.top + plotH - (plotH * min / maxValue);
+          ctx.strokeStyle = isLocked ? 'rgba(230,0,18,.88)' : 'rgba(230,0,18,.46)';
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(x - 3, minY);
+          ctx.lineTo(x + barWidth + 3, minY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        ctx.fillStyle = cssVar('--text-strong', '#111');
+        ctx.font = isLocked ? '900 12px system-ui' : '800 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(value), x + barWidth / 2, Math.max(14, y - 8));
+
+        bars.push({
+          ...item,
+          x,
+          y,
+          width: barWidth,
+          height: barHeight,
+          hitTop: pad.top,
+          hitBottom: pad.top + plotH
+        });
+      });
+    }
+
+    canvas.addEventListener('mousemove', function (event) {
+      const bar = findBar(event);
+      canvas.style.cursor = bar ? 'pointer' : 'default';
+      if (bar) showTooltip(bar, event);
+      else hideTooltip();
+    });
+
+    canvas.addEventListener('mouseleave', function () {
+      hideTooltip();
+    });
+
+    canvas.addEventListener('click', function (event) {
+      const bar = findBar(event);
+      if (!bar) {
+        lockedFilter = null;
+      } else {
+        const sameFilter = lockedFilter && lockedFilter.type === bar.type && normalize(lockedFilter.label) === normalize(bar.label);
+        lockedFilter = sameFilter ? null : bar;
+      }
+      applyFilter();
+      draw();
+      if (bar && lockedFilter) showTooltip(bar, event);
+      else hideTooltip();
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('focus', function () {
+        renderSuggestions();
+      });
+
+      searchInput.addEventListener('input', function () {
+        searchQuery = searchInput.value || '';
+        lockedFilter = null;
+        renderSuggestions();
+        applyFilter();
+        draw();
+        hideTooltip();
+      });
+    }
+
+    if (suggestionsBox) {
+      suggestionsBox.addEventListener('mousedown', function (event) {
+        const button = event.target.closest('.stock-suggestion-item');
+        if (!button) return;
+        event.preventDefault();
+        selectSuggestedProduct(button.dataset.product || '', button.dataset.category || 'Sem categoria');
+      });
+    }
+
+    document.addEventListener('mousedown', function (event) {
+      if (!suggestionsBox || !searchInput) return;
+      if (suggestionsBox.contains(event.target) || searchInput.contains(event.target)) return;
+      closeSuggestions();
+    });
+
+    if (clearSearchButton) {
+      clearSearchButton.addEventListener('click', function () {
+        if (searchInput) searchInput.value = '';
+        searchQuery = '';
+        lockedFilter = null;
+        applyFilter();
+        draw();
+        hideTooltip();
+        closeSuggestions();
+      });
+    }
+
+    if (clearButton) {
+      clearButton.addEventListener('click', function () {
+        lockedFilter = null;
+        searchQuery = '';
+        if (searchInput) searchInput.value = '';
+        applyFilter();
+        draw();
+        hideTooltip();
+        closeSuggestions();
+      });
+    }
+
+    draw();
+    applyFilter();
+    window.addEventListener('resize', draw);
+    const toggle = document.getElementById('themeToggle');
+    if (toggle) toggle.addEventListener('click', function () { setTimeout(draw, 80); });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Login • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Acesso ao Portal{% endblock %}
+{% block page_subtitle %}Entre com seu e-mail e senha para solicitar insumos.{% endblock %}
+{% block content %}
+<section class="auth-card card">
+  <form method="post" class="form-grid">
+    <label>
+      E-mail
+      <input name="email" type="email" placeholder="seu.email@jt.com" required>
+    </label>
+    <label>
+      Senha
+      <input name="password" type="password" placeholder="Sua senha" required>
+    </label>
+    <button class="btn primary" type="submit">Entrar</button>
+    <p class="auth-switch">Ainda não tem cadastro? <a href="{{ url_for('register') }}">Solicitar acesso</a></p>
+  </form>
+</section>
+{% endblock %}
