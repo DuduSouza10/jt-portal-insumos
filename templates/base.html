@@ -115,6 +115,15 @@
     </span>
   </div>
 
+  <button id="languageToggle" class="language-toggle" type="button" aria-label="Alternar idioma entre português e chinês tradicional" aria-pressed="false">
+    <span class="language-toggle-track">
+      <span class="language-option language-pt">PT</span>
+      <span class="language-option language-zh">繁中</span>
+      <span class="language-toggle-thumb"></span>
+    </span>
+    <span class="language-toggle-text">Idioma</span>
+  </button>
+
   <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema claro ou escuro">
     <span class="theme-toggle-track">
       <span class="theme-toggle-thumb"></span>
@@ -169,6 +178,7 @@
       });
     });
   </script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>

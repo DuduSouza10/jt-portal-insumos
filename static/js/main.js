@@ -14,6 +14,10 @@ let products = [];
 let cart = new Map();
 let debounceTimer = null;
 
+function jtText(text) {
+  return window.JT_I18N && typeof window.JT_I18N.t === 'function' ? window.JT_I18N.t(text) : text;
+}
+
 function setMessage(text, type = '') {
   cartMessage.textContent = text || '';
   cartMessage.className = `cart-message ${type}`;
@@ -42,7 +46,7 @@ function escapeHtml(value) {
 
 async function loadProducts() {
   const q = productSearch.value.trim();
-  productGrid.innerHTML = '<div class="card empty-state">Carregando insumos...</div>';
+  productGrid.innerHTML = `<div class="card empty-state">${jtText('Carregando insumos...')}</div>`;
   emptyState.classList.add('hidden');
   const response = await fetch(`/api/products?q=${encodeURIComponent(q)}`);
   products = await response.json();
@@ -62,8 +66,8 @@ function renderProducts() {
     card.style.animationDelay = `${Math.min(index * 0.045, 0.45)}s`;
 
     const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)}</span>` : '';
-    const stockBadge = product.show_stock ? `<span class="badge">Estoque: ${product.stock_quantity}</span>` : '';
-    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">Limite: ${product.limit}</span>` : `<span class="badge">Sem limite definido</span>`;
+    const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity}</span>` : '';
+    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
 
     card.innerHTML = `
       <div class="product-head">
@@ -72,7 +76,7 @@ function renderProducts() {
       </div>
       <div>
         <h3>${escapeHtml(product.name)}</h3>
-        <p>${escapeHtml(product.description || 'Sem descrição cadastrada.')}</p>
+        <p>${escapeHtml(product.description || jtText('Sem descrição cadastrada.'))}</p>
       </div>
       <div class="meta-row">
         ${priceBadge}
@@ -80,8 +84,8 @@ function renderProducts() {
         ${limitBadge}
       </div>
       <div class="add-row">
-        <input type="number" min="1" value="1" aria-label="Quantidade">
-        <button class="btn primary" type="button">Adicionar</button>
+        <input type="number" min="1" value="1" aria-label="${jtText('Quantidade')}">
+        <button class="btn primary" type="button">${jtText('Adicionar')}</button>
       </div>
     `;
     const qtyInput = card.querySelector('input');
@@ -89,17 +93,17 @@ function renderProducts() {
     button.addEventListener('click', () => {
       const quantity = parseInt(qtyInput.value, 10);
       if (!quantity || quantity <= 0) {
-        setMessage('Informe uma quantidade válida.', 'err');
+        setMessage(jtText('Informe uma quantidade válida.'), 'err');
         return;
       }
       const current = cart.get(product.id)?.quantity || 0;
       if (product.limit !== null && product.limit !== undefined && current + quantity > product.limit) {
-        setMessage(`Limite de insumos excedido para ${product.name}. Limite permitido: ${product.limit}.`, 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${product.name}. Limite permitido: ${product.limit}.`), 'err');
         return;
       }
       cart.set(product.id, { product, quantity: current + quantity });
       renderCart();
-      setMessage(`${product.name} adicionado à solicitação.`, 'ok');
+      setMessage(jtText(`${product.name} adicionado à solicitação.`), 'ok');
     });
     productGrid.appendChild(card);
   });
@@ -109,10 +113,10 @@ function renderCart() {
   cartItems.innerHTML = '';
   const values = Array.from(cart.values());
   const totalQty = values.reduce((sum, item) => sum + item.quantity, 0);
-  cartCount.textContent = `${totalQty} ${totalQty === 1 ? 'item' : 'itens'}`;
+  cartCount.textContent = `${totalQty} ${totalQty === 1 ? jtText('item') : jtText('itens')}`;
 
   if (!values.length) {
-    cartItems.innerHTML = '<div class="muted center">Sua lista está vazia.</div>';
+    cartItems.innerHTML = `<div class="muted center">${jtText('Sua lista está vazia.')}</div>`;
     return;
   }
 
@@ -123,7 +127,7 @@ function renderCart() {
     div.innerHTML = `
       <div>
         <strong>${escapeHtml(item.product.name)}</strong>
-        <span>${item.product.show_price ? escapeHtml(item.product.price) : 'Valor oculto'}</span>
+        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')}</span>
       </div>
       <input type="number" min="1" value="${item.quantity}">
       <button class="btn ghost danger" type="button">×</button>
@@ -138,7 +142,7 @@ function renderCart() {
       }
       if (item.product.limit !== null && item.product.limit !== undefined && quantity > item.product.limit) {
         input.value = item.quantity;
-        setMessage(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`, 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`), 'err');
         return;
       }
       cart.set(item.product.id, { product: item.product, quantity });
@@ -147,7 +151,7 @@ function renderCart() {
     remove.addEventListener('click', () => {
       cart.delete(item.product.id);
       renderCart();
-      setMessage('Item removido.', '');
+      setMessage(jtText('Item removido.'), '');
     });
     cartItems.appendChild(div);
   });
@@ -157,11 +161,11 @@ async function sendRequest() {
   hideLastPdfButton();
   const values = Array.from(cart.values());
   if (!values.length) {
-    setMessage('Adicione pelo menos um insumo antes de enviar.', 'err');
+    setMessage(jtText('Adicione pelo menos um insumo antes de enviar.'), 'err');
     return;
   }
   submitRequest.disabled = true;
-  setMessage('Enviando solicitação...', '');
+  setMessage(jtText('Enviando solicitação...'), '');
   try {
     const response = await fetch('/api/requests', {
       method: 'POST',
@@ -173,16 +177,16 @@ async function sendRequest() {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      setMessage(data.message || 'Não foi possível enviar a solicitação.', 'err');
+      setMessage(jtText(data.message || 'Não foi possível enviar a solicitação.'), 'err');
       return;
     }
     cart.clear();
     requestNote.value = '';
     renderCart();
-    setMessage(`Solicitação #${data.request_id} enviada para aprovação. PDF disponível para download.`, 'ok');
+    setMessage(jtText(`Solicitação #${data.request_id} enviada para aprovação. PDF disponível para download.`), 'ok');
     showLastPdfButton(data.request_id);
   } catch (error) {
-    setMessage('Erro de conexão ao enviar solicitação.', 'err');
+    setMessage(jtText('Erro de conexão ao enviar solicitação.'), 'err');
   } finally {
     submitRequest.disabled = false;
   }
@@ -197,9 +201,15 @@ clearCart.addEventListener('click', () => {
   cart.clear();
   renderCart();
   hideLastPdfButton();
-  setMessage('Lista limpa.', '');
+  setMessage(jtText('Lista limpa.'), '');
 });
 submitRequest.addEventListener('click', sendRequest);
 
 renderCart();
 loadProducts();
+
+
+window.addEventListener('jt-language-change', function () {
+  if (Array.isArray(products)) renderProducts();
+  renderCart();
+});
