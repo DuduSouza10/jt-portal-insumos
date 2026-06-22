@@ -171,3 +171,8 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 
 - Mensagens do código alteradas para confirmação de login.
 - Logo do topo substituída pelo SVG enviado.
+
+
+## v33
+- Removido o aviso duplicado de envio de código por e-mail na confirmação de login.
+- Mensagem de modo dev alterada para: “Insira o código para confirmar o seu login”.

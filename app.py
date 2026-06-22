@@ -932,7 +932,7 @@ def send_admin_login_code(user: User, code: str) -> bool:
     print("=" * 80)
     print(f"CÓDIGO DE CONFIRMAÇÃO DE LOGIN DEV para {user.email}: {code}")
     print("=" * 80)
-    flash(f"Modo dev sem SMTP: código de confirmação de login é {code}", "info")
+    flash(f"Insira o código para confirmar o seu login: {code}", "info")
     return True
 
 
@@ -1279,7 +1279,6 @@ def login():
             if not send_admin_login_code(user, code):
                 session.pop("pending_admin_user_id", None)
                 return redirect(url_for("login"))
-            flash("Enviamos um código de confirmação para o seu e-mail. Digite o código para concluir o login.", "info")
             return redirect(url_for("verify_admin"))
 
         session["user_id"] = user.id
