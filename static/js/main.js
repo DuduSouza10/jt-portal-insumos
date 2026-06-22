@@ -66,19 +66,23 @@ function renderProducts() {
     card.style.animationDelay = `${Math.min(index * 0.045, 0.45)}s`;
 
     const unit = product.unit_measure || 'un';
-    const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unit)}</span>` : '';
-    const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unit)}</span>`;
-    const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unit)}</span>` : '';
-    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unit)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
+    const unitLabel = jtText(unit);
+    const productName = jtText(product.name || '');
+    const productCategory = jtText(product.category || '');
+    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
+    const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unitLabel)}</span>` : '';
+    const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
+    const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
+    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unitLabel)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
 
     card.innerHTML = `
       <div class="product-head">
         <span class="product-icon">📦</span>
-        <span class="product-category">${escapeHtml(product.category)}</span>
+        <span class="product-category">${escapeHtml(productCategory)}</span>
       </div>
       <div>
-        <h3>${escapeHtml(product.name)}</h3>
-        <p>${escapeHtml(product.description || jtText('Sem descrição cadastrada.'))}</p>
+        <h3>${escapeHtml(productName)}</h3>
+        <p>${escapeHtml(productDescription)}</p>
       </div>
       <div class="meta-row">
         ${priceBadge}
@@ -101,12 +105,12 @@ function renderProducts() {
       }
       const current = cart.get(product.id)?.quantity || 0;
       if (product.limit !== null && product.limit !== undefined && current + quantity > product.limit) {
-        setMessage(jtText(`Limite de insumos excedido para ${product.name}. Limite permitido: ${product.limit}.`), 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
         return;
       }
       cart.set(product.id, { product, quantity: current + quantity });
       renderCart();
-      setMessage(jtText(`${product.name} adicionado à solicitação.`), 'ok');
+      setMessage(jtText(`${productName} adicionado à solicitação.`), 'ok');
     });
     productGrid.appendChild(card);
   });
@@ -129,8 +133,8 @@ function renderCart() {
     div.style.animationDelay = `${Math.min(index * 0.035, 0.25)}s`;
     div.innerHTML = `
       <div>
-        <strong>${escapeHtml(item.product.name)}</strong>
-        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(item.product.unit_measure || 'un')}</span>
+        <strong>${escapeHtml(jtText(item.product.name))}</strong>
+        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(jtText(item.product.unit_measure || 'un'))}</span>
       </div>
       <input type="number" min="1" value="${item.quantity}">
       <button class="btn ghost danger" type="button">×</button>
@@ -145,7 +149,7 @@ function renderCart() {
       }
       if (item.product.limit !== null && item.product.limit !== undefined && quantity > item.product.limit) {
         input.value = item.quantity;
-        setMessage(jtText(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`), 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${jtText(item.product.name)}. Limite permitido: ${item.product.limit}.`), 'err');
         return;
       }
       cart.set(item.product.id, { product: item.product, quantity });

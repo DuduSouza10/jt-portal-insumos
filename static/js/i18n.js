@@ -358,12 +358,45 @@
 "Solicitações pendentes": "待處理申請",
 "×": "×"
 };
+
+  Object.assign(zh, {
+    "Produtos e estoque": "產品與庫存",
+    "Cadastre insumos, valores, limites e parâmetros de estoque mínimo/máximo.": "註冊耗材、價格、限制以及最低/最高庫存參數。",
+    "Produtos cadastrados": "已註冊產品",
+    "Já cadastrados": "已註冊",
+    "Envelope de segurança M": "M 型安全信封",
+    "Envelope de segurança P": "P 型安全信封",
+    "Envelope médio para envios padrão.": "用於標準寄件的中型信封。",
+    "Envelope pequeno para envios leves.": "用於輕量寄件的小型信封。",
+    "Etiqueta térmica": "熱敏標籤",
+    "Rolo de etiqueta para impressora térmica.": "熱敏印表機用標籤卷。",
+    "Lacre plástico": "塑膠封條",
+    "Lacre numerado para controle interno.": "用於內部管控的編號封條。",
+    "Embalagens": "包裝用品",
+    "Etiquetas": "標籤",
+    "Operacional": "營運用品",
+    "Sem limite": "無限制",
+    "un": "個",
+    "rolo": "卷",
+    "caixa": "箱",
+    "pacote": "包",
+    "metro": "公尺",
+    "kg": "公斤",
+    "Normal": "正常",
+    "Baixo": "偏低",
+    "Crítico": "危急",
+    "Alto": "偏高",
+    "Importar planilha de produtos (.xlsx)": "匯入產品試算表 (.xlsx)",
+    "No file selected.": "尚未選擇檔案。",
+    "Browse...": "瀏覽..."
+  });
+
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
-  const VIEWPORT_PADDING = 520;
-  const MAX_TEXT_NODES_PER_RUN = 2600;
-  const MAX_ATTR_NODES_PER_RUN = 1800;
+  const VIEWPORT_PADDING = 2200;
+  const MAX_TEXT_NODES_PER_RUN = 12000;
+  const MAX_ATTR_NODES_PER_RUN = 9000;
   const originalTitle = document.title;
   let scheduled = false;
 
@@ -434,7 +467,34 @@
     ['Franquia', '加盟店'],
     ['Admin', '管理員'],
     ['Ativo', '啟用'],
-    ['Inativo', '停用']
+    ['Inativo', '停用'],
+    ['Envelope de segurança', '安全信封'],
+    ['Envelope médio', '中型信封'],
+    ['Envelope pequeno', '小型信封'],
+    ['Etiqueta térmica', '熱敏標籤'],
+    ['Lacre plástico', '塑膠封條'],
+    ['Envelope', '信封'],
+    ['etiqueta', '標籤'],
+    ['impressora térmica', '熱敏印表機'],
+    ['envios padrão', '標準寄件'],
+    ['envios leves', '輕量寄件'],
+    ['controle interno', '內部管控'],
+    ['estoque mínimo/máximo', '最低/最高庫存'],
+    ['estoque mínimo', '最低庫存'],
+    ['estoque máximo', '最高庫存'],
+    ['estoque', '庫存'],
+    ['produtos', '產品'],
+    ['produto', '產品'],
+    ['insumos', '耗材'],
+    ['insumo', '耗材'],
+    ['valores', '價格'],
+    ['limites', '限制'],
+    ['parâmetros', '參數'],
+    ['cadastrados', '已註冊'],
+    ['Cadastre', '註冊'],
+    ['mínimo', '最低'],
+    ['máximo', '最高'],
+    ['para', '用於']
   ].sort(function (a, b) { return b[0].length - a[0].length; });
 
   function currentLanguage() {
@@ -474,6 +534,13 @@
     if ((match = core.match(/^Atual\s*(.+)$/))) return `目前 ${match[1]}`;
     if ((match = core.match(/^(\d+)\s+item$/))) return `${match[1]} 項`;
     if ((match = core.match(/^(\d+)\s+itens$/))) return `${match[1]} 項`;
+    if ((match = core.match(/^(\d+)\s+un$/))) return `${match[1]} 個`;
+    if ((match = core.match(/^(\d+)\s+rolo$/))) return `${match[1]} 卷`;
+    if ((match = core.match(/^(\d+)\s+rolos$/))) return `${match[1]} 卷`;
+    if ((match = core.match(/^(\d+)\s+caixa$/))) return `${match[1]} 箱`;
+    if ((match = core.match(/^(\d+)\s+caixas$/))) return `${match[1]} 箱`;
+    if ((match = core.match(/^(\d+)\s+pacote$/))) return `${match[1]} 包`;
+    if ((match = core.match(/^(\d+)\s+pacotes$/))) return `${match[1]} 包`;
     if ((match = core.match(/^Admin\s*•\s*(.+)$/))) return `管理員 • ${match[1]}`;
     if ((match = core.match(/^Base\s*•\s*(.+)$/))) return `基地 • ${match[1]}`;
     if ((match = core.match(/^Franquia\s*•\s*(.+)$/))) return `加盟店 • ${match[1]}`;
@@ -704,5 +771,6 @@
     }
 
     scheduleVisibleTranslation(document.body || document.documentElement, 20);
+    window.setTimeout(function () { if (currentLanguage() === 'zh-Hant') refresh(document.body || document.documentElement); }, 260);
   });
 })();
