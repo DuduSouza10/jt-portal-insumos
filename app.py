@@ -906,18 +906,22 @@ def parse_money_to_cents(value: Any) -> int:
     for token in ["R$", "BRL", "￥", "¥"]:
         text_value = text_value.replace(token, "")
     text_value = text_value.replace(" ", "")
-    # Mantém apenas caracteres úteis para número. Isso evita erro com valores como "R$ 1.200,50" ou "25,00/un".
     text_value = re.sub(r"[^0-9,.-]", "", text_value)
     if not text_value:
         return 0
     if "," in text_value and "." in text_value:
-        # Assume formato brasileiro quando a vírgula aparece depois do ponto: 1.234,56
         if text_value.rfind(",") > text_value.rfind("."):
             text_value = text_value.replace(".", "").replace(",", ".")
         else:
             text_value = text_value.replace(",", "")
     elif "," in text_value:
-        text_value = text_value.replace(".", "").replace(",", ".")
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", text_value):
+            text_value = text_value.replace(",", "")
+        else:
+            text_value = text_value.replace(".", "").replace(",", ".")
+    elif "." in text_value:
+        if re.fullmatch(r"\d{1,3}(\.\d{3})+", text_value):
+            text_value = text_value.replace(".", "")
     try:
         return max(0, int(round(float(text_value or "0") * 100)))
     except (TypeError, ValueError, OverflowError):
@@ -1057,7 +1061,6 @@ def parse_optional_int(value: Any) -> int | None:
         except (TypeError, ValueError, OverflowError):
             return None
     text_value = str(value).strip()
-    # Remove unidades e textos extras: "400 un", "1.200 peças", "100 个".
     text_value = re.sub(r"[^0-9,.-]", "", text_value)
     if not text_value:
         return None
@@ -1067,9 +1070,13 @@ def parse_optional_int(value: Any) -> int | None:
         else:
             text_value = text_value.replace(",", "")
     elif "," in text_value:
-        text_value = text_value.replace(",", ".")
-    elif text_value.count(".") > 1:
-        text_value = text_value.replace(".", "")
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", text_value):
+            text_value = text_value.replace(",", "")
+        else:
+            text_value = text_value.replace(",", ".")
+    elif "." in text_value:
+        if text_value.count(".") > 1 or re.fullmatch(r"\d{1,3}(\.\d{3})+", text_value):
+            text_value = text_value.replace(".", "")
     try:
         number = int(round(float(text_value)))
     except (TypeError, ValueError, OverflowError):
@@ -1543,6 +1550,253 @@ def flash_import_errors(row_errors: list[str]) -> None:
     preview = "; ".join(row_errors[:5])
     suffix = "" if len(row_errors) <= 5 else f"; +{len(row_errors) - 5} outro(s) erro(s) nos logs."
     flash(f"Algumas linhas não foram importadas: {preview}{suffix}", "warning")
+
+
+
+def worksheet_values(row: Any) -> list[Any]:
+    return list(row or [])
+
+
+def header_map_contains_alias(header_map: dict[str, int], aliases: list[str]) -> bool:
+    normalized_aliases = [normalize_header(alias) for alias in aliases]
+    for alias in normalized_aliases:
+        if alias in header_map:
+            return True
+    for alias in normalized_aliases:
+        if not alias:
+            continue
+        for header_key in header_map.keys():
+            if not header_key:
+                continue
+            if alias in header_key or header_key in alias:
+                return True
+    return False
+
+
+def header_map_score(header_map: dict[str, int]) -> int:
+    required = 0
+    if header_map_contains_alias(header_map, PRODUCT_IMPORT_HEADER_ALIASES["name"]):
+        required += 5
+    for key in ["category", "unit_measure", "description", "stock_quantity", "price_cents", "active"]:
+        if header_map_contains_alias(header_map, PRODUCT_IMPORT_HEADER_ALIASES[key]):
+            required += 1
+    return required
+
+
+def detect_product_header_row(worksheet: Any, max_scan_rows: int = 12) -> tuple[int, dict[str, int]]:
+    """Encontra a linha de cabeçalho mesmo quando a planilha tem título antes da tabela."""
+    best_row_number = 1
+    best_map: dict[str, int] = {}
+    best_score = -1
+    max_row = min(int(getattr(worksheet, "max_row", 1) or 1), max_scan_rows)
+    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=1, max_row=max_row, values_only=True), start=1):
+        row_values = worksheet_values(row_values_tuple)
+        header_map = {normalize_header(value): index for index, value in enumerate(row_values) if value is not None and str(value).strip()}
+        score = header_map_score(header_map)
+        if score > best_score:
+            best_row_number = row_number
+            best_map = header_map
+            best_score = score
+        # Nome do produto achado e pelo menos mais um campo: já é cabeçalho confiável.
+        if score >= 6:
+            return row_number, header_map
+    return best_row_number, best_map
+
+
+def chunk_list(items: list[Any], size: int) -> list[list[Any]]:
+    return [items[index:index + size] for index in range(0, len(items), size)]
+
+
+def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
+    return (
+        record.name,
+        record.category,
+        record.unit_measure,
+        record.description,
+        int(record.stock_quantity or 0),
+        int(record.price_cents or 0),
+        record.limit_base,
+        record.limit_franchise,
+        record.min_stock,
+        record.max_stock,
+        1 if record.active else 0,
+    )
+
+
+def execute_insert_products_bulk(conn: Any, records: list[ProductImportRecord], row_errors: list[str]) -> tuple[int, int]:
+    """Insere produtos em blocos para evitar timeout no D1/Render."""
+    created = 0
+    skipped = 0
+    fields = "name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at"
+    single_placeholder = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    for chunk in chunk_list(records, 40):
+        if not chunk:
+            continue
+        placeholders = ", ".join([single_placeholder] * len(chunk))
+        params: list[Any] = []
+        created_at = now_iso()
+        for record in chunk:
+            params.extend(product_record_db_values(record))
+            params.append(created_at)
+        try:
+            conn.execute(f"INSERT INTO products ({fields}) VALUES {placeholders}", tuple(params))
+            created += len(chunk)
+        except Exception as bulk_exc:
+            print(f"[IMPORTAÇÃO PRODUTOS] Inserção em bloco falhou; tentando linha a linha: {bulk_exc}")
+            for record in chunk:
+                try:
+                    conn.execute(
+                        f"INSERT INTO products ({fields}) VALUES {single_placeholder}",
+                        (*product_record_db_values(record), now_iso()),
+                    )
+                    created += 1
+                except Exception as exc:
+                    skipped += 1
+                    row_errors.append(f"linha {record.source_row}: {exc}")
+                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao inserir linha {record.source_row} ({record.name}): {exc}")
+    return created, skipped
+
+
+def execute_update_products_bulk(conn: Any, updates: list[tuple[int, ProductImportRecord]], row_errors: list[str]) -> tuple[int, int]:
+    """Atualiza produtos em blocos via CASE para reduzir centenas de chamadas HTTP no D1."""
+    updated = 0
+    skipped = 0
+    field_getters: list[tuple[str, Any]] = [
+        ("name", lambda r: r.name),
+        ("category", lambda r: r.category),
+        ("unit_measure", lambda r: r.unit_measure),
+        ("description", lambda r: r.description),
+        ("stock_quantity", lambda r: int(r.stock_quantity or 0)),
+        ("price_cents", lambda r: int(r.price_cents or 0)),
+        ("limit_base", lambda r: r.limit_base),
+        ("limit_franchise", lambda r: r.limit_franchise),
+        ("min_stock", lambda r: r.min_stock),
+        ("max_stock", lambda r: r.max_stock),
+        ("active", lambda r: 1 if r.active else 0),
+    ]
+    for chunk in chunk_list(updates, 25):
+        if not chunk:
+            continue
+        ids = [int(product_id) for product_id, _record in chunk]
+        id_sql = ", ".join(str(product_id) for product_id in ids)
+        assignments: list[str] = []
+        params: list[Any] = []
+        for field_name, getter in field_getters:
+            case_parts = []
+            for product_id, record in chunk:
+                case_parts.append(f"WHEN {int(product_id)} THEN ?")
+                params.append(getter(record))
+            assignments.append(f"{field_name} = CASE id {' '.join(case_parts)} ELSE {field_name} END")
+        assignments.append("updated_at = ?")
+        params.append(now_iso())
+        sql = f"UPDATE products SET {', '.join(assignments)} WHERE id IN ({id_sql})"
+        try:
+            conn.execute(sql, tuple(params))
+            updated += len(chunk)
+        except Exception as bulk_exc:
+            print(f"[IMPORTAÇÃO PRODUTOS] Atualização em bloco falhou; tentando linha a linha: {bulk_exc}")
+            for product_id, record in chunk:
+                try:
+                    conn.execute(
+                        """
+                        UPDATE products
+                           SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
+                               limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
+                         WHERE id = ?
+                        """,
+                        (*product_record_db_values(record), now_iso(), int(product_id)),
+                    )
+                    updated += 1
+                except Exception as exc:
+                    skipped += 1
+                    row_errors.append(f"linha {record.source_row}: {exc}")
+                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao atualizar linha {record.source_row} ({record.name}): {exc}")
+    return updated, skipped
+
+
+def ensure_product_import_columns(conn: Any) -> None:
+    """Garante colunas novas antes da importação, inclusive em banco D1 já criado."""
+    try:
+        product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+    except Exception as exc:
+        print(f"[IMPORTAÇÃO PRODUTOS] Não foi possível verificar colunas por PRAGMA: {exc}")
+        return
+    migrations = [
+        ("unit_measure", "ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'"),
+        ("min_stock", "ALTER TABLE products ADD COLUMN min_stock INTEGER"),
+        ("max_stock", "ALTER TABLE products ADD COLUMN max_stock INTEGER"),
+    ]
+    for column_name, sql in migrations:
+        if column_name not in product_columns:
+            try:
+                conn.execute(sql)
+            except Exception as exc:
+                print(f"[IMPORTAÇÃO PRODUTOS] Migração ignorada para {column_name}: {exc}")
+
+
+def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, int, list[str]]:
+    workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
+    worksheet = workbook.active
+    if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
+        return 0, 0, 0, ["planilha vazia"]
+
+    header_row_number, header_map = detect_product_header_row(worksheet)
+    parsed_records: list[ProductImportRecord] = []
+    skipped = 0
+    row_errors: list[str] = []
+
+    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=header_row_number + 1, values_only=True), start=header_row_number + 1):
+        row_values = worksheet_values(row_values_tuple)
+        if excel_row_is_empty(row_values):
+            continue
+        try:
+            record = parse_product_import_record(row_number, row_values, header_map)
+            if record is None:
+                skipped += 1
+                continue
+            parsed_records.append(record)
+        except Exception as exc:
+            skipped += 1
+            row_errors.append(f"linha {row_number}: {exc}")
+            print(f"[IMPORTAÇÃO PRODUTOS] Erro ao interpretar linha {row_number}: {exc}")
+
+    parsed_records, duplicates_merged = dedupe_import_records(parsed_records)
+    skipped += duplicates_merged
+    if not parsed_records:
+        return 0, 0, skipped, row_errors
+
+    with db_connect() as conn:
+        ensure_product_import_columns(conn)
+        existing_rows = conn.execute("SELECT id, name FROM products").fetchall()
+        existing_by_id = {int(row["id"]): row for row in existing_rows}
+        existing_by_name = {normalize_product_lookup_key(row["name"]): row for row in existing_rows if row["name"] is not None}
+
+        updates: list[tuple[int, ProductImportRecord]] = []
+        inserts: list[ProductImportRecord] = []
+        reserved_names: set[str] = set()
+        for record in parsed_records:
+            existing_row = existing_by_id.get(record.product_id) if record.product_id is not None else None
+            if existing_row is None:
+                existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
+            if existing_row is not None:
+                updates.append((int(existing_row["id"]), record))
+            else:
+                name_key = normalize_product_lookup_key(record.name)
+                if name_key in reserved_names:
+                    skipped += 1
+                    continue
+                reserved_names.add(name_key)
+                inserts.append(record)
+
+        updated, skipped_updates = execute_update_products_bulk(conn, updates, row_errors)
+        created, skipped_inserts = execute_insert_products_bulk(conn, inserts, row_errors)
+        skipped += skipped_updates + skipped_inserts
+        conn.commit()
+    try:
+        workbook.close()
+    except Exception:
+        pass
+    return created, updated, skipped, row_errors
 
 
 # ---------- Autenticação ----------
@@ -2064,201 +2318,67 @@ def admin_products_export():
 @admin_required
 @page_access_required("admin_products")
 def admin_products_import():
-    uploaded = request.files.get("spreadsheet")
-    if uploaded is None or not uploaded.filename:
-        flash("Selecione uma planilha .xlsx para importar.", "warning")
-        return redirect(url_for("admin_products"))
-    if not uploaded.filename.lower().endswith(".xlsx"):
-        flash("Importe apenas arquivos .xlsx.", "warning")
-        return redirect(url_for("admin_products"))
-
     try:
-        uploaded_bytes = uploaded.read()
-    except Exception as exc:
-        print(f"[IMPORTAÇÃO PRODUTOS] Falha ao ler upload: {exc}")
-        flash("Não foi possível ler o arquivo enviado.", "danger")
-        return redirect(url_for("admin_products"))
+        uploaded = request.files.get("spreadsheet")
+        if uploaded is None or not uploaded.filename:
+            flash("Selecione uma planilha .xlsx para importar.", "warning")
+            return redirect(url_for("admin_products"))
+        if not uploaded.filename.lower().endswith(".xlsx"):
+            flash("Importe apenas arquivos .xlsx.", "warning")
+            return redirect(url_for("admin_products"))
 
-    if not uploaded_bytes:
-        flash("A planilha enviada está vazia.", "warning")
-        return redirect(url_for("admin_products"))
-
-    try:
-        upload_bytes_to_r2(
-            storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
-            uploaded_bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            {"type": "products_import"},
-        )
-    except Exception as exc:
-        # Falha no R2 não pode impedir a importação para o banco.
-        print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
-
-    try:
-        workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True)
-        worksheet = workbook.active
-    except Exception as exc:
-        print(f"[IMPORTAÇÃO PRODUTOS] XLSX inválido: {exc}")
-        flash("Não foi possível ler a planilha. Verifique se o arquivo está em formato .xlsx válido.", "danger")
-        return redirect(url_for("admin_products"))
-
-    first_row = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
-    if not first_row:
-        flash("A planilha está vazia.", "warning")
-        return redirect(url_for("admin_products"))
-
-    header_map = {normalize_header(value): index for index, value in enumerate(first_row) if value is not None and str(value).strip()}
-    parsed_records: list[ProductImportRecord] = []
-    skipped = 0
-    row_errors: list[str] = []
-
-    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=2, values_only=True), start=2):
-        row_values = list(row_values_tuple)
-        if excel_row_is_empty(row_values):
-            continue
         try:
-            record = parse_product_import_record(row_number, row_values, header_map)
-            if record is None:
-                skipped += 1
-                continue
-            parsed_records.append(record)
+            uploaded_bytes = uploaded.read()
         except Exception as exc:
-            skipped += 1
-            row_errors.append(f"linha {row_number}: {exc}")
-            print(f"[IMPORTAÇÃO PRODUTOS] Erro ao interpretar linha {row_number}: {exc}")
+            print(f"[IMPORTAÇÃO PRODUTOS] Falha ao ler upload: {exc}")
+            flash("Não foi possível ler o arquivo enviado.", "danger")
+            return redirect(url_for("admin_products"))
 
-    parsed_records, duplicates_merged = dedupe_import_records(parsed_records)
-    skipped += duplicates_merged
+        if not uploaded_bytes:
+            flash("A planilha enviada está vazia.", "warning")
+            return redirect(url_for("admin_products"))
 
-    if not parsed_records:
+        # Salvar cópia no R2 é opcional e nunca pode derrubar a importação.
+        try:
+            upload_bytes_to_r2(
+                storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
+                uploaded_bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                {"type": "products_import"},
+            )
+        except Exception as exc:
+            print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
+
+        try:
+            created, updated, skipped, row_errors = import_products_from_workbook_bytes(uploaded_bytes)
+        except Exception as exc:
+            try:
+                import traceback
+                traceback.print_exc()
+            except Exception:
+                pass
+            print(f"[IMPORTAÇÃO PRODUTOS] Erro geral tratado: {type(exc).__name__} - {exc}")
+            flash("Não consegui importar essa planilha. O erro foi registrado nos logs do Render; envie o trecho vermelho se continuar acontecendo.", "danger")
+            return redirect(url_for("admin_products"))
+
         flash_import_errors(row_errors)
-        flash("Nenhum produto válido foi encontrado na planilha. Confira se a primeira linha contém os cabeçalhos corretos.", "warning")
+        if created or updated:
+            flash(f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).", "success")
+        elif skipped or row_errors:
+            flash(f"Nenhum produto foi criado ou atualizado. {skipped} linha(s) ignorada(s).", "warning")
+        else:
+            flash("Nenhum produto válido foi encontrado na planilha. Confira se a primeira linha contém os cabeçalhos corretos.", "warning")
         return redirect(url_for("admin_products"))
-
-    created = 0
-    updated = 0
-    current_user_id = require_current_user().id
-
-    try:
-        with db_connect() as conn:
-            existing_rows = conn.execute("SELECT id, name, stock_quantity FROM products").fetchall()
-            existing_by_id = {int(row["id"]): row for row in existing_rows}
-            existing_by_name = {normalize_product_lookup_key(row["name"]): row for row in existing_rows if row["name"] is not None}
-
-            for record in parsed_records:
-                try:
-                    existing_row = existing_by_id.get(record.product_id) if record.product_id is not None else None
-                    if existing_row is None:
-                        existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
-
-                    if existing_row is not None:
-                        product_db_id = int(existing_row["id"])
-                        old_stock = int(existing_row["stock_quantity"] or 0)
-                        conn.execute(
-                            """
-                            UPDATE products
-                               SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
-                                   limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
-                             WHERE id = ?
-                            """,
-                            (
-                                record.name,
-                                record.category,
-                                record.unit_measure,
-                                record.description,
-                                record.stock_quantity,
-                                record.price_cents,
-                                record.limit_base,
-                                record.limit_franchise,
-                                record.min_stock,
-                                record.max_stock,
-                                1 if record.active else 0,
-                                now_iso(),
-                                product_db_id,
-                            ),
-                        )
-                        if old_stock != record.stock_quantity:
-                            record_stock_movement(
-                                conn,
-                                product_id=product_db_id,
-                                quantity_delta=record.stock_quantity - old_stock,
-                                stock_before=old_stock,
-                                stock_after=record.stock_quantity,
-                                movement_type="import_adjustment",
-                                note=f"Estoque atualizado por importação de planilha. Linha {record.source_row}.",
-                                created_by_id=current_user_id,
-                            )
-                        updated += 1
-                        # Atualiza cache para evitar duplicidade quando a planilha repetir produto com nome novo/alterado.
-                        fresh_row = {"id": product_db_id, "name": record.name, "stock_quantity": record.stock_quantity}
-                        existing_by_id[product_db_id] = fresh_row
-                        existing_by_name[normalize_product_lookup_key(record.name)] = fresh_row
-                    else:
-                        cursor = conn.execute(
-                            """
-                            INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                record.name,
-                                record.category,
-                                record.unit_measure,
-                                record.description,
-                                record.stock_quantity,
-                                record.price_cents,
-                                record.limit_base,
-                                record.limit_franchise,
-                                record.min_stock,
-                                record.max_stock,
-                                1 if record.active else 0,
-                                now_iso(),
-                            ),
-                        )
-                        row_id = get_cursor_lastrowid(cursor)
-                        if row_id is None:
-                            lookup = conn.execute(
-                                "SELECT id FROM products WHERE lower(name) = lower(?) ORDER BY id DESC LIMIT 1",
-                                (record.name,),
-                            ).fetchone()
-                            row_id = int(lookup["id"]) if lookup is not None else None
-                        if row_id is not None:
-                            if record.stock_quantity > 0:
-                                record_stock_movement(
-                                    conn,
-                                    int(row_id),
-                                    record.stock_quantity,
-                                    0,
-                                    record.stock_quantity,
-                                    "product_created",
-                                    f"Produto criado por importação. Linha {record.source_row}.",
-                                    created_by_id=current_user_id,
-                                )
-                            fresh_row = {"id": int(row_id), "name": record.name, "stock_quantity": record.stock_quantity}
-                            existing_by_id[int(row_id)] = fresh_row
-                            existing_by_name[normalize_product_lookup_key(record.name)] = fresh_row
-                        created += 1
-                except Exception as exc:
-                    skipped += 1
-                    row_errors.append(f"linha {record.source_row}: {exc}")
-                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao gravar linha {record.source_row} ({record.name}): {exc}")
-
-            conn.commit()
     except Exception as exc:
+        # Última barreira para impedir Internal Server Error branco na tela.
         try:
             import traceback
             traceback.print_exc()
         except Exception:
             pass
-        print(f"[IMPORTAÇÃO PRODUTOS] Erro geral: {exc}")
-        flash("Erro ao importar a planilha. Corrigi o tratamento para mostrar o motivo nos logs; verifique as variáveis do D1/R2 e o formato da planilha.", "danger")
+        print(f"[IMPORTAÇÃO PRODUTOS] Falha inesperada capturada: {type(exc).__name__} - {exc}")
+        flash("A importação falhou, mas o site não quebrou. Veja os logs do Render para o detalhe do erro.", "danger")
         return redirect(url_for("admin_products"))
-
-    flash_import_errors(row_errors)
-    if created or updated:
-        flash(f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).", "success")
-    else:
-        flash(f"Nenhum produto foi criado ou atualizado. {skipped} linha(s) ignorada(s).", "warning")
-    return redirect(url_for("admin_products"))
 
 
 @app.route("/admin/products/new", methods=["GET", "POST"])
