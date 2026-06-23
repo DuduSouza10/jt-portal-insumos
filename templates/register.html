@@ -4,20 +4,28 @@
 {% block page_subtitle %}O cadastro só será liberado após aprovação de um administrador.{% endblock %}
 {% block content %}
 <section class="auth-card card wide-card">
-  <form method="post" class="form-grid two-cols">
+  <form method="post" class="form-grid two-cols" data-unit-filter-form>
     <label>
       Nome do responsável
       <input name="responsible_name" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     <label>
-      Nome da base/franquia
-      <input name="organization_name" placeholder="Ex.: MG BHZ / Franquia Centro" required>
-    </label>
-    <label>
       Tipo de unidade
-      <select name="role" required>
+      <select name="role" id="roleSelect" required>
         <option value="base">Base</option>
         <option value="franchise">Franquia</option>
+      </select>
+    </label>
+    <label>
+      <span id="organizationSelectLabel">Nome da base</span>
+      <select name="organization_name" id="organizationSelect" required>
+        <option value="" selected disabled data-placeholder>Selecione a base</option>
+        {% for unit in base_unit_options %}
+          <option value="{{ unit }}" data-unit-role="base">{{ unit }}</option>
+        {% endfor %}
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}" data-unit-role="franchise">{{ unit }}</option>
+        {% endfor %}
       </select>
     </label>
     <label>
@@ -34,4 +42,41 @@
     </div>
   </form>
 </section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const roleSelect = document.getElementById('roleSelect');
+  const organizationSelect = document.getElementById('organizationSelect');
+  const organizationLabel = document.getElementById('organizationSelectLabel');
+  if (!roleSelect || !organizationSelect) return;
+
+  function syncUnitOptions() {
+    const role = roleSelect.value === 'franchise' ? 'franchise' : 'base';
+    const placeholder = organizationSelect.querySelector('[data-placeholder]');
+    if (organizationLabel) organizationLabel.textContent = role === 'franchise' ? 'Nome da franquia' : 'Nome da base';
+    if (placeholder) placeholder.textContent = role === 'franchise' ? 'Selecione a franquia' : 'Selecione a base';
+
+    Array.from(organizationSelect.options).forEach(function (option) {
+      const optionRole = option.dataset.unitRole;
+      if (!optionRole) return;
+      const visible = optionRole === role;
+      option.hidden = !visible;
+      option.disabled = !visible;
+    });
+
+    const selected = organizationSelect.selectedOptions[0];
+    if (selected && selected.dataset.unitRole && selected.dataset.unitRole !== role) {
+      organizationSelect.value = '';
+    }
+
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.JT_I18N.refresh(document.querySelector('[data-unit-filter-form]') || document.body);
+    }
+  }
+
+  roleSelect.addEventListener('change', syncUnitOptions);
+  syncUnitOptions();
+})();
+</script>
 {% endblock %}

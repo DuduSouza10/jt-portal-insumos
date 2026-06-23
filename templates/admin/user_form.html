@@ -4,14 +4,38 @@
 {% block page_subtitle %}Cadastre usuários manualmente, defina o nível de acesso e escolha quais páginas estarão liberadas.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form id="userAccessForm" method="post" class="form-grid two-cols">
+  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form>
+    {% set current_role = user.role if user else 'base' %}
     <label>
       Nome do responsável
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     <label>
-      Nome da base/franquia/área
-      <input name="organization_name" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: MG BHZ / Administração" required>
+      Tipo de acesso
+      <select name="role" id="roleSelect" required>
+        <option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>
+        <option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>
+        <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>
+      </select>
+    </label>
+    <label id="organizationSelectWrap">
+      <span id="organizationSelectLabel">Nome da base</span>
+      <select name="organization_name" id="organizationSelect" required>
+        <option value="" disabled {% if not user or not user.organization_name or user.role == 'admin' %}selected{% endif %} data-placeholder>Selecione a base</option>
+        {% if user and user.role in ['base', 'franchise'] and user.organization_name and user.organization_name not in base_franchise_options %}
+          <option value="{{ user.organization_name }}" data-unit-role="{{ user.role }}" selected>{{ user.organization_name }}</option>
+        {% endif %}
+        {% for unit in base_unit_options %}
+          <option value="{{ unit }}" data-unit-role="base" {% if user and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
+        {% endfor %}
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}" data-unit-role="franchise" {% if user and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label id="adminPositionWrap" class="{% if not user or user.role != 'admin' %}hidden{% endif %}">
+      Cargo
+      <input name="admin_position" id="adminPositionInput" type="text" value="{{ user.organization_name if user and user.role == 'admin' else '' }}" placeholder="Ex.: Supervisor de Qualidade">
     </label>
     <label>
       Nome de usuário
@@ -20,14 +44,6 @@
     <label>
       Senha {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
       <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Nova senha opcional' }}" {% if is_new %}required{% endif %}>
-    </label>
-    <label>
-      Tipo de acesso
-      <select name="role" required>
-        <option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>
-        <option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>
-        <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>
-      </select>
     </label>
     <label>
       Status do cadastro
@@ -100,6 +116,51 @@
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
   const allButton = document.querySelector('[data-select-all-pages]');
   const basicButton = document.querySelector('[data-select-basic-pages]');
+  const organizationSelect = document.getElementById('organizationSelect');
+  const organizationSelectWrap = document.getElementById('organizationSelectWrap');
+  const organizationLabel = document.getElementById('organizationSelectLabel');
+  const adminPositionWrap = document.getElementById('adminPositionWrap');
+  const adminPositionInput = document.getElementById('adminPositionInput');
+
+  function syncUnitFieldByRole() {
+    if (!roleSelect) return;
+    const role = roleSelect.value;
+    const isAdmin = role === 'admin';
+    const isFranchise = role === 'franchise';
+    const placeholder = organizationSelect ? organizationSelect.querySelector('[data-placeholder]') : null;
+
+    if (organizationSelectWrap) organizationSelectWrap.classList.toggle('hidden', isAdmin);
+    if (adminPositionWrap) adminPositionWrap.classList.toggle('hidden', !isAdmin);
+    if (organizationSelect) {
+      organizationSelect.disabled = isAdmin;
+      organizationSelect.required = !isAdmin;
+    }
+    if (adminPositionInput) {
+      adminPositionInput.disabled = !isAdmin;
+      adminPositionInput.required = isAdmin;
+    }
+
+    if (!isAdmin && organizationSelect) {
+      const expectedRole = isFranchise ? 'franchise' : 'base';
+      if (organizationLabel) organizationLabel.textContent = isFranchise ? 'Nome da franquia' : 'Nome da base';
+      if (placeholder) placeholder.textContent = isFranchise ? 'Selecione a franquia' : 'Selecione a base';
+      Array.from(organizationSelect.options).forEach(function (option) {
+        const optionRole = option.dataset.unitRole;
+        if (!optionRole) return;
+        const visible = optionRole === expectedRole;
+        option.hidden = !visible;
+        option.disabled = !visible;
+      });
+      const selected = organizationSelect.selectedOptions[0];
+      if (selected && selected.dataset.unitRole && selected.dataset.unitRole !== expectedRole) {
+        organizationSelect.value = '';
+      }
+    }
+
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.JT_I18N.refresh(document.querySelector('[data-admin-unit-filter-form]') || document.body);
+    }
+  }
 
   // Move the permissions modal out of the page layout/form container.
   // This makes it behave like a real floating window above the entire site.
@@ -149,7 +210,7 @@
     }, 60);
   });
   closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
-  if (roleSelect) roleSelect.addEventListener('change', syncRolePermissions);
+  if (roleSelect) roleSelect.addEventListener('change', function () { syncRolePermissions(); syncUnitFieldByRole(); });
   if (allButton) {
     allButton.addEventListener('click', function () {
       const isAdmin = roleSelect && roleSelect.value === 'admin';
@@ -169,6 +230,7 @@
   }
   document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeModal(); });
   syncRolePermissions();
+  syncUnitFieldByRole();
 })();
 </script>
 {% endblock %}

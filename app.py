@@ -114,6 +114,175 @@ MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "").strip()
 MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME or "no-reply@jt-insumos.local").strip()
 
 
+# Lista oficial de bases/franquias para cadastro e administração de usuários.
+BASE_FRANCHISE_OPTIONS_RAW = """ABC-MG
+AET -MG
+AFS -MG
+AGF -MG
+AMN -MG
+AUI -MG
+BCA -MG
+BDA-MG
+BHM-MG
+BHZ 03-MG
+BHZ 04-MG
+BHZ 05-MG
+BHZ 06-MG
+BMN -MG
+BTM 02-MG
+BTM -MG
+CAZ-MG
+CGE -MG
+CPA -MG
+CRL -MG
+CSP -MG
+CTG -MG
+CUV -MG
+DIQ 02-MG
+DIQ -MG
+DMA -MG
+ELD-MG
+EXT -MG
+F AAD-MG
+F AAX-MG
+F ADD-MG
+F ALP 02-MG
+F BCA-MG
+F BCV-MG
+F BDP-MG
+F BHZ 08-MG
+F BHZ 10-MG
+F BHZ-MG
+F CAR 02-MG
+F CET-MG
+F CGS-MG
+F CLT-MG
+F CMB-MG
+F COG-MG
+F CPA-MG
+F CRT-MG
+F DEL-MG
+F DIV-MG
+F EXT-MG
+F FMG-MG
+F GXP-MG
+F IAJ-MG
+F IAN-MG
+F IMA-MG
+F IRO-MG
+F IRT-MG
+F JDF 02-MG
+F JDF 03-MG
+F JDF 04-MG
+F JDF-MG
+F JPN-MG
+F LGP-MG
+F LPL-MG
+F MNT-MG
+F MPB-MG
+F MRC-MG
+F MTA-MG
+F MTL-MG
+F MTS-MG
+F NSR-MG
+F OPT-MG
+F ORB-MG
+F PDS-MG
+F PLE-MG
+F PMN-MG
+F PPY 02-MG
+F PSS-MG
+F SAB-MG
+F SGT-MG
+F SJN-MG
+F SSP-MG
+F STD-MG
+F STL-MG
+F STS-MG
+F TMN-MG
+F TPT-MG
+F TRC-MG
+F UBE-MG
+F UNI-MG
+F VSR-MG
+FAB-MG
+FRT -MG
+FUN-MG
+GHE -MG
+GVR -MG
+IBR -MG
+IGP-MG
+IPN 02-MG
+IPN -MG
+IRM -MG
+ITA -MG
+ITU -MG
+JDI-MG
+JMV -MG
+JNA -MG
+JTB -MG
+JUB -MG
+LAS -MG
+LGP -MG
+LGS-MG
+MNH -MG
+MRE -MG
+MTC -MG
+NVL -MG
+OLV -MG
+OPT -MG
+ORP-MG
+PDE-MG
+POJ -MG
+POO -MG
+PPR -MG
+PPY -MG
+PSS -MG
+PTC -MG
+PTN -MG
+PTU -MG
+QDF -MG
+RDN 02-MG
+RDN -MG
+SAB -MG
+SGF-MG
+SJD -MG
+SLN -MG
+SON-MG
+STL -MG
+STZ -MG
+SZD-MG
+TFL -MG
+UAB -MG
+UBA 02-MG
+UBA 03-MG
+UBA -MG
+UDI 02-MG
+UDI -MG
+VAG -MG
+VCS -MG
+VPS -MG
+BDC-MG
+JDF-MG"""
+def _unit_sort_key(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip()).upper()
+
+
+BASE_FRANCHISE_OPTIONS = sorted(
+    list(dict.fromkeys(line.strip() for line in BASE_FRANCHISE_OPTIONS_RAW.splitlines() if line.strip())),
+    key=_unit_sort_key,
+)
+# Franquias são as unidades com prefixo oficial "F " na lista.
+FRANCHISE_UNIT_OPTIONS = [unit for unit in BASE_FRANCHISE_OPTIONS if unit.upper().startswith("F ")]
+# Bases são todas as demais unidades da lista oficial.
+BASE_UNIT_OPTIONS = [unit for unit in BASE_FRANCHISE_OPTIONS if not unit.upper().startswith("F ")]
+BASE_FRANCHISE_OPTION_SET = set(BASE_FRANCHISE_OPTIONS)
+BASE_UNIT_OPTION_SET = set(BASE_UNIT_OPTIONS)
+FRANCHISE_UNIT_OPTION_SET = set(FRANCHISE_UNIT_OPTIONS)
+ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
+ADMIN_ORGANIZATION_OPTIONS = [ADMIN_ORGANIZATION_NAME]
+
+
 @dataclass
 class User:
     id: int
@@ -287,6 +456,18 @@ def synthetic_email_for_username(username: str) -> str:
     safe = normalize_username(username) or "usuario"
     return f"{safe}@usuario.local"
 
+
+
+
+def valid_organization_for_role(organization_name: str, role: str) -> bool:
+    organization_name = (organization_name or "").strip()
+    if role == "base":
+        return organization_name in BASE_UNIT_OPTION_SET
+    if role == "franchise":
+        return organization_name in FRANCHISE_UNIT_OPTION_SET
+    if role == "admin":
+        return bool(organization_name) and len(organization_name) <= 120
+    return False
 
 def is_real_email(value: str | None) -> bool:
     value = (value or "").strip().lower()
@@ -656,6 +837,10 @@ def inject_globals():
         "can_access": lambda page_key: user_has_page_access(current_user(), page_key),
         "can_access_any": lambda page_keys: user_has_any_page_access(current_user(), page_keys),
         "page_permission_options": PAGE_PERMISSION_OPTIONS,
+        "base_franchise_options": BASE_FRANCHISE_OPTIONS,
+        "base_unit_options": BASE_UNIT_OPTIONS,
+        "franchise_unit_options": FRANCHISE_UNIT_OPTIONS,
+        "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
     }
 
 
@@ -1961,6 +2146,9 @@ def register():
 
         if role not in ["base", "franchise"]:
             role = "base"
+        if not valid_organization_for_role(organization_name, role):
+            flash("Selecione uma unidade válida conforme o tipo escolhido.", "warning")
+            return redirect(url_for("register"))
         if not responsible_name or not organization_name or not username or not password:
             flash("Preencha todos os campos obrigatórios.", "warning")
             return redirect(url_for("register"))
@@ -2132,23 +2320,27 @@ def admin_users():
 def admin_user_new():
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
-        organization_name = request.form.get("organization_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
         role = request.form.get("role", "base").strip()
         status = request.form.get("status", "approved").strip()
-        selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
 
         if role not in ["base", "franchise", "admin"]:
             role = "base"
+        organization_name = request.form.get("admin_position" if role == "admin" else "organization_name", "").strip()
+        selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
+
         if status not in ["pending", "approved", "rejected"]:
             status = "approved"
+        if not valid_organization_for_role(organization_name, role):
+            flash("Selecione uma unidade válida conforme o tipo escolhido. Para administradores, informe o cargo.", "danger")
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
         if not responsible_name or not organization_name or not username or not password:
-            flash("Preencha responsável, unidade, nome de usuário e senha.", "danger")
+            flash("Preencha responsável, unidade/cargo, nome de usuário e senha.", "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
@@ -2191,7 +2383,6 @@ def admin_user_edit(user_id: int):
 
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
-        organization_name = request.form.get("organization_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
         role = request.form.get("role", "base").strip()
@@ -2201,8 +2392,12 @@ def admin_user_edit(user_id: int):
 
         if role not in ["base", "franchise", "admin"]:
             role = "base"
+        organization_name = request.form.get("admin_position" if role == "admin" else "organization_name", "").strip()
         if status not in ["pending", "approved", "rejected"]:
             status = "approved"
+        if not valid_organization_for_role(organization_name, role):
+            flash("Selecione uma unidade válida conforme o tipo escolhido. Para administradores, informe o cargo.", "danger")
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
 
         # Segurança: o admin logado não pode remover o próprio acesso administrativo
         # nem bloquear a própria conta sem querer.
@@ -2216,7 +2411,7 @@ def admin_user_edit(user_id: int):
             selected_pages = list(default_page_keys_for_role(role))
 
         if not responsible_name or not organization_name or not username:
-            flash("Preencha responsável, unidade e nome de usuário.", "danger")
+            flash("Preencha responsável, unidade/cargo e nome de usuário.", "danger")
             return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
@@ -2808,21 +3003,6 @@ def not_found(_):
 @app.errorhandler(401)
 def unauthorized(_):
     return redirect(url_for("login"))
-
-
-@app.errorhandler(500)
-def internal_error(error):
-    try:
-        import traceback
-        traceback.print_exc()
-    except Exception:
-        pass
-    print(f"[ERRO 500 CAPTURADO] {type(error).__name__} - {error}")
-    return render_template(
-        "error.html",
-        title="Erro interno",
-        message="O sistema encontrou um erro, mas a página não foi perdida. Volte e tente novamente. Se acontecer na importação, confira o relatório e os logs do Render."
-    ), 500
 
 
 setup_database()

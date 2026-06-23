@@ -176,3 +176,10 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 ## v33
 - Removido o aviso duplicado de envio de código por e-mail na confirmação de login.
 - Mensagem de modo dev alterada para: “Insira o código para confirmar o seu login”.
+
+
+## v47 - Lista oficial de bases/franquias
+
+- Cadastro de usuário passou a selecionar a base/franquia em lista oficial.
+- Administração de usuários também usa a mesma lista para criação/edição.
+- Bases e franquias só podem ser salvas com unidades válidas da lista.
