@@ -8,9 +8,33 @@
     <h2>Produtos cadastrados</h2>
     <div class="product-tools">
       <a class="btn ghost" href="{{ url_for('admin_stock') }}">Gestão de Estoque</a>
-      <a class="btn ghost" href="{{ url_for('admin_products_export') }}">Exportar planilha</a>
+      <button class="btn ghost" type="button" data-open-export-modal>Exportar planilha</button>
       <a class="btn primary" href="{{ url_for('admin_product_new') }}">Novo produto</a>
     </div>
+  </div>
+
+  <div id="exportLanguageModal" class="export-language-modal" aria-hidden="true">
+    <div class="export-language-backdrop" data-close-export-modal></div>
+    <section class="export-language-card card" role="dialog" aria-modal="true" aria-labelledby="exportLanguageTitle">
+      <div class="export-language-head">
+        <div>
+          <span class="eyebrow">Exportação</span>
+          <h3 id="exportLanguageTitle">Escolha o idioma da planilha</h3>
+          <p>Selecione se a planilha será exportada em português ou mandarim tradicional.</p>
+        </div>
+        <button class="permission-close" type="button" data-close-export-modal aria-label="Fechar">×</button>
+      </div>
+      <div class="export-language-actions">
+        <a class="export-language-option btn ghost" href="{{ url_for('admin_products_export', lang='pt') }}">
+          <strong>Português</strong>
+          <small>Cabeçalhos e dados em português.</small>
+        </a>
+        <a class="export-language-option btn primary" href="{{ url_for('admin_products_export', lang='zh') }}">
+          <strong>Mandarim tradicional</strong>
+          <small>Cabeçalhos bilíngues e dados conhecidos traduzidos.</small>
+        </a>
+      </div>
+    </section>
   </div>
   <form class="import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data">
     <label>
@@ -53,4 +77,31 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function () {
+  const modal = document.getElementById('exportLanguageModal');
+  const openButton = document.querySelector('[data-open-export-modal]');
+  const closeButtons = document.querySelectorAll('[data-close-export-modal]');
+  if (!modal || !openButton) return;
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+  function openModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('export-modal-open');
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('export-modal-open');
+  }
+  openButton.addEventListener('click', openModal);
+  closeButtons.forEach((button) => button.addEventListener('click', closeModal));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+})();
+</script>
 {% endblock %}

@@ -388,6 +388,13 @@
     "Alto": "偏高",
     "Importar planilha de produtos (.xlsx)": "匯入產品試算表 (.xlsx)",
     "No file selected.": "尚未選擇檔案。",
+    "Exportação": "匯出",
+    "Escolha o idioma da planilha": "選擇試算表語言",
+    "Selecione se a planilha será exportada em português ou mandarim tradicional.": "選擇試算表要以葡萄牙文或繁體中文匯出。",
+    "Português": "葡萄牙文",
+    "Cabeçalhos e dados em português.": "欄位標題與資料為葡萄牙文。",
+    "Mandarim tradicional": "繁體中文",
+    "Cabeçalhos bilíngues e dados conhecidos traduzidos.": "雙語欄位標題與已知資料翻譯。",
     "Browse...": "瀏覽..."
   });
 

@@ -3390,3 +3390,86 @@ body.permission-modal-open .language-toggle { filter: blur(3px) !important; poin
 
 /* v38 - evita travamento no trigger de idioma */
 .language-toggle:disabled { opacity: .72; cursor: wait; pointer-events: none; }
+
+
+/* v41 - modal de escolha de idioma para exportação de planilha. */
+.export-language-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 999999 !important;
+  display: none !important;
+  place-items: center !important;
+  padding: 22px !important;
+}
+.export-language-modal.open {
+  display: grid !important;
+}
+.export-language-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(3px);
+}
+.export-language-card {
+  position: relative;
+  z-index: 1;
+  width: min(620px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: 26px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+}
+.export-language-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.export-language-head h3 {
+  margin: 6px 0 6px;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+}
+.export-language-head p {
+  margin: 0;
+  color: var(--muted);
+}
+.export-language-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.export-language-option {
+  min-height: 96px;
+  flex-direction: column;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  text-align: left;
+  white-space: normal !important;
+}
+.export-language-option strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+.export-language-option small {
+  color: inherit;
+  opacity: 0.82;
+  line-height: 1.35;
+}
+body.export-modal-open .page-shell,
+body.export-modal-open .dev-credit,
+body.export-modal-open .theme-toggle,
+body.export-modal-open .language-toggle {
+  filter: blur(3px) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+body.export-modal-open .export-language-modal,
+body.export-modal-open .export-language-modal * {
+  filter: none !important;
+  pointer-events: auto;
+}
+@media (max-width: 640px) {
+  .export-language-actions { grid-template-columns: 1fr; }
+  .export-language-card { padding: 18px; }
+}

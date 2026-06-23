@@ -1278,6 +1278,96 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     return buffer
 
 
+PRODUCT_EXPORT_HEADERS_PT = [
+    "ID",
+    "Nome do produto",
+    "Categoria",
+    "Unidade de medida",
+    "Descrição",
+    "Estoque disponível",
+    "Valor unitário",
+    "Limite para bases",
+    "Limite para franquias",
+    "Estoque mínimo",
+    "Estoque máximo",
+    "Ativo",
+]
+
+PRODUCT_EXPORT_HEADERS_ZH = [
+    "ID",
+    "產品名稱 / Nome do produto",
+    "類別 / Categoria",
+    "計量單位 / Unidade de medida",
+    "描述 / Descrição",
+    "可用庫存 / Estoque disponível",
+    "單價 / Valor unitário",
+    "基地限制 / Limite para bases",
+    "加盟店限制 / Limite para franquias",
+    "最低庫存 / Estoque mínimo",
+    "最高庫存 / Estoque máximo",
+    "啟用 / Ativo",
+]
+
+EXCEL_ZH_TRANSLATIONS = {
+    "Envelope de segurança M": "M 型安全信封",
+    "Envelope de segurança P": "P 型安全信封",
+    "Envelope médio para envios padrão.": "用於標準寄件的中型信封。",
+    "Envelope pequeno para envios leves.": "用於輕量寄件的小型信封。",
+    "Etiqueta térmica": "熱敏標籤",
+    "Rolo de etiqueta para impressora térmica.": "熱敏印表機用標籤卷。",
+    "Lacre plástico": "塑膠封條",
+    "Lacre numerado para controle interno.": "用於內部管控的編號封條。",
+    "Embalagens": "包裝用品",
+    "Etiquetas": "標籤",
+    "Operacional": "營運用品",
+    "un": "個",
+    "unidade": "個",
+    "unidades": "個",
+    "rolo": "卷",
+    "rolos": "卷",
+    "caixa": "箱",
+    "caixas": "箱",
+    "pacote": "包",
+    "pacotes": "包",
+    "metro": "公尺",
+    "metros": "公尺",
+    "kg": "公斤",
+    "Sim": "是",
+    "Não": "否",
+    "Ativo": "啟用",
+    "Inativo": "停用",
+    "Sem limite": "無限制",
+}
+
+
+def translate_excel_value_to_zh(value: Any) -> Any:
+    if value is None:
+        return ""
+    text_value = str(value).strip()
+    if not text_value:
+        return ""
+    return EXCEL_ZH_TRANSLATIONS.get(text_value, text_value)
+
+
+def product_row_for_excel_language(product: Product, language: str = "pt") -> list[Any]:
+    if language == "zh":
+        return [
+            product.id,
+            translate_excel_value_to_zh(product.name),
+            translate_excel_value_to_zh(product.category),
+            translate_excel_value_to_zh(product.unit_measure),
+            translate_excel_value_to_zh(product.description),
+            product.stock_quantity,
+            product.price_brl,
+            product.limit_base,
+            product.limit_franchise,
+            product.min_stock,
+            product.max_stock,
+            translate_excel_value_to_zh("Sim" if product.active else "Não"),
+        ]
+    return product_row_for_excel(product)
+
+
 def product_row_for_excel(product: Product) -> list[Any]:
     return [
         product.id,
@@ -1296,11 +1386,19 @@ def product_row_for_excel(product: Product) -> list[Any]:
 
 
 def get_header_value(row_values: list[Any], header_map: dict[str, int], names: list[str]) -> Any:
-    for name in names:
-        key = normalize_header(name)
+    normalized_names = [normalize_header(name) for name in names]
+    for key in normalized_names:
         if key in header_map:
             idx = header_map[key]
             return row_values[idx] if idx < len(row_values) else None
+    for key in normalized_names:
+        if not key:
+            continue
+        for header_key, idx in header_map.items():
+            if not header_key:
+                continue
+            if key in header_key or header_key in key:
+                return row_values[idx] if idx < len(row_values) else None
     return None
 
 
@@ -1770,13 +1868,19 @@ def admin_products_export():
         rows = conn.execute("SELECT * FROM products ORDER BY active DESC, category ASC, name ASC").fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
 
+    export_language = (request.args.get("lang") or "pt").strip().lower()
+    if export_language in {"zh", "zh-tw", "mandarin", "mandarim", "chinese"}:
+        export_language = "zh"
+    else:
+        export_language = "pt"
+
     workbook = Workbook()
     worksheet = workbook.active
-    worksheet.title = "Produtos"
-    headers = ["ID", "Nome do produto", "Categoria", "Unidade de medida", "Descrição", "Estoque disponível", "Valor unitário", "Limite para bases", "Limite para franquias", "Estoque mínimo", "Estoque máximo", "Ativo"]
+    worksheet.title = "產品" if export_language == "zh" else "Produtos"
+    headers = PRODUCT_EXPORT_HEADERS_ZH if export_language == "zh" else PRODUCT_EXPORT_HEADERS_PT
     worksheet.append(headers)
     for product in products:
-        worksheet.append(product_row_for_excel(product))
+        worksheet.append(product_row_for_excel_language(product, export_language))
 
     header_fill = PatternFill("solid", fgColor="E60012")
     header_font = Font(color="FFFFFF", bold=True)
@@ -1791,8 +1895,9 @@ def admin_products_export():
         for cell in row:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-        row[5].number_format = 'R$ #,##0.00'
-    widths = [10, 34, 22, 46, 20, 16, 18, 20, 16, 16, 12]
+        if len(row) >= 7:
+            row[6].number_format = 'R$ #,##0.00'
+    widths = [10, 38, 24, 24, 48, 18, 18, 22, 24, 18, 18, 14]
     for idx, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(idx)].width = width
     worksheet.freeze_panes = "A2"
@@ -1800,7 +1905,8 @@ def admin_products_export():
     buffer = BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
-    filename = f"produtos_jt_insumos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    language_label = "mandarim" if export_language == "zh" else "portugues"
+    filename = f"produtos_jt_insumos_{language_label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     store_generated_file(
         storage_key("exports", filename),
         buffer,
@@ -1854,21 +1960,21 @@ def admin_products_import():
                 continue
 
             product_id = parse_optional_int(get_header_value(row_values, header_map, ["ID", "Código", "Codigo"]))
-            name = str(get_header_value(row_values, header_map, ["Nome do produto", "Nome", "Produto", "Insumo"]) or "").strip()
+            name = str(get_header_value(row_values, header_map, ["Nome do produto", "Nome", "Produto", "Insumo", "產品名稱", "产品名称"]) or "").strip()
             if not name:
                 skipped += 1
                 continue
 
-            category = str(get_header_value(row_values, header_map, ["Categoria"]) or "").strip()
-            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida"]) or "un").strip() or "un"
-            description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao"]) or "").strip()
-            stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade"])) or 0
-            price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco"]))
-            limit_base = parse_optional_int(get_header_value(row_values, header_map, ["Limite para bases", "Limite base", "Base"]))
-            limit_franchise = parse_optional_int(get_header_value(row_values, header_map, ["Limite para franquias", "Limite franquia", "Franquia"]))
-            min_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock"]))
-            max_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock"]))
-            active = parse_bool_value(get_header_value(row_values, header_map, ["Ativo", "Status", "Produto ativo"]), default=True)
+            category = str(get_header_value(row_values, header_map, ["Categoria", "類別", "类别"]) or "").strip()
+            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "計量單位", "计量单位", "單位", "单位"]) or "un").strip() or "un"
+            description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao", "描述", "說明", "说明"]) or "").strip()
+            stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "可用庫存", "可用库存", "庫存", "库存"])) or 0
+            price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "單價", "单价", "價格", "价格"]))
+            limit_base = parse_optional_int(get_header_value(row_values, header_map, ["Limite para bases", "Limite base", "Base", "基地限制"]))
+            limit_franchise = parse_optional_int(get_header_value(row_values, header_map, ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制"]))
+            min_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "最低庫存", "最低库存"]))
+            max_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "最高庫存", "最高库存"]))
+            active = parse_bool_value(get_header_value(row_values, header_map, ["Ativo", "Status", "Produto ativo", "啟用", "启用"]), default=True)
 
             existing_row = None
             if product_id is not None:
