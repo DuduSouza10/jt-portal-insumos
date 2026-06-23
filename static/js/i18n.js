@@ -560,6 +560,31 @@
     "塑料封条": "塑料封条"
   });
 
+
+  Object.assign(zh, {
+    "Entrada de Materiais": "材料入库",
+    "Adicionar entrada": "添加入库",
+    "Dados do material": "材料信息",
+    "Nome do item": "物料名称",
+    "Valor unitário": "单价",
+    "Unidade de medida": "计量单位",
+    "Anexo da nota fiscal (opcional)": "发票附件（可选）",
+    "Número da nota": "发票号码",
+    "Data da nota": "发票日期",
+    "Valor da nota": "发票金额",
+    "Observações": "备注",
+    "Salvar entrada": "保存入库",
+    "Importar XLSX": "导入 XLSX",
+    "Baixar planilha modelo": "下载模板表格",
+    "Importar entradas": "导入入库记录",
+    "Relatório mensal de entrada de materiais": "材料入库月度报告",
+    "Últimas entradas": "最近入库",
+    "Base": "基地",
+    "Franquia": "加盟店",
+    "Selecione uma base": "请选择基地",
+    "Selecione uma franquia": "请选择加盟店"
+  });
+
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);

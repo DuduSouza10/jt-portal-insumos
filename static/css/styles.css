@@ -4455,3 +4455,106 @@ html[data-theme="light"] .monthly-report-form {
   }
   .monthly-report-form-select-all .btn { grid-column: auto !important; }
 }
+
+/* v65 - Entrada de Materiais */
+.material-entry-hero,
+.material-entry-form,
+.material-side-panel,
+.material-report-card,
+.material-history-card {
+  overflow: hidden;
+}
+.material-entry-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 28px;
+}
+.material-entry-hero h2,
+.material-entry-form h2,
+.material-side-panel h2,
+.material-report-card h2 {
+  margin: 0 0 6px;
+}
+.material-entry-hero p,
+.material-entry-form p,
+.material-side-panel p,
+.material-report-card p {
+  margin: 0;
+}
+.material-entry-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.8fr);
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+.material-entry-form,
+.material-side-panel,
+.material-report-card,
+.material-history-card {
+  padding: 24px;
+}
+.material-entry-form .form-grid,
+.material-entry-form .invoice-extra-fields .form-grid {
+  margin-top: 16px;
+}
+.three-cols {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.invoice-extra-fields {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid rgba(230, 0, 18, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(230, 0, 18, 0.08), rgba(255, 255, 255, 0.035));
+}
+.material-notes-label {
+  display: block;
+  margin-top: 16px;
+}
+.material-notes-label textarea {
+  width: 100%;
+  margin-top: 8px;
+  resize: vertical;
+}
+.material-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+.material-import-actions {
+  display: grid;
+  gap: 14px;
+}
+.material-import-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.035);
+}
+html[data-theme="light"] .material-import-form {
+  border-color: rgba(15,23,42,0.08);
+  background: rgba(15,23,42,0.025);
+}
+.material-history-card table td,
+.material-history-card table th {
+  vertical-align: top;
+}
+.asset-modal-card .form-grid.two-cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 980px) {
+  .material-entry-grid { grid-template-columns: 1fr; }
+  .three-cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .material-entry-hero,
+  .material-entry-form,
+  .material-side-panel,
+  .material-report-card,
+  .material-history-card { padding: 18px; }
+  .asset-modal-card .form-grid.two-cols { grid-template-columns: 1fr; }
+}

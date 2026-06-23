@@ -173,10 +173,20 @@
           <input name="name" required placeholder="Ex.: Kit operacional">
         </label>
         <label>
-          Base/Franquia
-          <select name="base" id="assetModalBase" required data-required-when-base="true">
-            <option value="" selected disabled>Selecione a base/franquia</option>
-            {% for unit in asset_unit_options %}
+          Base
+          <select name="base" id="assetModalBase" data-modal-base-select>
+            <option value="" selected>Selecione uma base</option>
+            {% for unit in base_unit_options %}
+              <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}">{{ unit }}</option>
+            {% endfor %}
+            <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
+          </select>
+        </label>
+        <label>
+          Franquia
+          <select name="franchise" id="assetModalFranchise" data-modal-franchise-select>
+            <option value="" selected>Selecione uma franquia</option>
+            {% for unit in franchise_unit_options %}
               <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}">{{ unit }}</option>
             {% endfor %}
             <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
@@ -253,6 +263,8 @@
   const filterFranchise = document.getElementById('assetFilterFranchise');
   const modalRegional = document.getElementById('assetModalRegional');
   const modalBase = document.getElementById('assetModalBase');
+  const modalFranchise = document.getElementById('assetModalFranchise');
+  const assetForm = modal ? modal.querySelector('form.asset-form') : null;
   if (!modal || !openButton || !itemRows || !addItemButton) return;
 
   if (modal.parentElement !== document.body) {
@@ -451,6 +463,34 @@
   if (modalRegional) {
     modalRegional.addEventListener('change', function () {
       filterBaseSelect(modalBase, modalRegional.value);
+      filterBaseSelect(modalFranchise, modalRegional.value);
+    });
+  }
+  if (modalBase) {
+    modalBase.addEventListener('change', function () {
+      if (modalBase.value && modalFranchise) modalFranchise.value = '';
+    });
+  }
+  if (modalFranchise) {
+    modalFranchise.addEventListener('change', function () {
+      if (modalFranchise.value && modalBase) modalBase.value = '';
+    });
+  }
+  if (assetForm) {
+    assetForm.addEventListener('submit', function (event) {
+      const regional = (modalRegional && modalRegional.value || '').trim();
+      if (regional && regional.toUpperCase() === 'MATRIZ') return;
+      const hasBase = !!(modalBase && modalBase.value);
+      const hasFranchise = !!(modalFranchise && modalFranchise.value);
+      if (hasBase && hasFranchise) {
+        event.preventDefault();
+        alert('Selecione somente uma base ou uma franquia, não as duas.');
+        return;
+      }
+      if (!hasBase && !hasFranchise) {
+        event.preventDefault();
+        alert('Selecione uma base ou uma franquia para cadastrar o ativo.');
+      }
     });
   }
   addItemButton.addEventListener('click', addItemRow);
@@ -493,6 +533,7 @@
   filterBaseSelect(filterBase, filterRegional ? filterRegional.value : '');
   filterBaseSelect(filterFranchise, filterRegional ? filterRegional.value : '');
   filterBaseSelect(modalBase, modalRegional ? modalRegional.value : '');
+  filterBaseSelect(modalFranchise, modalRegional ? modalRegional.value : '');
   updateRemoveButtons();
 })();
 </script>

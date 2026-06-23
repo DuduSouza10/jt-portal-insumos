@@ -420,6 +420,30 @@ class AssetRecord:
     items: list[AssetItem] = field(default_factory=list)
 
 
+@dataclass
+class MaterialEntry:
+    id: int
+    product_id: int | None
+    item_name: str
+    quantity: int
+    unit_measure: str
+    unit_price_cents: int
+    invoice_file_name: str = ""
+    invoice_file_key: str = ""
+    invoice_number: str = ""
+    invoice_date: datetime | None = None
+    invoice_value_cents: int = 0
+    notes: str = ""
+    created_by_id: int | None = None
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    product: Product | None = None
+    created_by_name: str = ""
+
+    @property
+    def total_cents(self) -> int:
+        return int(self.quantity or 0) * int(self.unit_price_cents or 0)
+
+
 # ---------- Banco SQLite sem SQLAlchemy ----------
 
 def using_cloudflare_d1() -> bool:
@@ -877,6 +901,25 @@ def init_db() -> None:
                 FOREIGN KEY(product_id) REFERENCES products(id)
             );
 
+            CREATE TABLE IF NOT EXISTS material_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                unit_measure TEXT NOT NULL DEFAULT 'un',
+                unit_price_cents INTEGER NOT NULL DEFAULT 0,
+                invoice_file_name TEXT,
+                invoice_file_key TEXT,
+                invoice_number TEXT,
+                invoice_date TEXT,
+                invoice_value_cents INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                created_by_id INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(product_id) REFERENCES products(id),
+                FOREIGN KEY(created_by_id) REFERENCES users(id)
+            );
+
             CREATE TABLE IF NOT EXISTS user_page_permissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -928,6 +971,8 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_base_regional ON assets(base, regional)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_asset_items_asset_id ON asset_items(asset_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_asset_items_product_id ON asset_items(product_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_material_entries_created_at ON material_entries(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_material_entries_product_id ON material_entries(product_id)")
         movement_count = conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"]
         if int(movement_count or 0) == 0:
             existing_products = conn.execute("SELECT id, stock_quantity FROM products WHERE stock_quantity > 0").fetchall()
@@ -1405,7 +1450,9 @@ def movement_type_label(movement_type: str) -> str:
         "request_approved": "Saída por solicitação",
         "manual_adjustment": "Ajuste manual",
         "product_created": "Cadastro de produto",
-        "asset_allocation": "SaÃ­da para ativo",
+        "asset_allocation": "Saída para ativo",
+        "material_entry": "Entrada de materiais",
+        "material_import": "Importação de entrada",
         "import_adjustment": "Ajuste por importação",
     }
     return labels.get(movement_type, movement_type)
@@ -3275,6 +3322,355 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
     return created, updated, skipped, row_errors
 
 
+
+# ---------- Entrada de Materiais ----------
+
+MATERIAL_IMPORT_HEADER_ALIASES = {
+    "item_name": ["Nome do item", "Item", "Produto", "Insumo", "Material", "Nome do produto", "产品名称", "物料名称"],
+    "quantity": ["Quantidade", "Qtd", "Qtde", "数量", "數量"],
+    "unit_price_cents": ["Valor unitário", "Valor unitario", "Preço unitário", "Preco unitario", "Unitário", "Unitario", "单价", "單價"],
+    "unit_measure": ["Unidade de medida", "Unidade", "Un", "UM", "计量单位", "單位", "单位"],
+    "invoice_number": ["Número da nota", "Numero da nota", "NF", "Nota fiscal", "Nº nota", "No nota", "发票号码"],
+    "invoice_date": ["Data da nota", "Data NF", "Emissão", "Emissao", "发票日期"],
+    "invoice_value_cents": ["Valor da nota", "Valor NF", "Total da nota", "发票金额"],
+    "notes": ["Observações", "Observacoes", "Obs", "Notas", "备注"],
+}
+
+
+def parse_optional_date(value: Any) -> datetime | None:
+    if value is None or str(value).strip() == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    text_value = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(text_value, fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def material_entry_header_map_score(header_map: dict[str, int]) -> int:
+    score = 0
+    for key in ["item_name", "quantity", "unit_price_cents", "unit_measure", "invoice_number", "invoice_date", "invoice_value_cents", "notes"]:
+        if header_map_contains_alias(header_map, MATERIAL_IMPORT_HEADER_ALIASES[key]):
+            score += 3 if key in {"item_name", "quantity"} else 1
+    return score
+
+
+def detect_material_entry_header_row(worksheet: Any, max_scan_rows: int = 30) -> tuple[int, dict[str, int]]:
+    best_row_number = 1
+    best_map: dict[str, int] = {}
+    best_score = -1
+    max_row = min(int(getattr(worksheet, "max_row", 1) or 1), max_scan_rows)
+    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=1, max_row=max_row, values_only=True), start=1):
+        row_values = worksheet_values(row_values_tuple)
+        header_map = {normalize_header(value): index for index, value in enumerate(row_values) if value is not None and str(value).strip()}
+        score = material_entry_header_map_score(header_map)
+        if score > best_score:
+            best_row_number = row_number
+            best_map = header_map
+            best_score = score
+        if score >= 7:
+            return row_number, header_map
+    return best_row_number, best_map
+
+
+def get_material_import_value(row_values: list[Any], header_map: dict[str, int], field_key: str) -> Any:
+    return get_header_value(row_values, header_map, MATERIAL_IMPORT_HEADER_ALIASES.get(field_key, []))
+
+
+def row_to_material_entry(row: Any | None, product: Product | None = None) -> MaterialEntry | None:
+    if row is None:
+        return None
+    return MaterialEntry(
+        id=int(row["id"]),
+        product_id=row["product_id"] if "product_id" in row.keys() and row["product_id"] is not None else None,
+        item_name=row["item_name"] or "",
+        quantity=int(row["quantity"] or 0),
+        unit_measure=row["unit_measure"] or "un",
+        unit_price_cents=int(row["unit_price_cents"] or 0),
+        invoice_file_name=row["invoice_file_name"] or "",
+        invoice_file_key=row["invoice_file_key"] or "",
+        invoice_number=row["invoice_number"] or "",
+        invoice_date=parse_dt(row["invoice_date"]) if "invoice_date" in row.keys() and row["invoice_date"] else None,
+        invoice_value_cents=int(row["invoice_value_cents"] or 0),
+        notes=row["notes"] or "",
+        created_by_id=row["created_by_id"] if "created_by_id" in row.keys() and row["created_by_id"] is not None else None,
+        created_at=parse_dt(row["created_at"]),
+        product=product,
+        created_by_name=row["created_by_name"] if "created_by_name" in row.keys() and row["created_by_name"] else "",
+    )
+
+
+def find_product_by_name(conn: Any, name: str) -> Product | None:
+    cleaned_name = (name or "").strip()
+    if not cleaned_name:
+        return None
+    # Primeiro tenta busca exata para evitar varrer a tabela inteira no D1 a cada entrada.
+    row = conn.execute("SELECT * FROM products WHERE name = ? LIMIT 1", (cleaned_name,)).fetchone()
+    product = row_to_product(row) if row is not None else None
+    if product is not None:
+        return product
+    # Fallback tolerante para diferenças de caixa/acentuação.
+    key = normalize_product_lookup_key(cleaned_name)
+    rows = conn.execute("SELECT * FROM products").fetchall()
+    for row in rows:
+        product = row_to_product(row)
+        if product and normalize_product_lookup_key(product.name) == key:
+            return product
+    return None
+
+
+def create_or_update_product_from_material_entry(
+    conn: Any,
+    item_name: str,
+    quantity: int,
+    unit_measure: str,
+    unit_price_cents: int,
+    created_by_id: int | None,
+    movement_type: str = "material_entry",
+    note: str = "Entrada de materiais.",
+) -> int:
+    item_name = (item_name or "").strip()[:180]
+    unit_measure = (unit_measure or "un").strip()[:40] or "un"
+    quantity = int(quantity or 0)
+    unit_price_cents = int(unit_price_cents or 0)
+    product = find_product_by_name(conn, item_name)
+    now_value = now_iso()
+    if product is None:
+        cursor = conn.execute(
+            """
+            INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (item_name, "Entrada de Materiais", unit_measure, "Produto criado automaticamente pela entrada de materiais.", quantity, unit_price_cents, None, None, None, None, 1, now_value),
+        )
+        product_id = int(get_cursor_lastrowid(cursor) or 0)
+        record_stock_movement(conn, product_id, quantity, 0, quantity, movement_type, note, created_by_id=created_by_id)
+        return product_id
+    stock_before = int(product.stock_quantity or 0)
+    stock_after = stock_before + quantity
+    conn.execute(
+        """
+        UPDATE products
+           SET stock_quantity = ?, unit_measure = ?, price_cents = CASE WHEN ? > 0 THEN ? ELSE price_cents END, updated_at = ?
+         WHERE id = ?
+        """,
+        (stock_after, unit_measure, unit_price_cents, unit_price_cents, now_value, product.id),
+    )
+    record_stock_movement(conn, product.id, quantity, stock_before, stock_after, movement_type, note, created_by_id=created_by_id)
+    return product.id
+
+
+def create_material_entry_record(
+    conn: Any,
+    *,
+    item_name: str,
+    quantity: int,
+    unit_measure: str,
+    unit_price_cents: int,
+    invoice_file_name: str = "",
+    invoice_file_key: str = "",
+    invoice_number: str = "",
+    invoice_date: datetime | None = None,
+    invoice_value_cents: int = 0,
+    notes: str = "",
+    created_by_id: int | None = None,
+    movement_type: str = "material_entry",
+) -> int:
+    product_id = create_or_update_product_from_material_entry(
+        conn,
+        item_name=item_name,
+        quantity=quantity,
+        unit_measure=unit_measure,
+        unit_price_cents=unit_price_cents,
+        created_by_id=created_by_id,
+        movement_type=movement_type,
+        note=f"Entrada de materiais: {item_name}.",
+    )
+    cursor = conn.execute(
+        """
+        INSERT INTO material_entries (
+            product_id, item_name, quantity, unit_measure, unit_price_cents,
+            invoice_file_name, invoice_file_key, invoice_number, invoice_date,
+            invoice_value_cents, notes, created_by_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            product_id,
+            item_name[:180],
+            int(quantity or 0),
+            (unit_measure or "un")[:40],
+            int(unit_price_cents or 0),
+            invoice_file_name[:180],
+            invoice_file_key[:500],
+            invoice_number[:80],
+            invoice_date.isoformat() if invoice_date else None,
+            int(invoice_value_cents or 0),
+            notes[:1000],
+            created_by_id,
+            now_iso(),
+        ),
+    )
+    return int(get_cursor_lastrowid(cursor) or 0)
+
+
+def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | None = None, limit: int | None = None) -> list[MaterialEntry]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if start_dt is not None:
+        clauses.append("me.created_at >= ?")
+        params.append(start_dt.isoformat())
+    if end_dt is not None:
+        clauses.append("me.created_at <= ?")
+        params.append(end_dt.isoformat())
+    sql = """
+        SELECT me.*, u.responsible_name AS created_by_name
+          FROM material_entries me
+          LEFT JOIN users u ON u.id = me.created_by_id
+    """
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY me.created_at DESC, me.id DESC"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    with db_connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [entry for row in rows if (entry := row_to_material_entry(row)) is not None]
+
+
+def import_material_entries_from_workbook_bytes(uploaded_bytes: bytes, created_by_id: int | None) -> tuple[int, int, list[str]]:
+    workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
+    worksheet = workbook.active
+    if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
+        return 0, 0, ["planilha vazia"]
+    header_row_number, header_map = detect_material_entry_header_row(worksheet)
+    if not header_map_contains_alias(header_map, MATERIAL_IMPORT_HEADER_ALIASES["item_name"]):
+        return 0, 0, ["não encontrei a coluna Nome do item"]
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+    with db_connect() as conn:
+        for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=header_row_number + 1, values_only=True), start=header_row_number + 1):
+            row_values = worksheet_values(row_values_tuple)
+            if excel_row_is_empty(row_values):
+                continue
+            try:
+                item_name = clean_import_text(get_material_import_value(row_values, header_map, "item_name"))
+                quantity = parse_optional_int(get_material_import_value(row_values, header_map, "quantity")) or 0
+                unit_measure = clean_import_text(get_material_import_value(row_values, header_map, "unit_measure"), "un") or "un"
+                unit_price_cents = parse_money_to_cents(get_material_import_value(row_values, header_map, "unit_price_cents"))
+                invoice_number = clean_import_text(get_material_import_value(row_values, header_map, "invoice_number"))
+                invoice_date = parse_optional_date(get_material_import_value(row_values, header_map, "invoice_date"))
+                invoice_value_cents = parse_money_to_cents(get_material_import_value(row_values, header_map, "invoice_value_cents"))
+                notes = clean_import_text(get_material_import_value(row_values, header_map, "notes"))
+                if not item_name or quantity <= 0:
+                    skipped += 1
+                    continue
+                create_material_entry_record(
+                    conn,
+                    item_name=item_name,
+                    quantity=quantity,
+                    unit_measure=unit_measure,
+                    unit_price_cents=unit_price_cents,
+                    invoice_number=invoice_number,
+                    invoice_date=invoice_date,
+                    invoice_value_cents=invoice_value_cents,
+                    notes=notes,
+                    created_by_id=created_by_id,
+                    movement_type="material_import",
+                )
+                imported += 1
+            except Exception as exc:
+                skipped += 1
+                errors.append(f"linha {row_number}: {type(exc).__name__} - {str(exc)[:120]}")
+                print(f"[ENTRADA MATERIAIS] Erro ao importar linha {row_number}: {exc}")
+        conn.commit()
+    try:
+        workbook.close()
+    except Exception:
+        pass
+    return imported, skipped, errors
+
+
+def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: datetime, end_dt: datetime, viewer: User) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=15*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="MaterialTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=17, leading=21, textColor=colors.HexColor("#111111")))
+    styles.add(ParagraphStyle(name="MaterialSub", fontName=PDF_TEXT_FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#555555")))
+    styles.add(ParagraphStyle(name="MaterialCell", fontName=PDF_TEXT_FONT, fontSize=7.4, leading=9.2, textColor=colors.HexColor("#222222")))
+    styles.add(ParagraphStyle(name="MaterialBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.6, leading=9.5, textColor=colors.HexColor("#111111")))
+    styles.add(ParagraphStyle(name="MaterialSmall", fontName=PDF_TEXT_FONT, fontSize=6.8, leading=8.2, textColor=colors.HexColor("#666666")))
+    def p(value: Any, style: str = "MaterialCell") -> Paragraph:
+        return Paragraph(pdf_clean_text(value), styles[style])
+    total_qty = sum(int(entry.quantity or 0) for entry in entries)
+    total_value = sum(entry.total_cents for entry in entries)
+    invoices = len([entry for entry in entries if entry.invoice_number or entry.invoice_file_name])
+    story: list[Any] = []
+    story.append(Paragraph("Relatório de Entrada de Materiais", styles["MaterialTitle"]))
+    story.append(Paragraph(f"Período: {start_dt.strftime('%d/%m/%Y')} até {end_dt.strftime('%d/%m/%Y')} • Gerado por {pdf_clean_text(viewer.responsible_name)}", styles["MaterialSub"]))
+    story.append(Spacer(1, 6*mm))
+    summary = Table([
+        [p("Entradas", "MaterialBold"), p("Quantidade total", "MaterialBold"), p("Valor total", "MaterialBold"), p("Notas fiscais", "MaterialBold")],
+        [p(str(len(entries))), p(str(total_qty)), p(format_brl(total_value)), p(str(invoices))],
+    ], colWidths=[42*mm, 42*mm, 42*mm, 42*mm])
+    summary.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#E60012")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("BACKGROUND", (0,1), (-1,-1), colors.HexColor("#F8F8F8")),
+        ("BOX", (0,0), (-1,-1), 0.4, colors.HexColor("#DDDDDD")),
+        ("INNERGRID", (0,0), (-1,-1), 0.3, colors.HexColor("#E5E5E5")),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING", (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+    ]))
+    story.append(summary)
+    story.append(Spacer(1, 7*mm))
+    rows = [[p("Data", "MaterialBold"), p("Item", "MaterialBold"), p("Qtd.", "MaterialBold"), p("Un.", "MaterialBold"), p("Valor unit.", "MaterialBold"), p("Nota fiscal", "MaterialBold"), p("Observações", "MaterialBold")]]
+    if entries:
+        for entry in entries:
+            invoice_parts = []
+            if entry.invoice_number:
+                invoice_parts.append(f"Nº {entry.invoice_number}")
+            if entry.invoice_date:
+                invoice_parts.append(entry.invoice_date.strftime("%d/%m/%Y"))
+            if entry.invoice_value_cents:
+                invoice_parts.append(format_brl(entry.invoice_value_cents))
+            if entry.invoice_file_name:
+                invoice_parts.append(entry.invoice_file_name)
+            rows.append([
+                p(entry.created_at.strftime("%d/%m/%Y %H:%M")),
+                p(entry.item_name, "MaterialBold"),
+                p(str(entry.quantity)),
+                p(entry.unit_measure),
+                p(format_brl(entry.unit_price_cents)),
+                p("<br/>".join(invoice_parts) if invoice_parts else "-"),
+                p(entry.notes or "-"),
+            ])
+    else:
+        rows.append([p("Nenhuma entrada encontrada no período.", "MaterialCell"), "", "", "", "", "", ""])
+    table = Table(rows, colWidths=[23*mm, 44*mm, 15*mm, 16*mm, 25*mm, 37*mm, 30*mm], repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#111111")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("BACKGROUND", (0,1), (-1,-1), colors.white),
+        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ("BOX", (0,0), (-1,-1), 0.4, colors.HexColor("#D9D9D9")),
+        ("INNERGRID", (0,0), (-1,-1), 0.25, colors.HexColor("#E8E8E8")),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("TOPPADDING", (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("SPAN", (0,1), (-1,1)) if not entries else ("LINEBELOW", (0,0), (-1,0), 0.5, colors.HexColor("#E60012")),
+    ]))
+    story.append(table)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
 # ---------- Autenticação ----------
 
 @app.route("/")
@@ -4110,6 +4506,158 @@ def admin_requests_attended():
     return render_template("admin/requests_attended.html", requests_list=requests_list, selected_status="approved")
 
 
+
+@app.route("/admin/material-entries", methods=["GET", "POST"])
+@admin_required
+@page_access_required("admin_stock")
+def admin_material_entries():
+    if request.method == "POST":
+        item_name = (request.form.get("item_name") or "").strip()
+        quantity = parse_required_positive_int(request.form.get("quantity")) or 0
+        unit_price_cents = parse_money_to_cents(request.form.get("unit_price"))
+        unit_measure = (request.form.get("unit_measure") or "un").strip() or "un"
+        notes = (request.form.get("notes") or "").strip()
+        invoice_file = request.files.get("invoice_file")
+        has_invoice = bool(invoice_file and invoice_file.filename)
+        invoice_number = (request.form.get("invoice_number") or "").strip() if has_invoice else ""
+        invoice_date = parse_optional_date(request.form.get("invoice_date")) if has_invoice else None
+        invoice_value_cents = parse_money_to_cents(request.form.get("invoice_value")) if has_invoice else 0
+        if not item_name or quantity <= 0:
+            flash("Informe nome do item e quantidade válida para adicionar a entrada.", "warning")
+            return redirect(url_for("admin_material_entries"))
+        invoice_file_name = ""
+        invoice_file_key = ""
+        if has_invoice and invoice_file is not None:
+            try:
+                invoice_bytes = invoice_file.read()
+                invoice_file_name = invoice_file.filename or "nota_fiscal"
+                invoice_file_key = storage_key("notas_fiscais", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(invoice_file_name))
+                try:
+                    upload_bytes_to_r2(invoice_file_key, invoice_bytes, invoice_file.mimetype or "application/octet-stream", {"type": "material_invoice"})
+                except Exception as exc:
+                    print(f"[R2] Não foi possível salvar nota fiscal da entrada: {exc}")
+                    invoice_file_key = ""
+            except Exception as exc:
+                print(f"[ENTRADA MATERIAIS] Falha ao ler nota fiscal: {exc}")
+                invoice_file_name = ""
+                invoice_file_key = ""
+        try:
+            with db_connect() as conn:
+                create_material_entry_record(
+                    conn,
+                    item_name=item_name,
+                    quantity=quantity,
+                    unit_measure=unit_measure,
+                    unit_price_cents=unit_price_cents,
+                    invoice_file_name=invoice_file_name,
+                    invoice_file_key=invoice_file_key,
+                    invoice_number=invoice_number,
+                    invoice_date=invoice_date,
+                    invoice_value_cents=invoice_value_cents,
+                    notes=notes,
+                    created_by_id=require_current_user().id,
+                    movement_type="material_entry",
+                )
+                conn.commit()
+            flash("Entrada de material registrada e estoque atualizado.", "success")
+        except Exception as exc:
+            app.logger.exception("Falha ao registrar entrada de materiais")
+            flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
+        return redirect(url_for("admin_material_entries"))
+    entries = list_material_entries(limit=120)
+    return render_template("admin/material_entries.html", entries=entries)
+
+
+@app.get("/admin/material-entries/model")
+@admin_required
+@page_access_required("admin_stock")
+def admin_material_entries_template():
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Entrada de Materiais"
+    headers = ["Nome do item", "Quantidade", "Valor unitário", "Unidade de medida", "Número da nota", "Data da nota", "Valor da nota", "Observações"]
+    worksheet.append(headers)
+    worksheet.append(["Envelope de segurança M", 100, 0.65, "un", "NF-0001", "2026-06-23", 65.00, "Exemplo de preenchimento"])
+    header_fill = PatternFill("solid", fgColor="E60012")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="DDDDDD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+    widths = [38, 16, 18, 20, 22, 18, 18, 48]
+    for idx, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(idx)].width = width
+    for row in worksheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.border = border
+            cell.alignment = Alignment(vertical="center")
+    worksheet.freeze_panes = "A2"
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="modelo_entrada_materiais.xlsx")
+
+
+@app.post("/admin/material-entries/import")
+@admin_required
+@page_access_required("admin_stock")
+def admin_material_entries_import():
+    uploaded = request.files.get("spreadsheet")
+    if uploaded is None or not uploaded.filename:
+        flash("Selecione uma planilha .xlsx de entrada de materiais.", "warning")
+        return redirect(url_for("admin_material_entries"))
+    if not uploaded.filename.lower().endswith(".xlsx"):
+        flash("Importe apenas arquivos .xlsx.", "warning")
+        return redirect(url_for("admin_material_entries"))
+    try:
+        uploaded_bytes = uploaded.read()
+        if not uploaded_bytes:
+            flash("A planilha enviada está vazia.", "warning")
+            return redirect(url_for("admin_material_entries"))
+        try:
+            upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
+        except Exception as exc:
+            print(f"[R2] Não foi possível salvar planilha de entrada: {exc}")
+        imported, skipped, errors = import_material_entries_from_workbook_bytes(uploaded_bytes, require_current_user().id)
+        if errors:
+            flash("Algumas linhas foram ignoradas: " + "; ".join(errors[:4]), "warning")
+        flash(f"Importação concluída: {imported} entrada(s) importada(s), {skipped} linha(s) ignorada(s).", "success" if imported else "warning")
+    except Exception as exc:
+        app.logger.exception("Falha ao importar entrada de materiais")
+        flash(f"Não consegui importar a planilha. Erro: {type(exc).__name__}.", "danger")
+    return redirect(url_for("admin_material_entries"))
+
+
+@app.get("/admin/material-entries/report")
+@admin_required
+@page_access_required("admin_stock")
+def admin_material_entries_report():
+    start_raw = (request.args.get("start_date") or "").strip()
+    end_raw = (request.args.get("end_date") or "").strip()
+    if not start_raw or not end_raw:
+        flash("Informe a data inicial e a data final para gerar o relatório de entradas.", "warning")
+        return redirect(url_for("admin_material_entries"))
+    try:
+        start_dt = parse_report_date(start_raw, "Data inicial")
+        end_base = parse_report_date(end_raw, "Data final")
+        end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin_material_entries"))
+    if end_dt < start_dt:
+        flash("A data final não pode ser menor que a data inicial.", "warning")
+        return redirect(url_for("admin_material_entries"))
+    entries = list_material_entries(start_dt, end_dt)
+    buffer = build_material_entries_report_pdf(entries, start_dt, end_base, require_current_user())
+    filename = f"relatorio_entrada_materiais_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    store_generated_file(storage_key("reports", "material_entries", filename), buffer, "application/pdf", {"type": "material_entries_report", "start_date": start_raw, "end_date": end_raw})
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
 @app.route("/admin/assets")
 @admin_required
 @page_access_required("admin_stock")
@@ -4231,8 +4779,14 @@ def admin_asset_new():
 
 def admin_asset_new_with_stock():
     name = request.form.get("name", "").strip()
-    base = request.form.get("base", "").strip()
+    base_raw = request.form.get("base", "").strip()
+    franchise_raw = request.form.get("franchise", "").strip()
     regional = normalize_asset_regional(request.form.get("regional", ""))
+    try:
+        base, selected_unit_kind = validate_unit_selection(base_raw, franchise_raw, required=(regional != "Matriz"))
+    except ValueError as exc:
+        flash(str(exc), "warning")
+        return redirect(url_for("admin_assets", regional=regional))
     sector = request.form.get("sector", "").strip()
     manager = request.form.get("manager", "").strip()
     item_names = request.form.getlist("item_name")
@@ -4263,7 +4817,7 @@ def admin_asset_new_with_stock():
 
     redirect_args = {"regional": regional}
     if regional != "Matriz" and base:
-        redirect_args["base"] = base
+        redirect_args["franchise" if selected_unit_kind == "franchise" else "base"] = base
 
     if not name or not regional or not sector or not manager or (regional != "Matriz" and not base):
         flash("Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.", "warning")
@@ -4361,7 +4915,7 @@ def admin_asset_new_with_stock():
                 asset_link = public_url_for(
                     "admin_assets",
                     regional=regional,
-                    base=base,
+                    **({"franchise": base} if selected_unit_kind == "franchise" else {"base": base}),
                     _anchor=f"asset-{asset_id}",
                 )
                 notify_feishu_asset_created(

@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% block title %}Entrada de Materiais • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Entrada de Materiais{% endblock %}
+{% block page_subtitle %}Registre entradas de estoque, anexe nota fiscal quando houver e gere relatórios mensais.{% endblock %}
+{% block content %}
+<section class="material-entry-hero card">
+  <div>
+    <span class="eyebrow">Gestão de estoque</span>
+    <h2>Adicionar entrada</h2>
+    <p>Os materiais adicionados conversam com Produtos: se o item já existir, o estoque será somado; se não existir, o produto será criado automaticamente.</p>
+  </div>
+</section>
+
+<section class="material-entry-grid">
+  <form class="card material-entry-form" method="post" action="{{ url_for('admin_material_entries') }}" enctype="multipart/form-data">
+    <div class="section-head compact-section-head">
+      <div>
+        <span class="eyebrow">Nova entrada</span>
+        <h2>Dados do material</h2>
+        <p class="hint">Informe item, quantidade, valor e unidade. A nota fiscal é opcional.</p>
+      </div>
+    </div>
+    <div class="form-grid two-cols">
+      <label>
+        Nome do item
+        <input name="item_name" required placeholder="Ex.: Envelope de segurança M">
+      </label>
+      <label>
+        Quantidade
+        <input name="quantity" type="number" min="1" required placeholder="Ex.: 100">
+      </label>
+      <label>
+        Valor unitário
+        <input name="unit_price" inputmode="decimal" placeholder="Ex.: 0,65">
+      </label>
+      <label>
+        Unidade de medida
+        <input name="unit_measure" required value="un" placeholder="Ex.: un, caixa, rolo">
+      </label>
+      <label class="full invoice-file-row">
+        Anexo da nota fiscal (opcional)
+        <input id="materialInvoiceFile" name="invoice_file" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls">
+        <small class="hint">Ao anexar a nota, os campos abaixo serão exibidos.</small>
+      </label>
+    </div>
+
+    <div id="invoiceFields" class="invoice-extra-fields hidden">
+      <div class="form-grid three-cols">
+        <label>
+          Número da nota
+          <input name="invoice_number" placeholder="Ex.: NF-12345">
+        </label>
+        <label>
+          Data da nota
+          <input name="invoice_date" type="date">
+        </label>
+        <label>
+          Valor da nota
+          <input name="invoice_value" inputmode="decimal" placeholder="Ex.: 1.250,00">
+        </label>
+      </div>
+    </div>
+
+    <label class="full material-notes-label">
+      Observações
+      <textarea name="notes" rows="4" placeholder="Observações sobre a entrada, fornecedor, compra, divergências etc."></textarea>
+    </label>
+
+    <div class="form-actions material-actions">
+      <button class="btn primary" type="submit">Salvar entrada</button>
+    </div>
+  </form>
+
+  <aside class="card material-side-panel">
+    <div class="section-head compact-section-head">
+      <div>
+        <span class="eyebrow">Importação</span>
+        <h2>Importar XLSX</h2>
+        <p class="hint">Use a planilha modelo para importar várias entradas de uma só vez.</p>
+      </div>
+    </div>
+    <div class="material-import-actions">
+      <a class="btn ghost" href="{{ url_for('admin_material_entries_template') }}">Baixar planilha modelo</a>
+      <form method="post" action="{{ url_for('admin_material_entries_import') }}" enctype="multipart/form-data" class="material-import-form">
+        <input name="spreadsheet" type="file" accept=".xlsx" required>
+        <button class="btn primary" type="submit">Importar entradas</button>
+      </form>
+    </div>
+  </aside>
+</section>
+
+<section class="card monthly-report-card material-report-card">
+  <div class="section-head stock-panel-head">
+    <div>
+      <span class="eyebrow">Relatórios</span>
+      <h2>Relatório mensal de entrada de materiais</h2>
+      <p class="hint">Gere um PDF com todas as entradas registradas no período escolhido, incluindo notas fiscais, valores e observações.</p>
+    </div>
+  </div>
+  <form class="monthly-report-form monthly-report-form-wide" method="get" action="{{ url_for('admin_material_entries_report') }}" target="_blank">
+    <label>
+      <span>Data inicial</span>
+      <input type="date" name="start_date" required>
+    </label>
+    <label>
+      <span>Data final</span>
+      <input type="date" name="end_date" required>
+    </label>
+    <button class="btn primary" type="submit">Gerar relatório</button>
+  </form>
+</section>
+
+<section class="card table-card material-history-card">
+  <div class="section-head stock-panel-head">
+    <div>
+      <h2>Últimas entradas</h2>
+      <p class="hint">Histórico recente de materiais adicionados ao estoque.</p>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th><th>Item</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Total</th><th>Nota fiscal</th><th>Responsável</th><th>Observações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+      <tr>
+        <td data-label="Data">{{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td data-label="Item"><strong>{{ entry.item_name }}</strong></td>
+        <td data-label="Qtd.">{{ entry.quantity }}</td>
+        <td data-label="Unidade">{{ entry.unit_measure }}</td>
+        <td data-label="Valor unit.">{{ format_brl(entry.unit_price_cents) }}</td>
+        <td data-label="Total">{{ format_brl(entry.total_cents) }}</td>
+        <td data-label="Nota fiscal">
+          {% if entry.invoice_number or entry.invoice_file_name %}
+            <strong>{{ entry.invoice_number or 'Nota anexada' }}</strong><br>
+            <small>{{ entry.invoice_date.strftime('%d/%m/%Y') if entry.invoice_date else '' }} {{ format_brl(entry.invoice_value_cents) if entry.invoice_value_cents else '' }}</small>
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td data-label="Responsável">{{ entry.created_by_name or '-' }}</td>
+        <td data-label="Observações">{{ entry.notes or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted center">Nenhuma entrada de material registrada ainda.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const invoiceInput = document.getElementById('materialInvoiceFile');
+  const invoiceFields = document.getElementById('invoiceFields');
+  if (!invoiceInput || !invoiceFields) return;
+  function syncInvoiceFields() {
+    invoiceFields.classList.toggle('hidden', !invoiceInput.files || !invoiceInput.files.length);
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.JT_I18N.refresh(invoiceFields);
+    }
+  }
+  invoiceInput.addEventListener('change', syncInvoiceFields);
+  syncInvoiceFields();
+})();
+</script>
+{% endblock %}

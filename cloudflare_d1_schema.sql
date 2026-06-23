@@ -121,3 +121,25 @@ CREATE TABLE IF NOT EXISTS user_page_permissions (
     UNIQUE(user_id, page_key),
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- v65 - Entrada de Materiais
+CREATE TABLE IF NOT EXISTS material_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER,
+    item_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    unit_measure TEXT NOT NULL DEFAULT 'un',
+    unit_price_cents INTEGER NOT NULL DEFAULT 0,
+    invoice_file_name TEXT,
+    invoice_file_key TEXT,
+    invoice_number TEXT,
+    invoice_date TEXT,
+    invoice_value_cents INTEGER NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_by_id INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(product_id) REFERENCES products(id),
+    FOREIGN KEY(created_by_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_material_entries_created_at ON material_entries(created_at);
+CREATE INDEX IF NOT EXISTS idx_material_entries_product_id ON material_entries(product_id);
