@@ -50,6 +50,7 @@
     <a class="btn primary full-btn" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
     <p><strong>Unidade:</strong> {{ supply_request.user.organization_name }}</p>
     <p><strong>Tipo:</strong> {{ 'Base' if supply_request.user.role == 'base' else ('Franquia' if supply_request.user.role == 'franchise' else 'Admin') }}</p>
+    <p><strong>Pessoas na base:</strong> {{ supply_request.people_count or '-' }}</p>
     <p><strong>Usuário:</strong> {{ supply_request.user.username }}</p>
     <p><strong>Enviado em:</strong> {{ supply_request.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
     <p><strong>Observação do solicitante:</strong><br>{{ supply_request.user_note or '-' }}</p>

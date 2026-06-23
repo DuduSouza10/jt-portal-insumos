@@ -8,6 +8,7 @@ const clearCart = document.getElementById('clearCart');
 const submitRequest = document.getElementById('submitRequest');
 const cartMessage = document.getElementById('cartMessage');
 const requestNote = document.getElementById('requestNote');
+const requestPeopleCount = document.getElementById('requestPeopleCount');
 const downloadLastPdf = document.getElementById('downloadLastPdf');
 
 let products = [];
@@ -171,6 +172,12 @@ async function sendRequest() {
     setMessage(jtText('Adicione pelo menos um insumo antes de enviar.'), 'err');
     return;
   }
+  const peopleCount = parseInt(requestPeopleCount ? requestPeopleCount.value : '', 10);
+  if (!peopleCount || peopleCount <= 0 || peopleCount > 99999) {
+    setMessage(jtText('Informe o número de pessoas na base.'), 'err');
+    if (requestPeopleCount) requestPeopleCount.focus();
+    return;
+  }
   submitRequest.disabled = true;
   setMessage(jtText('Enviando solicitação...'), '');
   try {
@@ -179,6 +186,7 @@ async function sendRequest() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         items: values.map(item => ({ product_id: item.product.id, quantity: item.quantity })),
+        people_count: peopleCount,
         user_note: requestNote.value.trim()
       })
     });
@@ -189,6 +197,7 @@ async function sendRequest() {
     }
     cart.clear();
     requestNote.value = '';
+    if (requestPeopleCount) requestPeopleCount.value = '';
     renderCart();
     setMessage(jtText(`Solicitação #${data.request_id} enviada para aprovação. PDF disponível para download.`), 'ok');
     showLastPdfButton(data.request_id);

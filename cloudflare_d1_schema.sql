@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS supply_requests (
     status TEXT NOT NULL DEFAULT 'pending',
     user_note TEXT,
     admin_note TEXT,
+    people_count INTEGER,
     created_at TEXT NOT NULL,
     reviewed_at TEXT,
     reviewed_by_id INTEGER,

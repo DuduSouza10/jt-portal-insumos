@@ -4079,3 +4079,28 @@ body.asset-modal-open .asset-modal * {
     padding: 16px !important;
   }
 }
+
+
+/* v55 - campos fixados ficam abaixo do menu superior durante a rolagem. */
+:root {
+  --jt-sticky-under-topbar: 124px;
+}
+
+.search-card,
+.cart-panel {
+  top: var(--jt-sticky-under-topbar) !important;
+  z-index: 2500 !important;
+}
+
+/* Mantém o menu sempre acima dos painéis fixados. */
+.compact-header {
+  z-index: 6000 !important;
+}
+
+@media (max-width: 1180px) {
+  .search-card,
+  .cart-panel {
+    top: auto !important;
+    z-index: auto !important;
+  }
+}
