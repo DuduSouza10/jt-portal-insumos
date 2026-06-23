@@ -183,3 +183,10 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Cadastro de usuário passou a selecionar a base/franquia em lista oficial.
 - Administração de usuários também usa a mesma lista para criação/edição.
 - Bases e franquias só podem ser salvas com unidades válidas da lista.
+
+
+## v50.1 - Inativar produtos
+
+- Produtos voltaram a ter a ação **Inativar/Ativar** na listagem administrativa.
+- Inativar remove o produto das solicitações, mas mantém o registro salvo no banco de dados.
+- A ação **Excluir** continua disponível apenas para remoção definitiva.

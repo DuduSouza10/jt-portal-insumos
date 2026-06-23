@@ -2829,6 +2829,32 @@ def admin_product_edit(product_id: int):
     return render_template("admin/product_form.html", product=product)
 
 
+@app.post("/admin/products/<int:product_id>/toggle-active")
+@admin_required
+@page_access_required("admin_products")
+def admin_product_toggle_active(product_id: int):
+    product = get_product(product_id)
+    if product is None:
+        abort(404)
+
+    new_active = 0 if product.active else 1
+    try:
+        with db_connect() as conn:
+            conn.execute(
+                "UPDATE products SET active = ?, updated_at = ? WHERE id = ?",
+                (new_active, now_iso(), product_id),
+            )
+            conn.commit()
+        if new_active:
+            flash(f"Produto '{product.name}' ativado para solicitação.", "success")
+        else:
+            flash(f"Produto '{product.name}' inativado para solicitação. Ele continua salvo no banco de dados.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao alterar status do produto")
+        flash(f"Não consegui alterar o status do produto. Erro: {type(exc).__name__}.", "danger")
+    return redirect(url_for("admin_products"))
+
+
 @app.post("/admin/products/<int:product_id>/delete")
 @admin_required
 @page_access_required("admin_products")

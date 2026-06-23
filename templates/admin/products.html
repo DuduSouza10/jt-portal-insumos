@@ -66,6 +66,9 @@
         <td><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
         <td class="actions-cell">
           <a class="btn tiny ghost" href="{{ url_for('admin_product_edit', product_id=product.id) }}">Editar</a>
+          <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
+            <button class="btn tiny ghost" type="submit">{{ 'Inativar' if product.active else 'Ativar' }}</button>
+          </form>
           <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')"><button class="btn tiny danger" type="submit">Excluir</button></form>
         </td>
       </tr>
