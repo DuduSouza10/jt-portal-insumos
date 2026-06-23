@@ -4558,3 +4558,166 @@ html[data-theme="light"] .material-import-form {
   .material-history-card { padding: 18px; }
   .asset-modal-card .form-grid.two-cols { grid-template-columns: 1fr; }
 }
+
+
+/* v66 - Card do relatório mensal de Entrada de Materiais + favicon visual */
+.material-report-card-v66 {
+  padding: 0 !important;
+  border-radius: 30px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(230, 0, 18, .22) !important;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(230, 0, 18, .18), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,.07), rgba(255,255,255,.025) 44%, rgba(230,0,18,.06)) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.09) !important;
+}
+.material-report-card-v66::before { display: none !important; }
+.material-report-card-v66 > * { position: relative; z-index: 1; }
+.material-report-topline {
+  height: 5px;
+  background: linear-gradient(90deg, #e60012, #ff4053, rgba(230, 0, 18, .18));
+}
+.material-report-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, .95fr) minmax(360px, 1.2fr);
+  gap: clamp(18px, 2.3vw, 34px);
+  align-items: stretch;
+  padding: clamp(22px, 3vw, 38px);
+}
+.material-report-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.material-report-copy h2 {
+  margin: 8px 0 10px !important;
+  font-size: clamp(25px, 2.6vw, 38px) !important;
+  line-height: 1.02 !important;
+  letter-spacing: -.055em !important;
+}
+.material-report-copy .hint {
+  max-width: 660px;
+  line-height: 1.65;
+  color: var(--muted-2);
+}
+.material-report-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 18px;
+}
+.material-report-badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.055);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.material-report-badges span::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #e60012;
+  box-shadow: 0 0 0 4px rgba(230,0,18,.15);
+}
+.material-report-form-v66 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: clamp(16px, 2vw, 22px);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 24px;
+  background: rgba(8, 8, 10, .42);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 18px 42px rgba(0,0,0,.16);
+  backdrop-filter: blur(12px);
+  min-width: 0;
+}
+.material-date-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-strong);
+  font-weight: 950;
+}
+.material-date-field span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted-2);
+}
+.material-date-field input[type="date"] {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text-strong);
+  padding: 13px 15px;
+  outline: none;
+  font-weight: 900;
+  box-shadow: none;
+}
+.material-date-field input[type="date"]:focus {
+  border-color: rgba(230, 0, 18, .62);
+  box-shadow: 0 0 0 4px rgba(230, 0, 18, .12);
+}
+.material-report-submit {
+  grid-column: 1 / -1;
+  min-height: 54px;
+  border-radius: 18px !important;
+  justify-content: center;
+  box-shadow: 0 16px 34px rgba(230, 0, 18, .22) !important;
+}
+.material-report-footnote {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+html[data-theme="light"] .material-report-card-v66 {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(230, 0, 18, .10), transparent 34%),
+    linear-gradient(145deg, rgba(255,255,255,.98), rgba(255,255,255,.80) 54%, rgba(230,0,18,.045)) !important;
+  box-shadow: 0 24px 60px rgba(17,24,39,.10) !important;
+}
+html[data-theme="light"] .material-report-badges span,
+html[data-theme="light"] .material-report-form-v66 {
+  border-color: rgba(15,23,42,.08);
+  background: rgba(255,255,255,.78);
+}
+@media (max-width: 1080px) {
+  .material-report-layout {
+    grid-template-columns: 1fr;
+  }
+  .material-report-copy {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 680px) {
+  .material-report-layout {
+    padding: 18px;
+    gap: 16px;
+  }
+  .material-report-form-v66 {
+    grid-template-columns: 1fr;
+    padding: 14px;
+    border-radius: 20px;
+  }
+  .material-report-copy h2 {
+    font-size: 25px !important;
+  }
+  .material-report-badges span {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

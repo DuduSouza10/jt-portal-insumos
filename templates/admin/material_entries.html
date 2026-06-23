@@ -89,25 +89,33 @@
   </aside>
 </section>
 
-<section class="card monthly-report-card material-report-card">
-  <div class="section-head stock-panel-head">
-    <div>
+<section class="card monthly-report-card material-report-card material-report-card-v66">
+  <div class="material-report-topline"></div>
+  <div class="material-report-layout">
+    <div class="material-report-copy">
       <span class="eyebrow">Relatórios</span>
       <h2>Relatório mensal de entrada de materiais</h2>
-      <p class="hint">Gere um PDF com todas as entradas registradas no período escolhido, incluindo notas fiscais, valores e observações.</p>
+      <p class="hint">Selecione o período para gerar um PDF completo com entradas, notas fiscais, valores, quantidades e observações.</p>
+      <div class="material-report-badges" aria-label="Conteúdo do relatório">
+        <span>Entradas do período</span>
+        <span>Notas fiscais</span>
+        <span>Valores e estoque</span>
+      </div>
     </div>
+
+    <form class="material-report-form-v66" method="get" action="{{ url_for('admin_material_entries_report') }}" target="_blank">
+      <label class="material-date-field">
+        <span>Data inicial</span>
+        <input type="date" name="start_date" required>
+      </label>
+      <label class="material-date-field">
+        <span>Data final</span>
+        <input type="date" name="end_date" required>
+      </label>
+      <button class="btn primary material-report-submit" type="submit">Gerar relatório</button>
+      <p class="material-report-footnote">O PDF será aberto em uma nova aba e pode ser salvo ou enviado para conferência.</p>
+    </form>
   </div>
-  <form class="monthly-report-form monthly-report-form-wide" method="get" action="{{ url_for('admin_material_entries_report') }}" target="_blank">
-    <label>
-      <span>Data inicial</span>
-      <input type="date" name="start_date" required>
-    </label>
-    <label>
-      <span>Data final</span>
-      <input type="date" name="end_date" required>
-    </label>
-    <button class="btn primary" type="submit">Gerar relatório</button>
-  </form>
 </section>
 
 <section class="card table-card material-history-card">
