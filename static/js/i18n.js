@@ -849,6 +849,10 @@
     window.dispatchEvent(new CustomEvent('jt-language-change', { detail: { language: currentLanguage() } }));
   }
 
+  // v54: refresh de tradução não deve disparar jt-language-change.
+  // Esse evento recria cards/listas em outras telas e reinicia animações.
+  // Ele fica reservado apenas para a troca real do idioma no botão.
+
   function forceTranslateStockAndCards() {
     if (currentLanguage() !== 'zh-CN') return;
     const selectors = [
@@ -904,8 +908,6 @@
   function runVisibleTranslation(rootNode) {
     if (isApplying) return;
     isApplying = true;
-    const btn = document.getElementById('languageToggle');
-    if (btn) btn.disabled = true;
 
     const runner = function () {
       try {
@@ -913,9 +915,7 @@
         processVisible(rootNode || document.body || document.documentElement);
         forceTranslateStockAndCards();
       } finally {
-        if (btn) btn.disabled = false;
         isApplying = false;
-        dispatchLanguageChange();
       }
     };
 
@@ -936,10 +936,23 @@
   }
 
   function applyLanguage(lang) {
-    localStorage.setItem(STORAGE_KEY, lang === 'zh-CN' ? 'zh-CN' : 'pt-BR');
+    const previous = currentLanguage();
+    const nextLanguage = lang === 'zh-CN' ? 'zh-CN' : 'pt-BR';
+    localStorage.setItem(STORAGE_KEY, nextLanguage);
     setRootLanguage();
     updateButton();
-    runVisibleTranslation(document.body || document.documentElement);
+
+    const btn = document.getElementById('languageToggle');
+    if (btn) btn.disabled = true;
+
+    // Dispara somente quando o idioma muda de verdade, para componentes
+    // dinâmicos renderizarem uma vez. Scroll/refresh não recriam cards.
+    if (previous !== nextLanguage) dispatchLanguageChange();
+
+    window.setTimeout(function () {
+      runVisibleTranslation(document.body || document.documentElement);
+      window.setTimeout(function () { if (btn) btn.disabled = false; }, 520);
+    }, 20);
   }
 
   function refresh(rootNode) {
