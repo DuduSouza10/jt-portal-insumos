@@ -69,6 +69,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    has_request_context,
     jsonify,
     redirect,
     render_template,
@@ -77,6 +78,7 @@ from flask import (
     session,
     url_for,
 )
+import requests
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from openpyxl import Workbook, load_workbook
@@ -112,6 +114,15 @@ MAIL_USE_SSL = os.getenv("MAIL_USE_SSL", "false").lower() in {"1", "true", "yes"
 MAIL_USERNAME = os.getenv("MAIL_USERNAME", "").strip()
 MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "").strip()
 MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME or "no-reply@jt-insumos.local").strip()
+
+FEISHU_STOCK_WEBHOOK_URL = os.getenv(
+    "FEISHU_STOCK_WEBHOOK_URL",
+    "https://open.feishu.cn/open-apis/bot/v2/hook/0759b1b1-b0ac-413b-8672-c113012c14db",
+).strip()
+PUBLIC_BASE_URL = os.getenv(
+    "PUBLIC_BASE_URL",
+    os.getenv("APP_PUBLIC_URL", os.getenv("RENDER_EXTERNAL_URL", "")),
+).strip().rstrip("/")
 
 
 # Lista oficial de bases/franquias para cadastro e administração de usuários.
@@ -1328,6 +1339,189 @@ def record_stock_movement(
     )
 
 
+FEISHU_ITEM_LIMIT = 18
+
+
+def compact_text(value: Any, fallback: str = "-", limit: int = 240) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        text = fallback
+    if limit > 3 and len(text) > limit:
+        return text[: limit - 3].rstrip() + "..."
+    return text[:limit]
+
+
+def feishu_md(value: Any, fallback: str = "-", limit: int = 240) -> str:
+    text = compact_text(value, fallback=fallback, limit=limit)
+    for char in ("\\", "*", "_", "`", "[", "]", "(", ")", "#"):
+        text = text.replace(char, "\\" + char)
+    return text
+
+
+def feishu_line(label: str, value: Any) -> str:
+    return f"**{label}:** {feishu_md(value)}"
+
+
+def user_role_label(role: str | None) -> str:
+    labels = {"admin": "Admin", "base": "Base", "franchise": "Franquia"}
+    return labels.get(role or "", role or "-")
+
+
+def format_feishu_datetime(value: datetime | None = None) -> str:
+    return (value or datetime.utcnow()).strftime("%d/%m/%Y %H:%M")
+
+
+def public_url_for(endpoint: str, **values: Any) -> str:
+    clean_values = {key: value for key, value in values.items() if value is not None}
+    if not has_request_context():
+        return PUBLIC_BASE_URL
+    try:
+        path = url_for(endpoint, **clean_values)
+        if PUBLIC_BASE_URL:
+            return f"{PUBLIC_BASE_URL}{path}"
+        return url_for(endpoint, _external=True, **clean_values)
+    except Exception:
+        app.logger.exception("Falha ao montar link publico para o Feishu")
+        return PUBLIC_BASE_URL
+
+
+def dispatch_feishu_webhook(payload: dict[str, Any]) -> None:
+    webhook_url = FEISHU_STOCK_WEBHOOK_URL
+    if not webhook_url:
+        return
+
+    def send_payload() -> None:
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=8)
+            response.raise_for_status()
+            try:
+                response_payload = response.json()
+            except ValueError:
+                response_payload = {}
+            if isinstance(response_payload, dict) and response_payload.get("code") not in (0, None):
+                app.logger.warning("Feishu webhook retornou erro: %s", response_payload)
+        except Exception:
+            app.logger.exception("Falha ao enviar notificacao para o Feishu")
+
+    threading.Thread(target=send_payload, daemon=True).start()
+
+
+def send_feishu_card(title: str, lines: list[str], link_text: str, link_url: str) -> None:
+    content = "\n".join(line for line in lines if line is not None).strip()
+    if len(content) > 3500:
+        content = content[:3497].rstrip() + "..."
+
+    elements: list[dict[str, Any]] = []
+    if content:
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": content}})
+    if link_url:
+        elements.append(
+            {
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": compact_text(link_text, limit=50)},
+                        "type": "primary",
+                        "url": link_url,
+                    }
+                ],
+            }
+        )
+
+    if not elements:
+        return
+
+    dispatch_feishu_webhook(
+        {
+            "msg_type": "interactive",
+            "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "template": "red",
+                    "title": {"tag": "plain_text", "content": compact_text(title, limit=80)},
+                },
+                "elements": elements,
+            },
+        }
+    )
+
+
+def request_item_feishu_lines(items: list[RequestItem]) -> list[str]:
+    lines: list[str] = []
+    for item in items[:FEISHU_ITEM_LIMIT]:
+        product = item.product
+        product_name = product.name if product else item.product_name_snapshot
+        unit = product.unit_measure if product and product.unit_measure else "un"
+        lines.append(f"- {item.quantity} {feishu_md(unit, limit=40)} - {feishu_md(product_name)}")
+    remaining = len(items) - FEISHU_ITEM_LIMIT
+    if remaining > 0:
+        lines.append(f"- +{remaining} item(ns) no portal")
+    return lines or ["- Sem itens"]
+
+
+def notify_feishu_supply_request_created(supply_request: SupplyRequest, link_url: str) -> None:
+    requester = supply_request.user
+    requester_name = requester.responsible_name if requester else f"Usuario #{supply_request.user_id}"
+    requester_org = requester.organization_name if requester else "-"
+    requester_role = user_role_label(requester.role if requester else "")
+
+    lines = [
+        feishu_line("Solicitacao", f"#{supply_request.id}"),
+        feishu_line("Pedido por", requester_name),
+        feishu_line("Base/Franquia", requester_org),
+        feishu_line("Tipo", requester_role),
+        feishu_line("Status", "Pendente"),
+        feishu_line("Data", format_feishu_datetime()),
+    ]
+    if supply_request.user_note:
+        lines.append(feishu_line("Observacao do pedido", supply_request.user_note))
+    lines.extend(["", "**Itens solicitados:**", *request_item_feishu_lines(supply_request.items)])
+
+    send_feishu_card("Nova solicitacao de insumos", lines, "Abrir solicitacao", link_url)
+
+
+def notify_feishu_asset_created(
+    asset_id: int,
+    name: str,
+    base: str,
+    regional: str,
+    sector: str,
+    manager: str,
+    created_by: User,
+    item_rows: list[dict[str, Any]],
+    product_map: dict[int, Product],
+    link_url: str,
+) -> None:
+    item_lines: list[str] = []
+    for item in item_rows[:FEISHU_ITEM_LIMIT]:
+        product = product_map.get(int(item["product_id"]))
+        product_name = product.name if product else item.get("item_name", "Item")
+        unit = product.unit_measure if product and product.unit_measure else "un"
+        serial_number = compact_text(item.get("serial_number"), fallback="", limit=120)
+        serial_text = f" | Patrimonio/serie: {feishu_md(serial_number, fallback='', limit=120)}" if serial_number else ""
+        item_lines.append(
+            f"- {item['quantity']} {feishu_md(unit, limit=40)} - {feishu_md(product_name)}{serial_text}"
+        )
+    remaining = len(item_rows) - FEISHU_ITEM_LIMIT
+    if remaining > 0:
+        item_lines.append(f"- +{remaining} item(ns) no portal")
+
+    lines = [
+        feishu_line("Ativo", f"#{asset_id} - {name}"),
+        feishu_line("Regional", regional),
+        feishu_line("Base", base),
+        feishu_line("Setor", sector),
+        feishu_line("Gestor", manager),
+        feishu_line("Cadastrado por", created_by.responsible_name),
+        feishu_line("Data", format_feishu_datetime()),
+        "",
+        "**Itens vinculados:**",
+        *(item_lines or ["- Sem itens"]),
+    ]
+
+    send_feishu_card("Novo ativo cadastrado", lines, "Abrir ativo", link_url)
+
 
 
 
@@ -2502,6 +2696,14 @@ def api_create_request():
             )
         conn.commit()
 
+    try:
+        created_request = get_supply_request(int(request_id))
+        if created_request is not None:
+            request_link = public_url_for("admin_request_detail", request_id=int(request_id))
+            notify_feishu_supply_request_created(created_request, request_link)
+    except Exception:
+        app.logger.exception("Falha ao preparar notificacao Feishu da solicitacao")
+
     return jsonify({"ok": True, "message": "Solicitação enviada para aprovação.", "request_id": request_id})
 
 
@@ -3288,6 +3490,27 @@ def admin_asset_new_with_stock():
                 )
                 product.stock_quantity = stock_after
             conn.commit()
+            try:
+                asset_link = public_url_for(
+                    "admin_assets",
+                    regional=regional,
+                    base=base,
+                    _anchor=f"asset-{asset_id}",
+                )
+                notify_feishu_asset_created(
+                    int(asset_id),
+                    name,
+                    base,
+                    regional,
+                    sector,
+                    manager,
+                    current,
+                    item_rows,
+                    product_map,
+                    asset_link,
+                )
+            except Exception:
+                app.logger.exception("Falha ao preparar notificacao Feishu do ativo")
         flash("Ativo adicionado ao relatorio e estoque baixado.", "success")
     except Exception as exc:
         app.logger.exception("Falha ao adicionar ativo")

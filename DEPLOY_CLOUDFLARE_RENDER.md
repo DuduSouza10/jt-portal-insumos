@@ -18,6 +18,7 @@ CLOUDFLARE_API_TOKEN=...
 SECRET_KEY=...
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=Admin@123
+PUBLIC_BASE_URL=https://seu-portal.onrender.com
 ```
 
 ## Variáveis R2

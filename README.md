@@ -226,3 +226,11 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Cadastro de ativos ganhou quantidade por item e baixa automaticamente o estoque do produto.
 - A baixa entra no histórico de movimentações como **Saída para ativo**.
 - Regional **Matriz** adicionada; ao selecionar Matriz, o campo Base fica inativo.
+
+
+## v52 - Alertas Feishu
+
+- Ao enviar uma solicitacao de insumos, o portal envia um card para o grupo Feishu com solicitante, base/franquia, itens, quantidades e botao para abrir o detalhe.
+- Ao cadastrar um novo ativo, o portal envia um card para o grupo Feishu com regional, base, setor, gestor, itens, quantidades e botao para abrir o ativo na Gestao de Ativos.
+- Configure `PUBLIC_BASE_URL` no Render para os botoes abrirem o dominio correto do portal.
+- O webhook pode ser trocado pela variavel `FEISHU_STOCK_WEBHOOK_URL`.

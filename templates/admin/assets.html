@@ -61,7 +61,7 @@
 
 <section class="asset-report-grid">
   {% for asset in assets %}
-  <article class="asset-report-card card">
+  <article class="asset-report-card card" id="asset-{{ asset.id }}">
     <div class="asset-report-head">
       <div>
         <span class="asset-regional">{{ asset.regional }}</span>
