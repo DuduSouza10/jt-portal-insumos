@@ -4,6 +4,26 @@
   const originalText = new WeakMap();
   let isApplying = false;
   const zh = {
+  "Login • Portal de Insumos J&T": "登录 • J&T 耗材门户网站",
+  "Cadastro • Portal de Insumos J&T": "注册 • J&T 耗材门户网站",
+  "Acesso ao Portal": "登录门户网站",
+  "Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código para concluir o login.": "请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。",
+  "Entre com seu nome de usuário e senha.": "请输入用户名和密码。",
+  "Se sua conta exigir confirmação, informe o código para concluir o login.": "如果您的账号需要确认，请输入代码完成登录。",
+  "Ainda não tem cadastro? Solicitar acesso": "还没有账号？申请权限",
+  "Ex.: admin": "例如：admin",
+  "O cadastro só será liberado após aprovação de um administrador.": "注册申请需经管理员批准后才会开通。",
+  "Nome do responsável": "负责人姓名",
+  "Tipo de unidade": "单位类型",
+  "Nome da base": "基地名称",
+  "Nome da franquia": "加盟店名称",
+  "Selecione a base": "请选择基地",
+  "Selecione a franquia": "请选择加盟店",
+  "Ex.: Eduardo Rodrigues": "例如：Eduardo Rodrigues",
+  "Ex.: mg_bhz": "例如：mg_bhz",
+  "Voltar ao login": "返回登录",
+  "Cargo": "职位",
+  "Digite o cargo da pessoa": "请输入此人的职位",
   "Portal de Insumos J&T": "J&T 耗材门户网站",
   "Portal de Insumos": "耗材门户网站",
   "J&T Express Brazil": "J&T Express 巴西",
@@ -455,6 +475,17 @@
   let scheduled = false;
 
   const fallbackTerms = [
+    ['Acesso ao Portal', '登录门户网站'],
+    ['Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código para concluir o login.', '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。'],
+    ['Ainda não tem cadastro?', '还没有账号？'],
+    ['Solicitar acesso', '申请权限'],
+    ['Nome do responsável', '负责人姓名'],
+    ['Tipo de unidade', '单位类型'],
+    ['Nome da base', '基地名称'],
+    ['Nome da franquia', '加盟店名称'],
+    ['Selecione a base', '请选择基地'],
+    ['Selecione a franquia', '请选择加盟店'],
+    ['Voltar ao login', '返回登录'],
     ['Solicitações pendentes', '待处理申请'],
     ['Minhas solicitações', '我的申请'],
     ['Painel administrativo', '管理面板'],
@@ -557,7 +588,6 @@
     ['Cadastre', '注册'],
     ['mínimo', '最低'],
     ['máximo', '最高'],
-    ['para', '用于']
   ].sort(function (a, b) { return b[0].length - a[0].length; });
 
   function currentLanguage() {
@@ -589,6 +619,7 @@
 
   function translateCore(core) {
     if (!core) return core;
+    if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     if (zh[core]) return zh[core];
     let match;
     if ((match = core.match(/^(.+?)\s*•\s*Min\s+(.+?)\s*\/\s*Máx\s+(.+)$/))) return `${translatePiece(match[1])} • 最低 ${translatePiece(match[2])} / 最高 ${translatePiece(match[3])}`;
@@ -783,7 +814,20 @@
       '.stock-pill',
       '.stock-chart-tooltip *',
       '.stock-suggestion-item strong',
-      '.stock-suggestion-item span'
+      '.stock-suggestion-item span',
+      '.hero-card h2',
+      '.hero-card p',
+      '.hero-card .eyebrow',
+      '.auth-card label',
+      '.auth-card button',
+      '.auth-card a',
+      '.auth-card p',
+      '.auth-card span',
+      '.public-actions a',
+      '.dev-credit strong',
+      '.dev-credit small',
+      '.language-toggle-text',
+      '.theme-toggle-text'
     ];
     document.querySelectorAll(selectors.join(',')).forEach(function (el) {
       if (!el || shouldSkipElement(el)) return;
