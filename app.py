@@ -124,6 +124,14 @@ except Exception as exc:
     print(f"[PDF] Aviso: não foi possível registrar fonte chinesa STSong-Light: {exc}")
 
 app = Flask(__name__)
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    """Serve o favicon também no caminho raiz, porque alguns navegadores
+    ignoram o link do template em cache e buscam diretamente /favicon.ico.
+    """
+    return send_file(BASE_DIR / "static" / "img" / "favicon.ico", mimetype="image/vnd.microsoft.icon")
+
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-change-me")
 
 DATABASE_DRIVER = os.getenv("DATABASE_DRIVER", "sqlite").strip().lower()

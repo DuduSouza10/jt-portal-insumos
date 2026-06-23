@@ -4721,3 +4721,54 @@ html[data-theme="light"] .material-report-form-v66 {
     justify-content: flex-start;
   }
 }
+
+
+/* v67 - Favicon robusto + controles de anexos */
+.file-input-control {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(230, 0, 18, .18);
+  border-radius: 16px;
+  background: rgba(230, 0, 18, .06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.file-input-control.hidden { display: none !important; }
+.file-input-name {
+  min-width: 0;
+  flex: 1 1 220px;
+  color: var(--text-strong);
+  font-weight: 850;
+  word-break: break-word;
+  line-height: 1.35;
+}
+.file-input-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.file-input-actions .btn.tiny {
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+html[data-theme="light"] .file-input-control {
+  background: rgba(230, 0, 18, .045);
+  border-color: rgba(230, 0, 18, .16);
+}
+@media (max-width: 620px) {
+  .file-input-control,
+  .file-input-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .file-input-actions .btn.tiny {
+    width: 100%;
+    justify-content: center;
+  }
+}
