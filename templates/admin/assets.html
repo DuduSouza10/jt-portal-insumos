@@ -7,7 +7,7 @@
   <div>
     <span class="eyebrow">Controle patrimonial</span>
     <h2>Relatórios de ativos</h2>
-    <p>Filtre por base ou regional e acompanhe os itens cadastrados.</p>
+    <p>Filtre por base/franquia ou regional e acompanhe os itens cadastrados.</p>
   </div>
   <button class="btn primary" type="button" data-open-asset-modal>Adicionar Ativos</button>
 </section>
@@ -22,7 +22,7 @@
     <strong>{{ totals["items"] }}</strong>
   </article>
   <article class="stat-card card">
-    <span>Bases no filtro</span>
+    <span>Unidades no filtro</span>
     <strong>{{ totals.bases }}</strong>
   </article>
   <article class="stat-card card">
@@ -34,10 +34,10 @@
 <section class="card asset-filter-card">
   <form class="asset-filter-form" method="get" action="{{ url_for('admin_assets') }}">
     <label>
-      Base
+      Base/Franquia
       <select name="base" id="assetFilterBase">
-        <option value="">Todas as bases</option>
-        {% for unit in base_unit_options %}
+        <option value="">Todas as bases/franquias</option>
+        {% for unit in asset_unit_options %}
           <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}" {% if selected_base == unit %}selected{% endif %}>{{ unit }}</option>
         {% endfor %}
         <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
@@ -83,6 +83,9 @@
         </div>
       {% endfor %}
     </div>
+    <div class="asset-card-actions">
+      <a class="btn tiny primary" href="{{ url_for('asset_pdf', asset_id=asset.id) }}">Gerar PDF</a>
+    </div>
   </article>
   {% else %}
   <div class="empty-state card">Nenhum ativo cadastrado para este filtro.</div>
@@ -108,10 +111,10 @@
           <input name="name" required placeholder="Ex.: Kit operacional">
         </label>
         <label>
-          Base
+          Base/Franquia
           <select name="base" id="assetModalBase" required data-required-when-base="true">
-            <option value="" selected disabled>Selecione a base</option>
-            {% for unit in base_unit_options %}
+            <option value="" selected disabled>Selecione a base/franquia</option>
+            {% for unit in asset_unit_options %}
               <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}">{{ unit }}</option>
             {% endfor %}
             <option value="" disabled data-empty-base-option hidden>Sem Dados</option>

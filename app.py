@@ -656,6 +656,12 @@ def list_assets(base: str = "", regional: str = "") -> list[AssetRecord]:
         return [asset for row in rows if (asset := row_to_asset(row, conn=conn)) is not None]
 
 
+def get_asset(asset_id: int) -> AssetRecord | None:
+    with db_connect() as conn:
+        row = conn.execute("SELECT * FROM assets WHERE id = ?", (int(asset_id),)).fetchone()
+        return row_to_asset(row, conn=conn)
+
+
 def normalize_asset_regional(value: str) -> str:
     normalized = (value or "").strip().upper()
     if normalized == "MATRIZ":
@@ -675,12 +681,18 @@ def asset_regional_for_base(base: str) -> str:
 
 
 def base_options_for_asset_regional(regional: str = "") -> list[str]:
+    """Opções de unidade para Gestão de Ativos.
+
+    Diferente do cadastro de usuários, a gestão de ativos deve listar bases e
+    franquias. Mantemos o nome da função por compatibilidade com o restante do
+    código, mas a origem correta aqui é BASE_FRANCHISE_OPTIONS.
+    """
     normalized = normalize_asset_regional(regional)
     if not normalized:
-        return BASE_UNIT_OPTIONS
+        return BASE_FRANCHISE_OPTIONS
     if normalized == "Matriz":
         return []
-    return [unit for unit in BASE_UNIT_OPTIONS if asset_regional_for_base(unit) == normalized]
+    return [unit for unit in BASE_FRANCHISE_OPTIONS if asset_regional_for_base(unit) == normalized]
 
 
 def init_db() -> None:
@@ -1118,6 +1130,7 @@ def inject_globals():
         "base_franchise_options": BASE_FRANCHISE_OPTIONS,
         "base_unit_options": BASE_UNIT_OPTIONS,
         "franchise_unit_options": FRANCHISE_UNIT_OPTIONS,
+        "asset_unit_options": BASE_FRANCHISE_OPTIONS,
         "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
         "asset_regional_options": ASSET_REGIONAL_OPTIONS,
         "asset_regional_for_base": asset_regional_for_base,
@@ -2044,6 +2057,174 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     return buffer
 
 
+def build_asset_pdf(asset: AssetRecord, viewer: User) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        topMargin=14 * mm,
+        bottomMargin=18 * mm,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="AssetTitle", fontName="Helvetica-Bold", fontSize=20, leading=24, textColor=colors.HexColor("#111111"), spaceAfter=2))
+    styles.add(ParagraphStyle(name="AssetSubtitle", fontName="Helvetica", fontSize=8.7, leading=11.5, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="AssetLabel", fontName="Helvetica-Bold", fontSize=7.2, leading=8.6, textColor=colors.HexColor("#e60012"), uppercase=True))
+    styles.add(ParagraphStyle(name="AssetValue", fontName="Helvetica-Bold", fontSize=9.4, leading=12, textColor=colors.HexColor("#141414")))
+    styles.add(ParagraphStyle(name="AssetCell", fontName="Helvetica", fontSize=8.6, leading=11.2, textColor=colors.HexColor("#252525")))
+    styles.add(ParagraphStyle(name="AssetCellBold", fontName="Helvetica-Bold", fontSize=8.6, leading=11.2, textColor=colors.HexColor("#111111")))
+    styles.add(ParagraphStyle(name="AssetSmall", fontName="Helvetica", fontSize=7.5, leading=9.6, textColor=colors.HexColor("#777777")))
+    styles.add(ParagraphStyle(name="AssetSection", fontName="Helvetica-Bold", fontSize=12, leading=14.5, textColor=colors.HexColor("#111111"), spaceBefore=2, spaceAfter=6))
+
+    story: list[Any] = []
+
+    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
+    try:
+        drawing = svg2rlg(str(logo_path))
+        if drawing is None or not drawing.width:
+            raise ValueError("Logo SVG invalida")
+        scale = (38 * mm) / drawing.width
+        drawing.width *= scale
+        drawing.height *= scale
+        drawing.scale(scale, scale)
+        logo_cell: Any = drawing
+    except Exception:
+        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="AssetFallbackLogo", fontName="Helvetica-Bold", fontSize=15, textColor=colors.HexColor("#e60012")))
+
+    total_quantity = sum(max(0, int(item.quantity or 0)) for item in asset.items)
+    total_lines = len(asset.items)
+    created_by = get_user(asset.created_by_id) if asset.created_by_id else None
+    created_by_name = created_by.responsible_name if created_by else "Portal de Insumos"
+    generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    header = Table(
+        [[
+            logo_cell,
+            Paragraph(f"Ficha de Ativo #{asset.id}", styles["AssetTitle"]),
+            Paragraph(f"<b>Gerado em</b><br/>{generated_at}<br/><font color='#777777'>Portal de Insumos J&amp;T Express</font>", styles["AssetCell"]),
+        ]],
+        colWidths=[43 * mm, 82 * mm, 55 * mm],
+    )
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 0.9, colors.HexColor("#eeeeee")),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.2, colors.HexColor("#e60012")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Documento patrimonial gerado automaticamente para controle interno de ativos vinculados a bases e franquias.", styles["AssetSubtitle"]))
+    story.append(Spacer(1, 7 * mm))
+
+    def label_cell(text: str) -> Paragraph:
+        return Paragraph(pdf_clean_text(text), styles["AssetLabel"])
+
+    def value_cell(value: Any) -> Paragraph:
+        return Paragraph(pdf_clean_text(value), styles["AssetValue"])
+
+    info_data = [
+        [label_cell("ATIVO"), label_cell("BASE / FRANQUIA"), label_cell("REGIONAL")],
+        [value_cell(asset.name), value_cell(asset.base), value_cell(asset.regional)],
+        [label_cell("SETOR"), label_cell("GESTOR RESPONSAVEL"), label_cell("CADASTRADO POR")],
+        [value_cell(asset.sector), value_cell(asset.manager), value_cell(created_by_name)],
+        [label_cell("DATA DO CADASTRO"), label_cell("TOTAL DE ITENS"), label_cell("LINHAS DE ITENS")],
+        [value_cell(asset.created_at.strftime("%d/%m/%Y %H:%M")), value_cell(str(total_quantity)), value_cell(str(total_lines))],
+    ]
+    info_table = Table(info_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
+    info_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fcfcfc")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff1f2")),
+        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#fff1f2")),
+        ("BACKGROUND", (0, 4), (-1, 4), colors.HexColor("#fff1f2")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6e6e6")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e9e9e9")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6.2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6.2),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 8 * mm))
+
+    story.append(Paragraph("Itens vinculados ao ativo", styles["AssetSection"]))
+    item_rows: list[list[Any]] = [[
+        Paragraph("#", styles["AssetCellBold"]),
+        Paragraph("Item", styles["AssetCellBold"]),
+        Paragraph("Quantidade", styles["AssetCellBold"]),
+        Paragraph("Patrimonio / Serie", styles["AssetCellBold"]),
+    ]]
+    for index, item in enumerate(asset.items, start=1):
+        product = get_product(item.product_id) if item.product_id else None
+        unit = product.unit_measure if product and product.unit_measure else "un"
+        quantity_text = f"{item.quantity} {unit}"
+        item_rows.append([
+            Paragraph(str(index), styles["AssetCellBold"]),
+            Paragraph(pdf_clean_text(item.item_name), styles["AssetCell"]),
+            Paragraph(pdf_clean_text(quantity_text), styles["AssetCellBold"]),
+            Paragraph(pdf_clean_text(item.serial_number or "Sem patrimonio/serie"), styles["AssetCell"]),
+        ])
+    if len(item_rows) == 1:
+        item_rows.append(["", Paragraph("Nenhum item cadastrado.", styles["AssetCell"]), "", ""])
+
+    items_table = Table(item_rows, colWidths=[13 * mm, 87 * mm, 29 * mm, 51 * mm], repeatRows=1)
+    item_styles = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e60012")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e8e8e8")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("ALIGN", (2, 1), (2, -1), "CENTER"),
+    ]
+    for row_index in range(1, len(item_rows), 2):
+        item_styles.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#fbfbfb")))
+    items_table.setStyle(TableStyle(item_styles))
+    story.append(items_table)
+    story.append(Spacer(1, 10 * mm))
+
+    signature_table = Table(
+        [[
+            Paragraph("Responsavel pela unidade", styles["AssetSmall"]),
+            Paragraph("Conferencia administrativa", styles["AssetSmall"]),
+        ], [
+            Paragraph("__________________________________________", styles["AssetCell"]),
+            Paragraph("__________________________________________", styles["AssetCell"]),
+        ]],
+        colWidths=[87 * mm, 87 * mm],
+    )
+    signature_table.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(signature_table)
+
+    def footer(canvas, document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#e60012"))
+        canvas.setLineWidth(0.6)
+        canvas.line(15 * mm, 13 * mm, A4[0] - 15 * mm, 13 * mm)
+        canvas.setFillColor(colors.HexColor("#777777"))
+        canvas.setFont("Helvetica", 7.5)
+        canvas.drawString(15 * mm, 8.7 * mm, f"Ativo #{asset.id} - {pdf_clean_text(asset.base)}")
+        canvas.drawRightString(A4[0] - 15 * mm, 8.7 * mm, f"Pagina {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return buffer
+
+
 PRODUCT_EXPORT_HEADERS_PT = [
     "ID",
     "Nome do produto",
@@ -2824,6 +3005,28 @@ def request_pdf(request_id: int):
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
+@app.get("/admin/assets/<int:asset_id>/pdf")
+@admin_required
+@page_access_required("admin_stock")
+def asset_pdf(asset_id: int):
+    viewer = require_current_user()
+    asset = get_asset(asset_id)
+    if asset is None:
+        abort(404)
+
+    unit_name = asset.base.replace(";", " ")
+    filename = f"ativo_{asset.id}_{safe_filename(unit_name)}.pdf"
+    buffer = build_asset_pdf(asset, viewer)
+    store_generated_file(
+        storage_key("pdfs", "ativos", str(asset.id), filename),
+        buffer,
+        "application/pdf",
+        {"asset_id": str(asset.id), "unit": unit_name, "regional": asset.regional},
+    )
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
 # ---------- Admin ----------
 
 @app.route("/admin")
@@ -3344,7 +3547,7 @@ def admin_assets():
     selected_base = request.args.get("base", "").strip()
     selected_regional = normalize_asset_regional(request.args.get("regional", ""))
     filtered_base_options = base_options_for_asset_regional(selected_regional)
-    if selected_base and (selected_base not in BASE_UNIT_OPTION_SET or selected_base not in filtered_base_options):
+    if selected_base and (selected_base not in BASE_FRANCHISE_OPTION_SET or selected_base not in filtered_base_options):
         selected_base = ""
 
     assets = list_assets(base=selected_base, regional=selected_regional)
@@ -3401,16 +3604,16 @@ def admin_asset_new():
         item_rows.append((item_name[:180], serial_number[:120]))
 
     if not name or not base or not regional or not sector or not manager:
-        flash("Preencha nome, base, regional, setor e gestor para adicionar o ativo.", "warning")
+        flash("Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.", "warning")
         return redirect(url_for("admin_assets"))
-    if base not in BASE_UNIT_OPTION_SET:
-        flash("Selecione uma base válida para o ativo.", "warning")
+    if base not in BASE_FRANCHISE_OPTION_SET:
+        flash("Selecione uma base ou franquia válida para o ativo.", "warning")
         return redirect(url_for("admin_assets"))
     if regional not in ASSET_REGIONAL_OPTION_SET:
         flash("Selecione uma regional válida para o ativo.", "warning")
         return redirect(url_for("admin_assets"))
     if asset_regional_for_base(base) != regional:
-        flash("A base selecionada não pertence à regional informada.", "warning")
+        flash("A base/franquia selecionada não pertence à regional informada.", "warning")
         return redirect(url_for("admin_assets", regional=regional))
     if not item_rows:
         flash("Adicione pelo menos um item ao ativo.", "warning")
@@ -3481,16 +3684,16 @@ def admin_asset_new_with_stock():
         redirect_args["base"] = base
 
     if not name or not regional or not sector or not manager or (regional != "Matriz" and not base):
-        flash("Preencha nome, base, regional, setor e gestor para adicionar o ativo.", "warning")
+        flash("Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.", "warning")
         return redirect(url_for("admin_assets"))
     if not regional:
         flash("Selecione uma regional valida para o ativo.", "warning")
         return redirect(url_for("admin_assets"))
-    if regional != "Matriz" and base not in BASE_UNIT_OPTION_SET:
-        flash("Selecione uma base valida para o ativo.", "warning")
+    if regional != "Matriz" and base not in BASE_FRANCHISE_OPTION_SET:
+        flash("Selecione uma base ou franquia valida para o ativo.", "warning")
         return redirect(url_for("admin_assets", regional=regional))
     if regional != "Matriz" and asset_regional_for_base(base) != regional:
-        flash("A base selecionada nao pertence a regional informada.", "warning")
+        flash("A base/franquia selecionada nao pertence a regional informada.", "warning")
         return redirect(url_for("admin_assets", regional=regional))
     if missing_product:
         flash("Selecione cada item pela lista de produtos do portal.", "warning")

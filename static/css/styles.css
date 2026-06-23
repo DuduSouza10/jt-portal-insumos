@@ -4104,3 +4104,15 @@ body.asset-modal-open .asset-modal * {
     z-index: auto !important;
   }
 }
+
+
+/* v57 - PDF de ativos e bases/franquias na gestão patrimonial. */
+.asset-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
+}
+.asset-card-actions .btn {
+  min-height: 34px;
+}
