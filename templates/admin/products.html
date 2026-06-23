@@ -13,6 +13,45 @@
     </div>
   </div>
 
+  <form class="product-filter-card" method="get" action="{{ url_for('admin_products') }}">
+    <div class="product-filter-main">
+      <label class="product-filter-search">
+        Pesquisar produto
+        <input type="search" name="q" value="{{ product_filters.q if product_filters else '' }}" placeholder="Nome, categoria, descrição ou unidade..." autocomplete="off">
+      </label>
+      <label>
+        Filtrar status
+        <select name="status">
+          <option value="all" {{ 'selected' if product_filters.status == 'all' else '' }}>Todos</option>
+          <option value="active" {{ 'selected' if product_filters.status == 'active' else '' }}>Ativos</option>
+          <option value="inactive" {{ 'selected' if product_filters.status == 'inactive' else '' }}>Inativos</option>
+        </select>
+      </label>
+      <label>
+        Classificar por
+        <select name="sort">
+          <option value="default" {{ 'selected' if product_filters.sort == 'default' else '' }}>Padrão</option>
+          <option value="category" {{ 'selected' if product_filters.sort == 'category' else '' }}>Categoria A-Z</option>
+          <option value="category_desc" {{ 'selected' if product_filters.sort == 'category_desc' else '' }}>Categoria Z-A</option>
+          <option value="value_desc" {{ 'selected' if product_filters.sort == 'value_desc' else '' }}>Maior valor</option>
+          <option value="value_asc" {{ 'selected' if product_filters.sort == 'value_asc' else '' }}>Menor valor</option>
+          <option value="stock_desc" {{ 'selected' if product_filters.sort == 'stock_desc' else '' }}>Maior estoque</option>
+          <option value="stock_asc" {{ 'selected' if product_filters.sort == 'stock_asc' else '' }}>Menor estoque</option>
+        </select>
+      </label>
+      <div class="product-filter-actions">
+        <button class="btn primary" type="submit">Aplicar filtros</button>
+        <a class="btn ghost" href="{{ url_for('admin_products') }}">Limpar filtros</a>
+      </div>
+    </div>
+    <div class="product-filter-summary">
+      <span><strong>{{ product_counts.shown }}</strong> exibido(s)</span>
+      <span><strong>{{ product_counts.total }}</strong> total</span>
+      <span><strong>{{ product_counts.active }}</strong> ativo(s)</span>
+      <span><strong>{{ product_counts.inactive }}</strong> inativo(s)</span>
+    </div>
+  </form>
+
   <div id="exportLanguageModal" class="export-language-modal" aria-hidden="true">
     <div class="export-language-backdrop" data-close-export-modal></div>
     <section class="export-language-card card" role="dialog" aria-modal="true" aria-labelledby="exportLanguageTitle">
@@ -73,7 +112,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="12" class="muted center">Nenhum produto cadastrado.</td></tr>
+      <tr><td colspan="12" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
     </tbody>
   </table>

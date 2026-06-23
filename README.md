@@ -234,3 +234,15 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Ao cadastrar um novo ativo, o portal envia um card para o grupo Feishu com regional, base, setor, gestor, itens, quantidades e botao para abrir o ativo na Gestao de Ativos.
 - Configure `PUBLIC_BASE_URL` no Render para os botoes abrirem o dominio correto do portal.
 - O webhook pode ser trocado pela variavel `FEISHU_STOCK_WEBHOOK_URL`.
+
+## v59 - Horário de Brasília no Feishu
+
+- Mensagens enviadas para o Feishu agora usam o fuso `America/Sao_Paulo`.
+- Datas exibidas nos cards do Feishu aparecem com indicação `(Brasília)`.
+
+
+
+## v60 - Correção de caracteres chineses em PDFs
+
+- PDFs de solicitações e ativos agora usam fonte CJK compatível com chinês simplificado.
+- Corrigido problema de caracteres chineses aparecendo como quadradinhos/caixas pretas no PDF.
