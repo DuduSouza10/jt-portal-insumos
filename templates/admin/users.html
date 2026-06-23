@@ -38,7 +38,7 @@
               <button class="btn tiny danger" type="submit">Recusar</button>
             </form>
             <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
-            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir definitivamente este usuário do banco de dados?')">
               <button class="btn tiny ghost" type="submit">Excluir</button>
             </form>
           {% elif user.status == 'rejected' and not user.is_admin %}
@@ -47,13 +47,13 @@
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
             </form>
-            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir definitivamente este usuário do banco de dados?')">
               <button class="btn tiny danger" type="submit">Excluir</button>
             </form>
           {% else %}
             <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
             {% if current_user and user.id != current_user.id %}
-              <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir este usuário?')">
+              <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm('Excluir definitivamente este usuário do banco de dados?')">
                 <button class="btn tiny danger" type="submit">Excluir</button>
               </form>
             {% else %}

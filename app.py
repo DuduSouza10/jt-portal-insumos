@@ -786,6 +786,110 @@ def get_supply_request(request_id: int) -> SupplyRequest | None:
     return row_to_supply_request(row)
 
 
+def chunked_ids(values: list[int], chunk_size: int = 80) -> list[list[int]]:
+    unique_values: list[int] = []
+    seen: set[int] = set()
+    for value in values:
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError):
+            continue
+        if int_value not in seen:
+            seen.add(int_value)
+            unique_values.append(int_value)
+    return [unique_values[index:index + chunk_size] for index in range(0, len(unique_values), chunk_size)]
+
+
+def execute_delete_ids_chunked(conn: Any, table: str, column: str, ids: list[int]) -> int:
+    """Apaga IDs em blocos para funcionar bem no SQLite local e no Cloudflare D1."""
+    total = 0
+    allowed_tables = {"supply_requests", "request_items", "stock_movements", "admin_login_codes", "user_page_permissions"}
+    allowed_columns = {"id", "request_id", "product_id", "user_id", "created_by_id"}
+    if table not in allowed_tables or column not in allowed_columns:
+        raise ValueError("Tabela/coluna não autorizada para exclusão em bloco.")
+    for chunk in chunked_ids(ids):
+        placeholders = ",".join("?" for _ in chunk)
+        cursor = conn.execute(f"DELETE FROM {table} WHERE {column} IN ({placeholders})", chunk)
+        if isinstance(getattr(cursor, "rowcount", None), int) and cursor.rowcount > 0:
+            total += int(cursor.rowcount)
+    return total
+
+
+def permanently_delete_supply_request(conn: Any, request_id: int) -> bool:
+    """Remove uma solicitação e vínculos diretos do banco de dados."""
+    row = conn.execute("SELECT id FROM supply_requests WHERE id = ?", (request_id,)).fetchone()
+    if row is None:
+        return False
+    conn.execute("DELETE FROM stock_movements WHERE request_id = ?", (request_id,))
+    conn.execute("DELETE FROM request_items WHERE request_id = ?", (request_id,))
+    conn.execute("DELETE FROM supply_requests WHERE id = ?", (request_id,))
+    return True
+
+
+def permanently_delete_empty_supply_requests(conn: Any, request_ids: list[int]) -> int:
+    """Remove solicitações que ficaram sem itens depois da exclusão de produto."""
+    empty_ids: list[int] = []
+    for chunk in chunked_ids(request_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT sr.id
+              FROM supply_requests sr
+             WHERE sr.id IN ({placeholders})
+               AND NOT EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_id = sr.id)
+            """,
+            chunk,
+        ).fetchall()
+        empty_ids.extend(int(row["id"]) for row in rows)
+    if not empty_ids:
+        return 0
+    execute_delete_ids_chunked(conn, "stock_movements", "request_id", empty_ids)
+    return execute_delete_ids_chunked(conn, "supply_requests", "id", empty_ids)
+
+
+def permanently_delete_product(conn: Any, product_id: int) -> tuple[str, int, int]:
+    """Remove definitivamente um produto, seus vínculos e movimentos de estoque.
+
+    Retorna: (nome do produto, itens de solicitação removidos, solicitações vazias removidas).
+    """
+    product_row = conn.execute("SELECT id, name FROM products WHERE id = ?", (product_id,)).fetchone()
+    if product_row is None:
+        raise LookupError("Produto não encontrado.")
+
+    product_name = product_row["name"] or f"Produto #{product_id}"
+    request_rows = conn.execute("SELECT DISTINCT request_id FROM request_items WHERE product_id = ?", (product_id,)).fetchall()
+    request_ids = [int(row["request_id"]) for row in request_rows]
+    item_count_row = conn.execute("SELECT COUNT(*) AS total FROM request_items WHERE product_id = ?", (product_id,)).fetchone()
+    removed_items = int(item_count_row["total"] or 0) if item_count_row is not None else 0
+
+    conn.execute("DELETE FROM stock_movements WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM request_items WHERE product_id = ?", (product_id,))
+    removed_empty_requests = permanently_delete_empty_supply_requests(conn, request_ids)
+    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    return product_name, removed_items, removed_empty_requests
+
+
+def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
+    """Remove definitivamente um usuário e as solicitações feitas por ele."""
+    row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row is None:
+        raise LookupError("Usuário não encontrado.")
+
+    request_rows = conn.execute("SELECT id FROM supply_requests WHERE user_id = ?", (user_id,)).fetchall()
+    request_ids = [int(row["id"]) for row in request_rows]
+    if request_ids:
+        execute_delete_ids_chunked(conn, "stock_movements", "request_id", request_ids)
+        execute_delete_ids_chunked(conn, "request_items", "request_id", request_ids)
+        execute_delete_ids_chunked(conn, "supply_requests", "id", request_ids)
+
+    conn.execute("DELETE FROM admin_login_codes WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
+    conn.execute("UPDATE stock_movements SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
+    conn.execute("UPDATE supply_requests SET reviewed_by_id = NULL WHERE reviewed_by_id = ?", (user_id,))
+    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    return len(request_ids), user_id
+
+
 def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
     sql = "SELECT * FROM supply_requests"
     params: list[Any] = []
@@ -2485,21 +2589,23 @@ def admin_user_delete(user_id: int):
     if target.is_admin and target.id == current.id:
         flash("Você não pode excluir seu próprio usuário admin.", "warning")
         return redirect(url_for("admin_users"))
-    with db_connect() as conn:
-        if target.is_admin:
-            approved_admins = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND status = 'approved'").fetchone()["total"]
-            if approved_admins <= 1 and target.status == "approved":
-                flash("Não é possível excluir o último administrador aprovado.", "warning")
-                return redirect(url_for("admin_users"))
-        total = conn.execute("SELECT COUNT(*) AS total FROM supply_requests WHERE user_id = ?", (user_id,)).fetchone()["total"]
-        if total:
-            conn.execute("UPDATE users SET status = 'rejected', updated_at = ? WHERE id = ?", (now_iso(), user_id))
+
+    try:
+        with db_connect() as conn:
+            if target.is_admin:
+                approved_admins = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND status = 'approved'").fetchone()["total"]
+                if approved_admins <= 1 and target.status == "approved":
+                    flash("Não é possível excluir o último administrador aprovado.", "warning")
+                    return redirect(url_for("admin_users"))
+            removed_requests, _ = permanently_delete_user(conn, user_id)
             conn.commit()
-            flash("Usuário possui solicitações vinculadas; o cadastro foi recusado/desativado em vez de excluído.", "warning")
+        if removed_requests:
+            flash(f"Usuário excluído definitivamente. {removed_requests} solicitação(ões) vinculada(s) também foram removidas do banco.", "success")
         else:
-            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
-            conn.commit()
-            flash("Usuário excluído.", "success")
+            flash("Usuário excluído definitivamente do banco de dados.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao excluir usuário definitivamente")
+        flash(f"Não consegui excluir o usuário do banco. Erro: {type(exc).__name__}.", "danger")
     return redirect(url_for("admin_users"))
 
 
@@ -2727,12 +2833,22 @@ def admin_product_edit(product_id: int):
 @admin_required
 @page_access_required("admin_products")
 def admin_product_delete(product_id: int):
-    if get_product(product_id) is None:
+    try:
+        with db_connect() as conn:
+            product_name, removed_items, removed_requests = permanently_delete_product(conn, product_id)
+            conn.commit()
+        details: list[str] = []
+        if removed_items:
+            details.append(f"{removed_items} vínculo(s) em solicitações")
+        if removed_requests:
+            details.append(f"{removed_requests} solicitação(ões) vazia(s)")
+        suffix = f" Removidos também: {', '.join(details)}." if details else ""
+        flash(f"Produto '{product_name}' excluído definitivamente do banco de dados.{suffix}", "success")
+    except LookupError:
         abort(404)
-    with db_connect() as conn:
-        conn.execute("UPDATE products SET active = 0, updated_at = ? WHERE id = ?", (now_iso(), product_id))
-        conn.commit()
-    flash("Produto desativado.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao excluir produto definitivamente")
+        flash(f"Não consegui excluir o produto do banco. Erro: {type(exc).__name__}.", "danger")
     return redirect(url_for("admin_products"))
 
 
@@ -2973,20 +3089,18 @@ def admin_request_reject(request_id: int):
 @admin_required
 @page_access_any_required(["admin_requests", "admin_requests_attended"])
 def admin_request_delete(request_id: int):
-    if get_supply_request(request_id) is None:
+    try:
+        with db_connect() as conn:
+            deleted = permanently_delete_supply_request(conn, request_id)
+            if not deleted:
+                raise LookupError("Solicitação não encontrada.")
+            conn.commit()
+        flash("Solicitação excluída definitivamente do banco de dados.", "success")
+    except LookupError:
         abort(404)
-    current = require_current_user()
-    with db_connect() as conn:
-        conn.execute(
-            """
-            UPDATE supply_requests
-            SET status = 'deleted', reviewed_at = ?, reviewed_by_id = ?
-            WHERE id = ?
-            """,
-            (now_iso(), current.id, request_id),
-        )
-        conn.commit()
-    flash("Solicitação marcada como excluída.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao excluir solicitação definitivamente")
+        flash(f"Não consegui excluir a solicitação do banco. Erro: {type(exc).__name__}.", "danger")
     return redirect(url_for("admin_requests"))
 
 
