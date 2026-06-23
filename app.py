@@ -895,22 +895,47 @@ def normalize_header(value: Any) -> str:
 def parse_money_to_cents(value: Any) -> int:
     if value is None or str(value).strip() == "":
         return 0
+    if isinstance(value, bool):
+        return 0
     if isinstance(value, (int, float)):
-        return int(round(float(value) * 100))
-    text_value = str(value).strip().replace("R$", "").replace(" ", "")
-    if "," in text_value:
+        try:
+            return int(round(float(value) * 100))
+        except (TypeError, ValueError, OverflowError):
+            return 0
+    text_value = str(value).strip()
+    for token in ["R$", "BRL", "￥", "¥"]:
+        text_value = text_value.replace(token, "")
+    text_value = text_value.replace(" ", "")
+    # Mantém apenas caracteres úteis para número. Isso evita erro com valores como "R$ 1.200,50" ou "25,00/un".
+    text_value = re.sub(r"[^0-9,.-]", "", text_value)
+    if not text_value:
+        return 0
+    if "," in text_value and "." in text_value:
+        # Assume formato brasileiro quando a vírgula aparece depois do ponto: 1.234,56
+        if text_value.rfind(",") > text_value.rfind("."):
+            text_value = text_value.replace(".", "").replace(",", ".")
+        else:
+            text_value = text_value.replace(",", "")
+    elif "," in text_value:
         text_value = text_value.replace(".", "").replace(",", ".")
     try:
-        return int(round(float(text_value or "0") * 100))
-    except ValueError:
+        return max(0, int(round(float(text_value or "0") * 100)))
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 
 def parse_bool_value(value: Any, default: bool = True) -> bool:
     if value is None or str(value).strip() == "":
         return default
+    text_raw = str(value).strip().lower()
     text = normalize_header(value)
-    return text in {"1", "sim", "s", "yes", "y", "true", "ativo", "ativado", "active"}
+    true_values = {"1", "sim", "s", "yes", "y", "true", "ativo", "ativado", "active", "habilitado", "enabled", "enable", "是", "启用", "啟用", "正常"}
+    false_values = {"0", "nao", "não", "n", "no", "false", "inativo", "desativado", "inactive", "disabled", "disable", "否", "停用", "禁用"}
+    if text in true_values or text_raw in true_values:
+        return True
+    if text in false_values or text_raw in false_values:
+        return False
+    return default
 
 
 def safe_filename(text_value: str) -> str:
@@ -1023,9 +1048,31 @@ def parse_required_positive_int(value: Any) -> int | None:
 def parse_optional_int(value: Any) -> int | None:
     if value is None or str(value).strip() == "":
         return None
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)):
+        try:
+            number = int(round(float(value)))
+            return number if number >= 0 else None
+        except (TypeError, ValueError, OverflowError):
+            return None
+    text_value = str(value).strip()
+    # Remove unidades e textos extras: "400 un", "1.200 peças", "100 个".
+    text_value = re.sub(r"[^0-9,.-]", "", text_value)
+    if not text_value:
+        return None
+    if "," in text_value and "." in text_value:
+        if text_value.rfind(",") > text_value.rfind("."):
+            text_value = text_value.replace(".", "").replace(",", ".")
+        else:
+            text_value = text_value.replace(",", "")
+    elif "," in text_value:
+        text_value = text_value.replace(",", ".")
+    elif text_value.count(".") > 1:
+        text_value = text_value.replace(".", "")
     try:
-        number = int(str(value).strip())
-    except ValueError:
+        number = int(round(float(text_value)))
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if number >= 0 else None
 
@@ -1400,6 +1447,102 @@ def get_header_value(row_values: list[Any], header_map: dict[str, int], names: l
             if key in header_key or header_key in key:
                 return row_values[idx] if idx < len(row_values) else None
     return None
+
+
+PRODUCT_IMPORT_HEADER_ALIASES = {
+    "id": ["ID", "Código", "Codigo", "编号", "編號"],
+    "name": ["Nome do produto", "Nome", "Produto", "Insumo", "产品名称", "產品名稱", "商品名称", "产品"],
+    "category": ["Categoria", "Categoria do produto", "类别", "類別", "分类", "分類"],
+    "unit_measure": ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "计量单位", "計量單位", "单位", "單位"],
+    "description": ["Descrição", "Descricao", "Descrição do produto", "Descricao do produto", "描述", "说明", "說明"],
+    "stock_quantity": ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "Qtd", "可用库存", "可用庫存", "库存", "庫存"],
+    "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "单价", "單價", "价格", "價格"],
+    "limit_base": ["Limite para bases", "Limite base", "Base", "基地限制"],
+    "limit_franchise": ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制", "加盟限制"],
+    "min_stock": ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "Min", "最低库存", "最低庫存"],
+    "max_stock": ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "Max", "最高库存", "最高庫存"],
+    "active": ["Ativo", "Status", "Produto ativo", "启用", "啟用", "状态", "狀態"],
+}
+
+
+def normalize_product_lookup_key(value: Any) -> str:
+    text_value = str(value or "").strip().casefold()
+    text_value = "".join(ch for ch in unicodedata.normalize("NFD", text_value) if unicodedata.category(ch) != "Mn")
+    return " ".join(text_value.split())
+
+
+def clean_import_text(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    text_value = str(value).strip()
+    if text_value.lower() in {"none", "nan", "null"}:
+        return default
+    return text_value
+
+
+def get_import_value(row_values: list[Any], header_map: dict[str, int], field_key: str) -> Any:
+    return get_header_value(row_values, header_map, PRODUCT_IMPORT_HEADER_ALIASES.get(field_key, []))
+
+
+def excel_row_is_empty(row_values: list[Any]) -> bool:
+    return not any(value is not None and str(value).strip() for value in row_values)
+
+
+@dataclass
+class ProductImportRecord:
+    source_row: int
+    product_id: int | None
+    name: str
+    category: str
+    unit_measure: str
+    description: str
+    stock_quantity: int
+    price_cents: int
+    limit_base: int | None
+    limit_franchise: int | None
+    min_stock: int | None
+    max_stock: int | None
+    active: bool
+
+
+def parse_product_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> ProductImportRecord | None:
+    name = clean_import_text(get_import_value(row_values, header_map, "name"))
+    if not name:
+        return None
+    return ProductImportRecord(
+        source_row=row_number,
+        product_id=parse_optional_int(get_import_value(row_values, header_map, "id")),
+        name=name,
+        category=clean_import_text(get_import_value(row_values, header_map, "category")),
+        unit_measure=clean_import_text(get_import_value(row_values, header_map, "unit_measure"), "un") or "un",
+        description=clean_import_text(get_import_value(row_values, header_map, "description")),
+        stock_quantity=parse_optional_int(get_import_value(row_values, header_map, "stock_quantity")) or 0,
+        price_cents=parse_money_to_cents(get_import_value(row_values, header_map, "price_cents")),
+        limit_base=parse_optional_int(get_import_value(row_values, header_map, "limit_base")),
+        limit_franchise=parse_optional_int(get_import_value(row_values, header_map, "limit_franchise")),
+        min_stock=parse_optional_int(get_import_value(row_values, header_map, "min_stock")),
+        max_stock=parse_optional_int(get_import_value(row_values, header_map, "max_stock")),
+        active=parse_bool_value(get_import_value(row_values, header_map, "active"), default=True),
+    )
+
+
+def dedupe_import_records(records: list[ProductImportRecord]) -> tuple[list[ProductImportRecord], int]:
+    ordered: dict[str, ProductImportRecord] = {}
+    duplicates = 0
+    for record in records:
+        key = f"id:{record.product_id}" if record.product_id is not None else f"name:{normalize_product_lookup_key(record.name)}"
+        if key in ordered:
+            duplicates += 1
+        ordered[key] = record
+    return list(ordered.values()), duplicates
+
+
+def flash_import_errors(row_errors: list[str]) -> None:
+    if not row_errors:
+        return
+    preview = "; ".join(row_errors[:5])
+    suffix = "" if len(row_errors) <= 5 else f"; +{len(row_errors) - 5} outro(s) erro(s) nos logs."
+    flash(f"Algumas linhas não foram importadas: {preview}{suffix}", "warning")
 
 
 # ---------- Autenticação ----------
@@ -1931,16 +2074,31 @@ def admin_products_import():
 
     try:
         uploaded_bytes = uploaded.read()
-        if uploaded_bytes:
-            upload_bytes_to_r2(
-                storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
-                uploaded_bytes,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                {"type": "products_import"},
-            )
+    except Exception as exc:
+        print(f"[IMPORTAÇÃO PRODUTOS] Falha ao ler upload: {exc}")
+        flash("Não foi possível ler o arquivo enviado.", "danger")
+        return redirect(url_for("admin_products"))
+
+    if not uploaded_bytes:
+        flash("A planilha enviada está vazia.", "warning")
+        return redirect(url_for("admin_products"))
+
+    try:
+        upload_bytes_to_r2(
+            storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
+            uploaded_bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            {"type": "products_import"},
+        )
+    except Exception as exc:
+        # Falha no R2 não pode impedir a importação para o banco.
+        print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
+
+    try:
         workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True)
         worksheet = workbook.active
-    except Exception:
+    except Exception as exc:
+        print(f"[IMPORTAÇÃO PRODUTOS] XLSX inválido: {exc}")
         flash("Não foi possível ler a planilha. Verifique se o arquivo está em formato .xlsx válido.", "danger")
         return redirect(url_for("admin_products"))
 
@@ -1948,79 +2106,158 @@ def admin_products_import():
     if not first_row:
         flash("A planilha está vazia.", "warning")
         return redirect(url_for("admin_products"))
-    header_map = {normalize_header(value): index for index, value in enumerate(first_row) if value is not None}
+
+    header_map = {normalize_header(value): index for index, value in enumerate(first_row) if value is not None and str(value).strip()}
+    parsed_records: list[ProductImportRecord] = []
+    skipped = 0
+    row_errors: list[str] = []
+
+    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=2, values_only=True), start=2):
+        row_values = list(row_values_tuple)
+        if excel_row_is_empty(row_values):
+            continue
+        try:
+            record = parse_product_import_record(row_number, row_values, header_map)
+            if record is None:
+                skipped += 1
+                continue
+            parsed_records.append(record)
+        except Exception as exc:
+            skipped += 1
+            row_errors.append(f"linha {row_number}: {exc}")
+            print(f"[IMPORTAÇÃO PRODUTOS] Erro ao interpretar linha {row_number}: {exc}")
+
+    parsed_records, duplicates_merged = dedupe_import_records(parsed_records)
+    skipped += duplicates_merged
+
+    if not parsed_records:
+        flash_import_errors(row_errors)
+        flash("Nenhum produto válido foi encontrado na planilha. Confira se a primeira linha contém os cabeçalhos corretos.", "warning")
+        return redirect(url_for("admin_products"))
 
     created = 0
     updated = 0
-    skipped = 0
-    with db_connect() as conn:
-        for row_values_tuple in worksheet.iter_rows(min_row=2, values_only=True):
-            row_values = list(row_values_tuple)
-            if not any(value is not None and str(value).strip() for value in row_values):
-                continue
+    current_user_id = require_current_user().id
 
-            product_id = parse_optional_int(get_header_value(row_values, header_map, ["ID", "Código", "Codigo"]))
-            name = str(get_header_value(row_values, header_map, ["Nome do produto", "Nome", "Produto", "Insumo", "产品名称", "产品名称"]) or "").strip()
-            if not name:
-                skipped += 1
-                continue
+    try:
+        with db_connect() as conn:
+            existing_rows = conn.execute("SELECT id, name, stock_quantity FROM products").fetchall()
+            existing_by_id = {int(row["id"]): row for row in existing_rows}
+            existing_by_name = {normalize_product_lookup_key(row["name"]): row for row in existing_rows if row["name"] is not None}
 
-            category = str(get_header_value(row_values, header_map, ["Categoria", "类别", "类别"]) or "").strip()
-            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "计量单位", "计量单位", "单位", "单位"]) or "un").strip() or "un"
-            description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao", "描述", "说明", "说明"]) or "").strip()
-            stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "可用库存", "可用库存", "库存", "库存"])) or 0
-            price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "单价", "单价", "价格", "价格"]))
-            limit_base = parse_optional_int(get_header_value(row_values, header_map, ["Limite para bases", "Limite base", "Base", "基地限制"]))
-            limit_franchise = parse_optional_int(get_header_value(row_values, header_map, ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制"]))
-            min_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "最低库存", "最低库存"]))
-            max_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "最高库存", "最高库存"]))
-            active = parse_bool_value(get_header_value(row_values, header_map, ["Ativo", "Status", "Produto ativo", "启用", "启用"]), default=True)
+            for record in parsed_records:
+                try:
+                    existing_row = existing_by_id.get(record.product_id) if record.product_id is not None else None
+                    if existing_row is None:
+                        existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
 
-            existing_row = None
-            if product_id is not None:
-                existing_row = conn.execute("SELECT id, stock_quantity FROM products WHERE id = ?", (product_id,)).fetchone()
-            if existing_row is None:
-                existing_row = conn.execute("SELECT id, stock_quantity FROM products WHERE lower(name) = lower(?)", (name,)).fetchone()
+                    if existing_row is not None:
+                        product_db_id = int(existing_row["id"])
+                        old_stock = int(existing_row["stock_quantity"] or 0)
+                        conn.execute(
+                            """
+                            UPDATE products
+                               SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
+                                   limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
+                             WHERE id = ?
+                            """,
+                            (
+                                record.name,
+                                record.category,
+                                record.unit_measure,
+                                record.description,
+                                record.stock_quantity,
+                                record.price_cents,
+                                record.limit_base,
+                                record.limit_franchise,
+                                record.min_stock,
+                                record.max_stock,
+                                1 if record.active else 0,
+                                now_iso(),
+                                product_db_id,
+                            ),
+                        )
+                        if old_stock != record.stock_quantity:
+                            record_stock_movement(
+                                conn,
+                                product_id=product_db_id,
+                                quantity_delta=record.stock_quantity - old_stock,
+                                stock_before=old_stock,
+                                stock_after=record.stock_quantity,
+                                movement_type="import_adjustment",
+                                note=f"Estoque atualizado por importação de planilha. Linha {record.source_row}.",
+                                created_by_id=current_user_id,
+                            )
+                        updated += 1
+                        # Atualiza cache para evitar duplicidade quando a planilha repetir produto com nome novo/alterado.
+                        fresh_row = {"id": product_db_id, "name": record.name, "stock_quantity": record.stock_quantity}
+                        existing_by_id[product_db_id] = fresh_row
+                        existing_by_name[normalize_product_lookup_key(record.name)] = fresh_row
+                    else:
+                        cursor = conn.execute(
+                            """
+                            INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                record.name,
+                                record.category,
+                                record.unit_measure,
+                                record.description,
+                                record.stock_quantity,
+                                record.price_cents,
+                                record.limit_base,
+                                record.limit_franchise,
+                                record.min_stock,
+                                record.max_stock,
+                                1 if record.active else 0,
+                                now_iso(),
+                            ),
+                        )
+                        row_id = get_cursor_lastrowid(cursor)
+                        if row_id is None:
+                            lookup = conn.execute(
+                                "SELECT id FROM products WHERE lower(name) = lower(?) ORDER BY id DESC LIMIT 1",
+                                (record.name,),
+                            ).fetchone()
+                            row_id = int(lookup["id"]) if lookup is not None else None
+                        if row_id is not None:
+                            if record.stock_quantity > 0:
+                                record_stock_movement(
+                                    conn,
+                                    int(row_id),
+                                    record.stock_quantity,
+                                    0,
+                                    record.stock_quantity,
+                                    "product_created",
+                                    f"Produto criado por importação. Linha {record.source_row}.",
+                                    created_by_id=current_user_id,
+                                )
+                            fresh_row = {"id": int(row_id), "name": record.name, "stock_quantity": record.stock_quantity}
+                            existing_by_id[int(row_id)] = fresh_row
+                            existing_by_name[normalize_product_lookup_key(record.name)] = fresh_row
+                        created += 1
+                except Exception as exc:
+                    skipped += 1
+                    row_errors.append(f"linha {record.source_row}: {exc}")
+                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao gravar linha {record.source_row} ({record.name}): {exc}")
 
-            if existing_row is not None:
-                conn.execute(
-                    """
-                    UPDATE products
-                       SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
-                           limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
-                     WHERE id = ?
-                    """,
-                    (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso(), int(existing_row["id"])),
-                )
-                old_stock = int(existing_row["stock_quantity"] or 0)
-                if old_stock != stock_quantity:
-                    record_stock_movement(
-                        conn,
-                        product_id=int(existing_row["id"]),
-                        quantity_delta=stock_quantity - old_stock,
-                        stock_before=old_stock,
-                        stock_after=stock_quantity,
-                        movement_type="import_adjustment",
-                        note="Estoque atualizado por importação de planilha.",
-                        created_by_id=require_current_user().id,
-                    )
-                updated += 1
-            else:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, 1 if active else 0, now_iso()),
-                )
-                if stock_quantity > 0:
-                    row_id = get_cursor_lastrowid(cursor)
-                    if row_id is not None:
-                        record_stock_movement(conn, int(row_id), stock_quantity, 0, stock_quantity, "product_created", "Produto criado por importação.", created_by_id=require_current_user().id)
-                created += 1
-        conn.commit()
+            conn.commit()
+    except Exception as exc:
+        try:
+            import traceback
+            traceback.print_exc()
+        except Exception:
+            pass
+        print(f"[IMPORTAÇÃO PRODUTOS] Erro geral: {exc}")
+        flash("Erro ao importar a planilha. Corrigi o tratamento para mostrar o motivo nos logs; verifique as variáveis do D1/R2 e o formato da planilha.", "danger")
+        return redirect(url_for("admin_products"))
 
-    flash(f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).", "success")
+    flash_import_errors(row_errors)
+    if created or updated:
+        flash(f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).", "success")
+    else:
+        flash(f"Nenhum produto foi criado ou atualizado. {skipped} linha(s) ignorada(s).", "warning")
     return redirect(url_for("admin_products"))
 
 

@@ -425,6 +425,18 @@
     "kg": "公斤"
   });
 
+
+  Object.assign(zh, {
+    "Normal • Min 100 / Máx 500": "正常 • 最低 100 / 最高 500",
+    "Normal • Min 120 / Máx 600": "正常 • 最低 120 / 最高 600",
+    "Normal • Min 30 / Máx 180": "正常 • 最低 30 / 最高 180",
+    "Normal • Min 250 / Máx 1200": "正常 • 最低 250 / 最高 1200",
+    "M 型安全信封": "M 型安全信封",
+    "P 型安全信封": "P 型安全信封",
+    "热敏标签": "热敏标签",
+    "塑料封条": "塑料封条"
+  });
+
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
@@ -513,6 +525,15 @@
     ['envios padrão', '标准寄件'],
     ['envios leves', '轻量寄件'],
     ['controle interno', '内部管控'],
+    ['Normal • Min', '正常 • 最低'],
+    ['Normal • Mín', '正常 • 最低'],
+    ['Baixo • Min', '偏低 • 最低'],
+    ['Crítico • Min', '危急 • 最低'],
+    ['Alto • Min', '偏高 • 最低'],
+    [' / Máx', ' / 最高'],
+    ['Min ', '最低 '],
+    ['Mín ', '最低 '],
+    ['Máx ', '最高 '],
     ['estoque mínimo/máximo', '最低/最高库存'],
     ['estoque mínimo', '最低库存'],
     ['estoque máximo', '最高库存'],
@@ -552,10 +573,20 @@
     return changed ? out : core;
   }
 
+  function translatePiece(value) {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return raw;
+    return zh[raw] || translateFallback(raw);
+  }
+
   function translateCore(core) {
     if (!core) return core;
     if (zh[core]) return zh[core];
     let match;
+    if ((match = core.match(/^(.+?)\s*•\s*Min\s+(.+?)\s*\/\s*Máx\s+(.+)$/))) return `${translatePiece(match[1])} • 最低 ${translatePiece(match[2])} / 最高 ${translatePiece(match[3])}`;
+    if ((match = core.match(/^(.+?)\s*•\s*Mín\.?\s+(.+?)\s*\/\s*Máx\.?\s+(.+)$/))) return `${translatePiece(match[1])} • 最低 ${translatePiece(match[2])} / 最高 ${translatePiece(match[3])}`;
+    if ((match = core.match(/^(.+?)\s*•\s*Mín\.?:\s*(.+?)\s*•\s*Máx\.?:\s*(.+)$/))) return `${translatePiece(match[1])} • 最低：${translatePiece(match[2])} • 最高：${translatePiece(match[3])}`;
+    if ((match = core.match(/^(.+?)\s*•\s*Min\.?:\s*(.+?)\s*•\s*Máx\.?:\s*(.+)$/))) return `${translatePiece(match[1])} • 最低：${translatePiece(match[2])} • 最高：${translatePiece(match[3])}`;
     if ((match = core.match(/^Insira o código para confirmar o seu login:\s*(\d{6})$/))) return `请输入代码以确认您的登入：${match[1]}`;
     if ((match = core.match(/^Solicitação #(\d+) enviada para aprovação\. PDF disponível para download\.$/))) return `申请 #${match[1]} 已送交批准。PDF 可供下载。`;
     if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${match[1]} 超出耗材限制。允许限制：${match[2]}。`;
@@ -729,6 +760,45 @@
     window.dispatchEvent(new CustomEvent('jt-language-change', { detail: { language: currentLanguage() } }));
   }
 
+  function forceTranslateStockAndCards() {
+    if (currentLanguage() !== 'zh-CN') return;
+    const selectors = [
+      '.stock-priority-item strong',
+      '.stock-priority-item small',
+      '.stock-product-card strong',
+      '.stock-product-card small',
+      '.stock-product-card span',
+      '.product-card h3',
+      '.product-card p',
+      '.product-card .product-category',
+      '.badge',
+      '.stock-pill',
+      '.stock-chart-tooltip *',
+      '.stock-suggestion-item strong',
+      '.stock-suggestion-item span'
+    ];
+    document.querySelectorAll(selectors.join(',')).forEach(function (el) {
+      if (!el || shouldSkipElement(el)) return;
+      Array.prototype.slice.call(el.childNodes || []).forEach(function (node) {
+        if (node.nodeType !== Node.TEXT_NODE) return;
+        const raw = String(node.nodeValue || '');
+        if (!raw.trim()) return;
+        if (!originalText.has(node)) originalText.set(node, raw);
+        const source = originalText.get(node) || raw;
+        const next = t(source);
+        if (node.nodeValue !== next) node.nodeValue = next;
+      });
+      ATTRS.forEach(function (attr) {
+        if (!el.hasAttribute || !el.hasAttribute(attr)) return;
+        const key = STORAGE_ATTR_PREFIX + attr;
+        if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || '');
+        const original = el.getAttribute(key) || '';
+        const next = t(original);
+        if (el.getAttribute(attr) !== next) el.setAttribute(attr, next);
+      });
+    });
+  }
+
   function runVisibleTranslation(rootNode) {
     if (isApplying) return;
     isApplying = true;
@@ -739,6 +809,7 @@
       try {
         updateDocumentTitle();
         processVisible(rootNode || document.body || document.documentElement);
+        forceTranslateStockAndCards();
       } finally {
         if (btn) btn.disabled = false;
         isApplying = false;
