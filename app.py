@@ -1278,6 +1278,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     return buffer
 
 
+
 PRODUCT_EXPORT_HEADERS_PT = [
     "ID",
     "Nome do produto",
@@ -1295,48 +1296,48 @@ PRODUCT_EXPORT_HEADERS_PT = [
 
 PRODUCT_EXPORT_HEADERS_ZH = [
     "ID",
-    "產品名稱 / Nome do produto",
-    "類別 / Categoria",
-    "計量單位 / Unidade de medida",
+    "产品名称 / Nome do produto",
+    "类别 / Categoria",
+    "计量单位 / Unidade de medida",
     "描述 / Descrição",
-    "可用庫存 / Estoque disponível",
-    "單價 / Valor unitário",
+    "可用库存 / Estoque disponível",
+    "单价 / Valor unitário",
     "基地限制 / Limite para bases",
     "加盟店限制 / Limite para franquias",
-    "最低庫存 / Estoque mínimo",
-    "最高庫存 / Estoque máximo",
-    "啟用 / Ativo",
+    "最低库存 / Estoque mínimo",
+    "最高库存 / Estoque máximo",
+    "启用 / Ativo",
 ]
 
 EXCEL_ZH_TRANSLATIONS = {
     "Envelope de segurança M": "M 型安全信封",
     "Envelope de segurança P": "P 型安全信封",
-    "Envelope médio para envios padrão.": "用於標準寄件的中型信封。",
-    "Envelope pequeno para envios leves.": "用於輕量寄件的小型信封。",
-    "Etiqueta térmica": "熱敏標籤",
-    "Rolo de etiqueta para impressora térmica.": "熱敏印表機用標籤卷。",
-    "Lacre plástico": "塑膠封條",
-    "Lacre numerado para controle interno.": "用於內部管控的編號封條。",
-    "Embalagens": "包裝用品",
-    "Etiquetas": "標籤",
-    "Operacional": "營運用品",
-    "un": "個",
-    "unidade": "個",
-    "unidades": "個",
+    "Envelope médio para envios padrão.": "用于标准寄件的中型信封。",
+    "Envelope pequeno para envios leves.": "用于轻量寄件的小型信封。",
+    "Etiqueta térmica": "热敏标签",
+    "Rolo de etiqueta para impressora térmica.": "热敏打印机用标签卷。",
+    "Lacre plástico": "塑料封条",
+    "Lacre numerado para controle interno.": "用于内部管控的编号封条。",
+    "Embalagens": "包装用品",
+    "Etiquetas": "标签",
+    "Operacional": "运营用品",
+    "un": "个",
+    "unidade": "个",
+    "unidades": "个",
     "rolo": "卷",
     "rolos": "卷",
     "caixa": "箱",
     "caixas": "箱",
     "pacote": "包",
     "pacotes": "包",
-    "metro": "公尺",
-    "metros": "公尺",
+    "metro": "米",
+    "metros": "米",
     "kg": "公斤",
     "Sim": "是",
     "Não": "否",
-    "Ativo": "啟用",
+    "Ativo": "启用",
     "Inativo": "停用",
-    "Sem limite": "無限制",
+    "Sem limite": "无限制",
 }
 
 
@@ -1366,7 +1367,6 @@ def product_row_for_excel_language(product: Product, language: str = "pt") -> li
             translate_excel_value_to_zh("Sim" if product.active else "Não"),
         ]
     return product_row_for_excel(product)
-
 
 def product_row_for_excel(product: Product) -> list[Any]:
     return [
@@ -1869,14 +1869,14 @@ def admin_products_export():
     products = [product for row in rows if (product := row_to_product(row)) is not None]
 
     export_language = (request.args.get("lang") or "pt").strip().lower()
-    if export_language in {"zh", "zh-tw", "mandarin", "mandarim", "chinese"}:
+    if export_language in {"zh", "zh-cn", "zh-hans", "zh-tw", "mandarin", "mandarim", "chinese", "simplified"}:
         export_language = "zh"
     else:
         export_language = "pt"
 
     workbook = Workbook()
     worksheet = workbook.active
-    worksheet.title = "產品" if export_language == "zh" else "Produtos"
+    worksheet.title = "产品" if export_language == "zh" else "Produtos"
     headers = PRODUCT_EXPORT_HEADERS_ZH if export_language == "zh" else PRODUCT_EXPORT_HEADERS_PT
     worksheet.append(headers)
     for product in products:
@@ -1905,7 +1905,7 @@ def admin_products_export():
     buffer = BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
-    language_label = "mandarim" if export_language == "zh" else "portugues"
+    language_label = "chines_simplificado" if export_language == "zh" else "portugues"
     filename = f"produtos_jt_insumos_{language_label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     store_generated_file(
         storage_key("exports", filename),
@@ -1960,21 +1960,21 @@ def admin_products_import():
                 continue
 
             product_id = parse_optional_int(get_header_value(row_values, header_map, ["ID", "Código", "Codigo"]))
-            name = str(get_header_value(row_values, header_map, ["Nome do produto", "Nome", "Produto", "Insumo", "產品名稱", "产品名称"]) or "").strip()
+            name = str(get_header_value(row_values, header_map, ["Nome do produto", "Nome", "Produto", "Insumo", "产品名称", "产品名称"]) or "").strip()
             if not name:
                 skipped += 1
                 continue
 
-            category = str(get_header_value(row_values, header_map, ["Categoria", "類別", "类别"]) or "").strip()
-            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "計量單位", "计量单位", "單位", "单位"]) or "un").strip() or "un"
-            description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao", "描述", "說明", "说明"]) or "").strip()
-            stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "可用庫存", "可用库存", "庫存", "库存"])) or 0
-            price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "單價", "单价", "價格", "价格"]))
+            category = str(get_header_value(row_values, header_map, ["Categoria", "类别", "类别"]) or "").strip()
+            unit_measure = str(get_header_value(row_values, header_map, ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "计量单位", "计量单位", "单位", "单位"]) or "un").strip() or "un"
+            description = str(get_header_value(row_values, header_map, ["Descrição", "Descricao", "描述", "说明", "说明"]) or "").strip()
+            stock_quantity = parse_optional_int(get_header_value(row_values, header_map, ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "可用库存", "可用库存", "库存", "库存"])) or 0
+            price_cents = parse_money_to_cents(get_header_value(row_values, header_map, ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "单价", "单价", "价格", "价格"]))
             limit_base = parse_optional_int(get_header_value(row_values, header_map, ["Limite para bases", "Limite base", "Base", "基地限制"]))
             limit_franchise = parse_optional_int(get_header_value(row_values, header_map, ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制"]))
-            min_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "最低庫存", "最低库存"]))
-            max_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "最高庫存", "最高库存"]))
-            active = parse_bool_value(get_header_value(row_values, header_map, ["Ativo", "Status", "Produto ativo", "啟用", "启用"]), default=True)
+            min_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "最低库存", "最低库存"]))
+            max_stock = parse_optional_int(get_header_value(row_values, header_map, ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "最高库存", "最高库存"]))
+            active = parse_bool_value(get_header_value(row_values, header_map, ["Ativo", "Status", "Produto ativo", "启用", "启用"]), default=True)
 
             existing_row = None
             if product_id is not None:

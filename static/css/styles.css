@@ -3384,7 +3384,7 @@ html[data-theme="light"] .language-toggle { background: rgba(255,255,255,.90); c
 html[data-theme="light"] .language-toggle-track { background: rgba(230,0,18,.08); border-color: rgba(230,0,18,.18); }
 html[data-theme="light"] .language-option { color: rgba(28,28,28,.52); }
 html[data-theme="light"] .language-toggle:not(.is-zh) .language-pt, html[data-theme="light"] .language-toggle.is-zh .language-zh { color: #ffffff; }
-html[data-language="zh-Hant"] body { font-family: "Microsoft JhengHei", "Noto Sans TC", "PingFang TC", "SF Pro Display", Inter, system-ui, sans-serif; }
+html[data-language="zh-CN"] body { font-family: "Microsoft YaHei", "Noto Sans SC", "PingFang SC", "SF Pro Display", Inter, system-ui, sans-serif; }
 body.permission-modal-open .language-toggle { filter: blur(3px) !important; pointer-events: none !important; user-select: none !important; }
 @media (max-width: 760px) { .language-toggle { right: 12px; bottom: 62px; padding: 8px; } .language-toggle-text { display: none; } .language-toggle-track { width: 64px; height: 26px; } .language-toggle-thumb { width: 28px; height: 20px; } .language-toggle.is-zh .language-toggle-thumb { transform: translateX(30px); } }
 

@@ -20,7 +20,7 @@
         <div>
           <span class="eyebrow">Exportação</span>
           <h3 id="exportLanguageTitle">Escolha o idioma da planilha</h3>
-          <p>Selecione se a planilha será exportada em português ou mandarim tradicional.</p>
+          <p>Selecione se a planilha será exportada em português ou chinês simplificado.</p>
         </div>
         <button class="permission-close" type="button" data-close-export-modal aria-label="Fechar">×</button>
       </div>
@@ -30,7 +30,7 @@
           <small>Cabeçalhos e dados em português.</small>
         </a>
         <a class="export-language-option btn primary" href="{{ url_for('admin_products_export', lang='zh') }}">
-          <strong>Mandarim tradicional</strong>
+          <strong>Chinês simplificado</strong>
           <small>Cabeçalhos bilíngues e dados conhecidos traduzidos.</small>
         </a>
       </div>
@@ -87,10 +87,17 @@
   if (modal.parentElement !== document.body) {
     document.body.appendChild(modal);
   }
+  function refreshModalLanguage() {
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.JT_I18N.refresh(modal);
+      window.setTimeout(function () { window.JT_I18N.refresh(modal); }, 90);
+    }
+  }
   function openModal() {
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('export-modal-open');
+    refreshModalLanguage();
   }
   function closeModal() {
     modal.classList.remove('open');
@@ -101,6 +108,9 @@
   closeButtons.forEach((button) => button.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+  window.addEventListener('jt-language-change', function () {
+    if (modal.classList.contains('open')) refreshModalLanguage();
   });
 })();
 </script>
