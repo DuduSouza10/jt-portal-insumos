@@ -1968,12 +1968,13 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     header_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#ffffff")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff7f8")),
+        ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#f0d6d9")),
         ("LINEBELOW", (0, 0), (-1, -1), 2.0, colors.HexColor("#e60012")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
     ]))
     story.append(header_table)
     story.append(Spacer(1, 5 * mm))
@@ -2130,15 +2131,15 @@ def build_supply_requests_period_report_pdf(
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=13 * mm,
-        rightMargin=13 * mm,
-        topMargin=14 * mm,
-        bottomMargin=16 * mm,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
     )
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="ReportTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=17, leading=21, textColor=colors.HexColor("#151515"), spaceAfter=2))
-    styles.add(ParagraphStyle(name="ReportSubtitle", fontName=PDF_TEXT_FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="ReportSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=11.2, leading=14, textColor=colors.HexColor("#151515"), spaceBefore=5, spaceAfter=6))
+    styles.add(ParagraphStyle(name="ReportTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=18.5, leading=22.5, textColor=colors.HexColor("#151515"), spaceAfter=3))
+    styles.add(ParagraphStyle(name="ReportSubtitle", fontName=PDF_TEXT_FONT, fontSize=9.0, leading=12.2, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="ReportSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=12.0, leading=15, textColor=colors.HexColor("#151515"), spaceBefore=6, spaceAfter=7))
     styles.add(ParagraphStyle(name="ReportLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
     styles.add(ParagraphStyle(name="ReportMeta", fontName=PDF_TEXT_FONT, fontSize=8.0, leading=10.2, textColor=colors.HexColor("#222222")))
     styles.add(ParagraphStyle(name="ReportCell", fontName=PDF_TEXT_FONT, fontSize=7.4, leading=9.5, textColor=colors.HexColor("#222222")))
@@ -2174,7 +2175,7 @@ def build_supply_requests_period_report_pdf(
             Paragraph("Relatório de Solicitações de Insumos", styles["ReportTitle"]),
             Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["ReportMeta"]),
         ]],
-        colWidths=[39 * mm, 90 * mm, 55 * mm],
+        colWidths=[36 * mm, 92 * mm, 50 * mm],
     )
     header.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -2219,16 +2220,16 @@ def build_supply_requests_period_report_pdf(
         [Paragraph("PENDENTES", styles["ReportLabel"]), Paragraph("APROVADAS", styles["ReportLabel"]), Paragraph("REJEITADAS", styles["ReportLabel"]), Paragraph("PESSOAS INFORMADAS", styles["ReportLabel"])],
         [p(status_counts.get("pending", 0), "ReportMeta"), p(status_counts.get("approved", 0), "ReportMeta"), p(status_counts.get("rejected", 0), "ReportMeta"), p(total_people if total_people else "-", "ReportMeta")],
     ]
-    summary_table = Table(summary_data, colWidths=[46 * mm, 46 * mm, 46 * mm, 46 * mm])
+    summary_table = Table(summary_data, colWidths=[44.5 * mm, 44.5 * mm, 44.5 * mm, 44.5 * mm])
     summary_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
         ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#fff3f4")),
         ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
         ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 7),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 9),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
     story.append(summary_table)
@@ -2244,9 +2245,10 @@ def build_supply_requests_period_report_pdf(
                 p(f"{product['quantity']} {product.get('unit') or 'un'}", "ReportCellBold"),
                 p(format_brl(product["value"]), "ReportCellBold"),
             ])
-        product_table = Table(product_rows, colWidths=[112 * mm, 34 * mm, 38 * mm], repeatRows=1)
+        product_table = Table(product_rows, colWidths=[108 * mm, 34 * mm, 36 * mm], repeatRows=1)
         product_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e60012")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fff8f8")]),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
             ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
@@ -2262,7 +2264,7 @@ def build_supply_requests_period_report_pdf(
 
     story.append(Paragraph("Solicitações do período", styles["ReportSection"]))
     if not requests_list:
-        empty = Table([[Paragraph("Nenhuma solicitação encontrada para o período selecionado.", styles["ReportMeta"])]], colWidths=[184 * mm])
+        empty = Table([[Paragraph("Nenhuma solicitação encontrada para o período selecionado.", styles["ReportMeta"])]], colWidths=[178 * mm])
         empty.setStyle(TableStyle([
             ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff8f8")),
@@ -2303,10 +2305,12 @@ def build_supply_requests_period_report_pdf(
             ]
             if req.reviewed_at:
                 detail_rows.append([Paragraph("Revisão", styles["ReportLabel"]), Paragraph(req.reviewed_at.strftime("%d/%m/%Y %H:%M"), styles["ReportSmall"]), Paragraph("", styles["ReportSmall"])])
-            detail = Table(detail_rows, colWidths=[72 * mm, 68 * mm, 44 * mm], repeatRows=0)
+            detail = Table(detail_rows, colWidths=[68 * mm, 66 * mm, 44 * mm], repeatRows=0)
             detail.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fffafa")),
+                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#fffafa")),
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6d6d8")),
                 ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#eeeeee")),
                 ("LEFTPADDING", (0, 0), (-1, -1), 7),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 7),
@@ -2322,11 +2326,11 @@ def build_supply_requests_period_report_pdf(
         width, _height = A4
         canvas.setStrokeColor(colors.HexColor("#e60012"))
         canvas.setLineWidth(0.7)
-        canvas.line(13 * mm, 13 * mm, width - 13 * mm, 13 * mm)
+        canvas.line(16 * mm, 13 * mm, width - 16 * mm, 13 * mm)
         canvas.setFont(PDF_TEXT_FONT, 7.2)
         canvas.setFillColor(colors.HexColor("#777777"))
-        canvas.drawString(13 * mm, 8.5 * mm, "J&T Express Brazil • Relatório mensal de solicitações")
-        canvas.drawRightString(width - 13 * mm, 8.5 * mm, f"Página {document.page}")
+        canvas.drawString(16 * mm, 8.5 * mm, "J&T Express Brazil • Relatório mensal de solicitações")
+        canvas.drawRightString(width - 16 * mm, 8.5 * mm, f"Página {document.page}")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
