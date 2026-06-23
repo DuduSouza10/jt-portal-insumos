@@ -53,18 +53,18 @@
     <tbody>
       {% for product in products %}
       <tr>
-        <td><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
-        <td>{{ product.category or '-' }}</td>
-        <td>{{ product.unit_measure or 'un' }}</td>
-        <td><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
-        <td>{{ product.min_stock if product.min_stock is not none else '-' }}</td>
-        <td>{{ product.max_stock if product.max_stock is not none else '-' }}</td>
-        <td>{{ format_brl(product.price_cents) }}</td>
-        <td>{{ product.limit_base if product.limit_base is not none else 'Sem limite' }}</td>
-        <td>{{ product.limit_franchise if product.limit_franchise is not none else 'Sem limite' }}</td>
-        <td><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
-        <td><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
-        <td class="actions-cell">
+        <td data-label="Produto"><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
+        <td data-label="Categoria">{{ product.category or '-' }}</td>
+        <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
+        <td data-label="Estoque"><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
+        <td data-label="Min.">{{ product.min_stock if product.min_stock is not none else '-' }}</td>
+        <td data-label="Max.">{{ product.max_stock if product.max_stock is not none else '-' }}</td>
+        <td data-label="Valor">{{ format_brl(product.price_cents) }}</td>
+        <td data-label="Limite base">{{ product.limit_base if product.limit_base is not none else 'Sem limite' }}</td>
+        <td data-label="Limite franquia">{{ product.limit_franchise if product.limit_franchise is not none else 'Sem limite' }}</td>
+        <td data-label="Situacao"><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
+        <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
+        <td class="actions-cell" data-label="Acoes">
           <a class="btn tiny ghost" href="{{ url_for('admin_product_edit', product_id=product.id) }}">Editar</a>
           <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
             <button class="btn tiny ghost" type="submit">{{ 'Inativar' if product.active else 'Ativar' }}</button>

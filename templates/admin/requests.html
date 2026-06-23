@@ -22,14 +22,14 @@
     <tbody>
       {% for req in requests_list %}
       <tr>
-        <td>#{{ req.id }}</td>
-        <td>{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
-        <td>{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
-        <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
-        <td>{{ req.items|length }}</td>
-        <td>{{ format_brl(req.total_cents) }}</td>
-        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td class="actions-cell"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
+        <td data-label="#">#{{ req.id }}</td>
+        <td data-label="Unidade">{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
+        <td data-label="Tipo">{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
+        <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td data-label="Itens">{{ req.items|length }}</td>
+        <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
+        <td data-label="Data">{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
       </tr>
       {% else %}
       <tr><td colspan="8" class="muted center">Nenhuma solicitação encontrada.</td></tr>

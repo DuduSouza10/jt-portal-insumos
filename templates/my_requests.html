@@ -19,17 +19,17 @@
     <tbody>
       {% for req in requests_list %}
       <tr>
-        <td>#{{ req.id }}</td>
-        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
-        <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
-        <td>
+        <td data-label="#">#{{ req.id }}</td>
+        <td data-label="Data">{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td data-label="Itens">
           {% for item in req.items %}
             <div>{{ item.quantity }}x {{ item.product_name_snapshot }}</div>
           {% endfor %}
         </td>
-        {% if current_user.role == 'franchise' or current_user.is_admin %}<td>{{ format_brl(req.total_cents) }}</td>{% endif %}
-        <td>{{ req.admin_note or '-' }}</td>
-        <td><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>
+        {% if current_user.role == 'franchise' or current_user.is_admin %}<td data-label="Total">{{ format_brl(req.total_cents) }}</td>{% endif %}
+        <td data-label="Observacao admin">{{ req.admin_note or '-' }}</td>
+        <td class="actions-cell" data-label="PDF"><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>
       </tr>
       {% else %}
       <tr><td colspan="7" class="muted center">Nenhuma solicitação enviada.</td></tr>

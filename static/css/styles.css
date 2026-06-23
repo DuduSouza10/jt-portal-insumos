@@ -3473,3 +3473,261 @@ body.export-modal-open .export-language-modal * {
   .export-language-actions { grid-template-columns: 1fr; }
   .export-language-card { padding: 18px; }
 }
+
+
+/* v50.2 - cards e tabelas responsivos, sem rolagem interna nos cards. */
+.card,
+.table-card,
+.product-card,
+.cart-panel,
+.stock-panel,
+.stock-board,
+.stock-product-card,
+.stock-movements-card,
+.permission-card,
+.export-language-card {
+  min-width: 0 !important;
+}
+
+.table-card {
+  overflow: visible !important;
+}
+
+.cart-items,
+.stock-card-list,
+.stock-priority-list {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+
+.stock-priority-item,
+.stock-mini-card,
+.stock-product-top,
+.stock-product-bottom {
+  flex-wrap: wrap;
+}
+
+.stock-chart-wrap {
+  overflow: visible !important;
+}
+
+.stock-chart-wrap canvas,
+.stock-movements-card table {
+  min-width: 0 !important;
+}
+
+.product-grid,
+.stock-board-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)) !important;
+}
+
+.request-total-cell {
+  text-align: right;
+}
+
+.request-total-cell strong {
+  margin-right: 14px;
+}
+
+.permission-modal.open {
+  align-items: flex-start !important;
+  overflow-y: auto !important;
+}
+
+.permission-card {
+  max-height: none !important;
+  grid-template-rows: auto !important;
+  overflow: visible !important;
+  margin: auto 0 !important;
+}
+
+.permission-grid {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  .portal-layout,
+  .admin-split,
+  .detail-grid,
+  .stock-dashboard-grid,
+  .stock-modern-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cart-panel,
+  .search-card {
+    position: static !important;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .section-head,
+  .product-tools-head,
+  .import-form,
+  .stock-panel-head,
+  .export-language-head {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    align-items: stretch !important;
+  }
+
+  .product-tools,
+  .export-language-actions,
+  .form-actions,
+  .tabs {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    width: 100% !important;
+  }
+
+  .product-tools .btn,
+  .section-head .btn,
+  .form-actions .btn,
+  .tabs .tab {
+    width: 100% !important;
+  }
+
+  .table-card table,
+  .stock-movements-card table {
+    min-width: 0 !important;
+    width: 100% !important;
+    display: block !important;
+    border-collapse: separate !important;
+  }
+
+  .table-card thead {
+    display: none !important;
+  }
+
+  .table-card tbody,
+  .table-card tfoot {
+    display: grid !important;
+    gap: 12px !important;
+  }
+
+  .table-card tr {
+    display: grid !important;
+    gap: 0 !important;
+    padding: 14px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 18px !important;
+    background: var(--surface-soft) !important;
+  }
+
+  .table-card td,
+  .table-card th {
+    display: grid !important;
+    grid-template-columns: minmax(108px, 38%) minmax(0, 1fr) !important;
+    gap: 12px !important;
+    align-items: start !important;
+    padding: 10px 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+    text-align: right !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .table-card tr > :last-child {
+    border-bottom: 0 !important;
+  }
+
+  .table-card td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 950;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .table-card td[colspan] {
+    display: block !important;
+    text-align: center !important;
+  }
+
+  .table-card td[colspan]::before {
+    display: none !important;
+  }
+
+  .table-card .actions-cell {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    white-space: normal !important;
+  }
+
+  .table-card .actions-cell::before {
+    content: attr(data-label);
+    flex: 0 0 100%;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 950;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .actions-cell > a,
+  .actions-cell > form,
+  .actions-cell .btn {
+    flex: 1 1 140px !important;
+    margin: 0 !important;
+  }
+
+  .table-card td.request-total-cell[colspan] {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 14px !important;
+    text-align: left !important;
+  }
+
+  .request-total-cell strong {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .page-shell {
+    width: min(100% - 16px, 1380px) !important;
+  }
+
+  .card,
+  .table-card,
+  .stock-panel,
+  .stock-board,
+  .auth-card,
+  .wide-card,
+  .cart-panel {
+    border-radius: 18px !important;
+    padding: 16px !important;
+  }
+
+  .product-card,
+  .stock-product-card,
+  .stock-priority-item,
+  .cart-item {
+    border-radius: 16px !important;
+  }
+
+  .cart-item,
+  .add-row,
+  .search-line,
+  .stock-search-row,
+  .stock-product-bottom {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .stock-chart-wrap {
+    padding: 10px !important;
+  }
+}

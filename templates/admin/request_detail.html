@@ -17,22 +17,23 @@
       <tbody>
         {% for item in supply_request.items %}
         <tr>
-          <td>{{ item.product_name_snapshot }}</td>
-          <td>
+          <td data-label="Produto">{{ item.product_name_snapshot }}</td>
+          <td data-label="Qtd.">
             {% if supply_request.status == 'pending' %}
               <input class="qty-input" name="quantity_{{ item.id }}" type="number" min="1" value="{{ item.quantity }}" required>
             {% else %}
               <strong>{{ item.quantity }}</strong>
             {% endif %}
           </td>
-          <td>{{ format_brl(item.price_cents_snapshot) }}</td>
-          <td>{{ format_brl(item.price_cents_snapshot * item.quantity) }}</td>
-          <td>{{ item.product.stock_quantity if item.product else '-' }}</td>
+          <td data-label="Unidade">{{ item.product.unit_measure if item.product else '-' }}</td>
+          <td data-label="Valor unit.">{{ format_brl(item.price_cents_snapshot) }}</td>
+          <td data-label="Subtotal">{{ format_brl(item.price_cents_snapshot * item.quantity) }}</td>
+          <td data-label="Estoque atual">{{ item.product.stock_quantity if item.product else '-' }}</td>
         </tr>
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr><th colspan="3">Total</th><th>{{ format_brl(supply_request.total_cents) }}</th><th></th></tr>
+        <tr><td class="request-total-cell" colspan="6" data-label="Total"><strong>Total</strong><span>{{ format_brl(supply_request.total_cents) }}</span></td></tr>
       </tfoot>
     </table>
     {% if supply_request.status == 'pending' %}

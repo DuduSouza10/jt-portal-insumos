@@ -190,3 +190,10 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Produtos voltaram a ter a ação **Inativar/Ativar** na listagem administrativa.
 - Inativar remove o produto das solicitações, mas mantém o registro salvo no banco de dados.
 - A ação **Excluir** continua disponível apenas para remoção definitiva.
+
+
+## v50.2 - Cards responsivos sem rolagem interna
+
+- Listas dentro dos cards agora crescem junto com o conteúdo em vez de criar rolagem interna.
+- Tabelas administrativas viram cartões responsivos em telas menores.
+- Carrinho, cards de estoque, permissões e movimentações foram ajustados para quebrar linha sem esconder conteúdo.

@@ -22,12 +22,12 @@
     <tbody>
       {% for user in users %}
       <tr>
-        <td>{{ user.responsible_name }}</td>
-        <td>{{ user.organization_name }}</td>
-        <td>{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
-        <td>{{ user.username }}</td>
-        <td><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
-        <td class="actions-cell">
+        <td data-label="Responsavel">{{ user.responsible_name }}</td>
+        <td data-label="Unidade">{{ user.organization_name }}</td>
+        <td data-label="Tipo">{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
+        <td data-label="Usuario">{{ user.username }}</td>
+        <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
+        <td class="actions-cell" data-label="Acoes">
           {% if user.status == 'pending' and not user.is_admin %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">

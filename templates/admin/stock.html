@@ -121,15 +121,15 @@
     <tbody>
       {% for mov in movement_rows %}
       <tr data-stock-product="{{ (mov.product_name or '')|e }}" data-stock-category="{{ (mov.product_category or 'Sem categoria')|e }}">
-        <td>{{ mov.created_at }}</td>
-        <td><strong>{{ mov.product_name or '-' }}</strong></td>
-        <td>{{ movement_type_label(mov.movement_type) }}</td>
-        <td><span class="movement-delta {{ 'positive' if mov.quantity_delta > 0 else 'negative' }}">{{ '+' if mov.quantity_delta > 0 else '' }}{{ mov.quantity_delta }}</span></td>
-        <td>{{ mov.stock_before }}</td>
-        <td>{{ mov.stock_after }}</td>
-        <td>{% if mov.request_id %}<a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>{% else %}-{% endif %}</td>
-        <td>{{ mov.created_by_name or '-' }}</td>
-        <td>{{ mov.note or '-' }}</td>
+        <td data-label="Data">{{ mov.created_at }}</td>
+        <td data-label="Produto"><strong>{{ mov.product_name or '-' }}</strong></td>
+        <td data-label="Tipo">{{ movement_type_label(mov.movement_type) }}</td>
+        <td data-label="Mov."><span class="movement-delta {{ 'positive' if mov.quantity_delta > 0 else 'negative' }}">{{ '+' if mov.quantity_delta > 0 else '' }}{{ mov.quantity_delta }}</span></td>
+        <td data-label="Antes">{{ mov.stock_before }}</td>
+        <td data-label="Depois">{{ mov.stock_after }}</td>
+        <td data-label="Solicitacao">{% if mov.request_id %}<a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>{% else %}-{% endif %}</td>
+        <td data-label="Responsavel">{{ mov.created_by_name or '-' }}</td>
+        <td data-label="Observacao">{{ mov.note or '-' }}</td>
       </tr>
       {% else %}
       <tr><td colspan="9" class="muted center">Nenhuma movimentação registrada ainda.</td></tr>

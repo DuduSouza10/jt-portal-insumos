@@ -33,10 +33,10 @@
       <tbody>
         {% for req in latest_requests %}
         <tr>
-          <td><a href="{{ url_for('admin_request_detail', request_id=req.id) }}">#{{ req.id }}</a></td>
-          <td>{{ req.user.organization_name }}</td>
-          <td><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
-          <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+          <td data-label="#"><a href="{{ url_for('admin_request_detail', request_id=req.id) }}">#{{ req.id }}</a></td>
+          <td data-label="Unidade">{{ req.user.organization_name }}</td>
+          <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+          <td data-label="Data">{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
         </tr>
         {% else %}
         <tr><td colspan="4" class="muted center">Nenhuma solicitação.</td></tr>
@@ -55,8 +55,8 @@
       <tbody>
         {% for product in low_stock %}
         <tr>
-          <td>{{ product.name }}</td>
-          <td><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
+          <td data-label="Produto">{{ product.name }}</td>
+          <td data-label="Estoque"><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
         </tr>
         {% else %}
         <tr><td colspan="2" class="muted center">Sem alerta de estoque baixo.</td></tr>
