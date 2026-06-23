@@ -99,14 +99,18 @@ CREATE TABLE IF NOT EXISTS assets (
 CREATE TABLE IF NOT EXISTS asset_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id INTEGER NOT NULL,
+    product_id INTEGER,
     item_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
     serial_number TEXT,
     created_at TEXT NOT NULL,
-    FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+    FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+    FOREIGN KEY(product_id) REFERENCES products(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_assets_base_regional ON assets(base, regional);
 CREATE INDEX IF NOT EXISTS idx_asset_items_asset_id ON asset_items(asset_id);
+CREATE INDEX IF NOT EXISTS idx_asset_items_product_id ON asset_items(product_id);
 
 CREATE TABLE IF NOT EXISTS user_page_permissions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

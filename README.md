@@ -211,3 +211,18 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Gestão de Insumos mantém a tela atual de estoque, gráficos e movimentações.
 - Gestão de Ativos permite adicionar ativos em modal com Nome, Base, Regional, Setor, Gestor e múltiplos itens.
 - Relatórios de ativos aparecem na própria tela e podem ser filtrados por base ou regional.
+
+
+## v51.1 - Ajustes da Gestão de Ativos
+
+- Corrigido o card de Itens cadastrados.
+- Lista de bases agora acompanha o filtro regional: MG mostra bases `-MG`, SPN mostra bases `-SP`.
+- Quando a regional não possui bases correspondentes, a lista exibe **Sem Dados**.
+
+
+## v51.2 - Ativos integrados ao estoque
+
+- Itens de ativos agora são selecionados a partir dos produtos cadastrados.
+- Cadastro de ativos ganhou quantidade por item e baixa automaticamente o estoque do produto.
+- A baixa entra no histórico de movimentações como **Saída para ativo**.
+- Regional **Matriz** adicionada; ao selecionar Matriz, o campo Base fica inativo.

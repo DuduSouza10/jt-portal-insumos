@@ -279,8 +279,8 @@ BASE_UNIT_OPTIONS = [unit for unit in BASE_FRANCHISE_OPTIONS if not unit.upper()
 BASE_FRANCHISE_OPTION_SET = set(BASE_FRANCHISE_OPTIONS)
 BASE_UNIT_OPTION_SET = set(BASE_UNIT_OPTIONS)
 FRANCHISE_UNIT_OPTION_SET = set(FRANCHISE_UNIT_OPTIONS)
-ASSET_REGIONAL_OPTIONS = ["MG", "SPN"]
-ASSET_REGIONAL_OPTION_SET = set(ASSET_REGIONAL_OPTIONS)
+ASSET_REGIONAL_OPTIONS = ["MG", "SPN", "Matriz"]
+ASSET_REGIONAL_OPTION_SET = {option.upper() for option in ASSET_REGIONAL_OPTIONS}
 ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
 ADMIN_ORGANIZATION_OPTIONS = [ADMIN_ORGANIZATION_NAME]
 
@@ -364,6 +364,8 @@ class AssetItem:
     id: int
     asset_id: int
     item_name: str
+    product_id: int | None = None
+    quantity: int = 1
     serial_number: str = ""
     created_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -577,10 +579,15 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
 def row_to_asset_item(row: Any | None) -> AssetItem | None:
     if row is None:
         return None
+    row_keys = set(row.keys()) if hasattr(row, "keys") else set()
+    product_id = row["product_id"] if "product_id" in row_keys else None
+    quantity = row["quantity"] if "quantity" in row_keys else 1
     return AssetItem(
         id=int(row["id"]),
         asset_id=int(row["asset_id"]),
         item_name=row["item_name"] or "",
+        product_id=int(product_id) if product_id else None,
+        quantity=int(quantity or 1),
         serial_number=row["serial_number"] or "",
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
     )
@@ -633,6 +640,33 @@ def list_assets(base: str = "", regional: str = "") -> list[AssetRecord]:
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
         return [asset for row in rows if (asset := row_to_asset(row, conn=conn)) is not None]
+
+
+def normalize_asset_regional(value: str) -> str:
+    normalized = (value or "").strip().upper()
+    if normalized == "MATRIZ":
+        return "Matriz"
+    if normalized in {"MG", "SPN"}:
+        return normalized
+    return ""
+
+
+def asset_regional_for_base(base: str) -> str:
+    normalized = (base or "").strip().upper()
+    if "-MG" in normalized:
+        return "MG"
+    if "-SP" in normalized:
+        return "SPN"
+    return ""
+
+
+def base_options_for_asset_regional(regional: str = "") -> list[str]:
+    normalized = normalize_asset_regional(regional)
+    if not normalized:
+        return BASE_UNIT_OPTIONS
+    if normalized == "Matriz":
+        return []
+    return [unit for unit in BASE_UNIT_OPTIONS if asset_regional_for_base(unit) == normalized]
 
 
 def init_db() -> None:
@@ -736,10 +770,13 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS asset_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 asset_id INTEGER NOT NULL,
+                product_id INTEGER,
                 item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
                 serial_number TEXT,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+                FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                FOREIGN KEY(product_id) REFERENCES products(id)
             );
 
             CREATE TABLE IF NOT EXISTS user_page_permissions (
@@ -781,8 +818,14 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN min_stock INTEGER")
         if "max_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN max_stock INTEGER")
+        asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
+        if "product_id" not in asset_item_columns:
+            conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
+        if "quantity" not in asset_item_columns:
+            conn.execute("ALTER TABLE asset_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_base_regional ON assets(base, regional)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_asset_items_asset_id ON asset_items(asset_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_asset_items_product_id ON asset_items(product_id)")
         movement_count = conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"]
         if int(movement_count or 0) == 0:
             existing_products = conn.execute("SELECT id, stock_quantity FROM products WHERE stock_quantity > 0").fetchall()
@@ -975,6 +1018,7 @@ def permanently_delete_product(conn: Any, product_id: int) -> tuple[str, int, in
     conn.execute("DELETE FROM stock_movements WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM request_items WHERE product_id = ?", (product_id,))
     removed_empty_requests = permanently_delete_empty_supply_requests(conn, request_ids)
+    conn.execute("UPDATE asset_items SET product_id = NULL WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
     return product_name, removed_items, removed_empty_requests
 
@@ -1057,6 +1101,7 @@ def inject_globals():
         "franchise_unit_options": FRANCHISE_UNIT_OPTIONS,
         "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
         "asset_regional_options": ASSET_REGIONAL_OPTIONS,
+        "asset_regional_for_base": asset_regional_for_base,
     }
 
 
@@ -1257,6 +1302,7 @@ def movement_type_label(movement_type: str) -> str:
         "request_approved": "Saída por solicitação",
         "manual_adjustment": "Ajuste manual",
         "product_created": "Cadastro de produto",
+        "asset_allocation": "SaÃ­da para ativo",
         "import_adjustment": "Ajuste por importação",
     }
     return labels.get(movement_type, movement_type)
@@ -3012,19 +3058,32 @@ def admin_requests_attended():
 @page_access_required("admin_stock")
 def admin_assets():
     selected_base = request.args.get("base", "").strip()
-    selected_regional = request.args.get("regional", "").strip().upper()
-    if selected_base and selected_base not in BASE_UNIT_OPTION_SET:
+    selected_regional = normalize_asset_regional(request.args.get("regional", ""))
+    filtered_base_options = base_options_for_asset_regional(selected_regional)
+    if selected_base and (selected_base not in BASE_UNIT_OPTION_SET or selected_base not in filtered_base_options):
         selected_base = ""
-    if selected_regional and selected_regional not in ASSET_REGIONAL_OPTION_SET:
-        selected_regional = ""
 
     assets = list_assets(base=selected_base, regional=selected_regional)
+    with db_connect() as conn:
+        product_rows = conn.execute("SELECT * FROM products WHERE active = 1 ORDER BY category ASC, name ASC").fetchall()
+    asset_product_options = [
+        {
+            "id": product.id,
+            "name": product.name,
+            "category": product.category or "Sem categoria",
+            "stock_quantity": product.stock_quantity,
+            "unit_measure": product.unit_measure or "un",
+        }
+        for row in product_rows
+        if (product := row_to_product(row)) is not None
+    ]
     totals = {
         "assets": len(assets),
-        "items": sum(len(asset.items) for asset in assets),
+        "items": sum(sum(item.quantity for item in asset.items) for asset in assets),
         "bases": len({asset.base for asset in assets if asset.base}),
         "mg": sum(1 for asset in assets if asset.regional == "MG"),
         "spn": sum(1 for asset in assets if asset.regional == "SPN"),
+        "matriz": sum(1 for asset in assets if asset.regional == "Matriz"),
     }
     return render_template(
         "admin/assets.html",
@@ -3032,6 +3091,8 @@ def admin_assets():
         totals=totals,
         selected_base=selected_base,
         selected_regional=selected_regional,
+        filtered_base_options=filtered_base_options,
+        asset_product_options=asset_product_options,
     )
 
 
@@ -3064,6 +3125,9 @@ def admin_asset_new():
     if regional not in ASSET_REGIONAL_OPTION_SET:
         flash("Selecione uma regional válida para o ativo.", "warning")
         return redirect(url_for("admin_assets"))
+    if asset_regional_for_base(base) != regional:
+        flash("A base selecionada não pertence à regional informada.", "warning")
+        return redirect(url_for("admin_assets", regional=regional))
     if not item_rows:
         flash("Adicione pelo menos um item ao ativo.", "warning")
         return redirect(url_for("admin_assets"))
@@ -3094,6 +3158,144 @@ def admin_asset_new():
         app.logger.exception("Falha ao adicionar ativo")
         flash(f"Não consegui adicionar o ativo. Erro: {type(exc).__name__}.", "danger")
     return redirect(url_for("admin_assets", base=base, regional=regional))
+
+
+def admin_asset_new_with_stock():
+    name = request.form.get("name", "").strip()
+    base = request.form.get("base", "").strip()
+    regional = normalize_asset_regional(request.form.get("regional", ""))
+    sector = request.form.get("sector", "").strip()
+    manager = request.form.get("manager", "").strip()
+    item_names = request.form.getlist("item_name")
+    product_ids = request.form.getlist("product_id")
+    quantities = request.form.getlist("quantity")
+    serial_numbers = request.form.getlist("serial_number")
+
+    item_rows: list[dict[str, Any]] = []
+    missing_product = False
+    invalid_quantity = False
+    for index, raw_item_name in enumerate(item_names):
+        item_name = (raw_item_name or "").strip()
+        product_id = parse_required_positive_int(product_ids[index] if index < len(product_ids) else "")
+        quantity = parse_required_positive_int(quantities[index] if index < len(quantities) else "")
+        if not item_name and product_id is None:
+            continue
+        if product_id is None:
+            missing_product = True
+            continue
+        if quantity is None:
+            invalid_quantity = True
+            continue
+        serial_number = (serial_numbers[index] if index < len(serial_numbers) else "").strip()
+        item_rows.append({"product_id": product_id, "quantity": quantity, "serial_number": serial_number[:120]})
+
+    if regional == "Matriz":
+        base = "Matriz"
+
+    redirect_args = {"regional": regional}
+    if regional != "Matriz" and base:
+        redirect_args["base"] = base
+
+    if not name or not regional or not sector or not manager or (regional != "Matriz" and not base):
+        flash("Preencha nome, base, regional, setor e gestor para adicionar o ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+    if not regional:
+        flash("Selecione uma regional valida para o ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+    if regional != "Matriz" and base not in BASE_UNIT_OPTION_SET:
+        flash("Selecione uma base valida para o ativo.", "warning")
+        return redirect(url_for("admin_assets", regional=regional))
+    if regional != "Matriz" and asset_regional_for_base(base) != regional:
+        flash("A base selecionada nao pertence a regional informada.", "warning")
+        return redirect(url_for("admin_assets", regional=regional))
+    if missing_product:
+        flash("Selecione cada item pela lista de produtos do portal.", "warning")
+        return redirect(url_for("admin_assets", **redirect_args))
+    if invalid_quantity:
+        flash("Informe uma quantidade valida para cada item.", "warning")
+        return redirect(url_for("admin_assets", **redirect_args))
+    if not item_rows:
+        flash("Adicione pelo menos um item ao ativo.", "warning")
+        return redirect(url_for("admin_assets", **redirect_args))
+
+    try:
+        with db_connect() as conn:
+            requested_by_product: dict[int, int] = {}
+            for item in item_rows:
+                requested_by_product[item["product_id"]] = requested_by_product.get(item["product_id"], 0) + item["quantity"]
+
+            product_ids_unique = sorted(requested_by_product)
+            placeholders = ", ".join(["?"] * len(product_ids_unique))
+            product_rows = conn.execute(f"SELECT * FROM products WHERE id IN ({placeholders})", product_ids_unique).fetchall()
+            product_map = {
+                int(row["id"]): product
+                for row in product_rows
+                if (product := row_to_product(row)) is not None
+            }
+            missing_ids = [product_id for product_id in product_ids_unique if product_id not in product_map]
+            inactive = [product.name for product in product_map.values() if not product.active]
+            insufficient = [
+                f"{product_map[product_id].name} (solicitado {quantity}, estoque {product_map[product_id].stock_quantity})"
+                for product_id, quantity in requested_by_product.items()
+                if product_id in product_map and product_map[product_id].stock_quantity < quantity
+            ]
+            if missing_ids:
+                flash("Um ou mais produtos selecionados nao existem mais no cadastro.", "warning")
+                return redirect(url_for("admin_assets", **redirect_args))
+            if inactive:
+                flash("Produto(s) inativo(s) nao podem ser vinculados a ativos: " + ", ".join(inactive), "warning")
+                return redirect(url_for("admin_assets", **redirect_args))
+            if insufficient:
+                flash("Estoque insuficiente para: " + "; ".join(insufficient), "warning")
+                return redirect(url_for("admin_assets", **redirect_args))
+
+            current = require_current_user()
+            cursor = conn.execute(
+                """
+                INSERT INTO assets (name, base, regional, sector, manager, created_by_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name[:180], base, regional, sector[:120], manager[:120], current.id, now_iso()),
+            )
+            asset_id = get_cursor_lastrowid(cursor)
+            if asset_id is None:
+                raise RuntimeError("Nao foi possivel identificar o ativo criado.")
+            for item in item_rows:
+                product = product_map[item["product_id"]]
+                quantity = item["quantity"]
+                stock_before = product.stock_quantity
+                stock_after = stock_before - quantity
+                conn.execute(
+                    "UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?",
+                    (stock_after, now_iso(), product.id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO asset_items (asset_id, product_id, item_name, quantity, serial_number, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (int(asset_id), product.id, product.name, quantity, item["serial_number"], now_iso()),
+                )
+                record_stock_movement(
+                    conn,
+                    product.id,
+                    -quantity,
+                    stock_before,
+                    stock_after,
+                    "asset_allocation",
+                    f"Saida para ativo #{asset_id} - {name}.",
+                    created_by_id=current.id,
+                )
+                product.stock_quantity = stock_after
+            conn.commit()
+        flash("Ativo adicionado ao relatorio e estoque baixado.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao adicionar ativo")
+        flash(f"Nao consegui adicionar o ativo. Erro: {type(exc).__name__}.", "danger")
+    return redirect(url_for("admin_assets", **redirect_args))
+
+
+app.view_functions["admin_asset_new"] = admin_required(page_access_required("admin_stock")(admin_asset_new_with_stock))
 
 
 @app.route("/admin/stock")

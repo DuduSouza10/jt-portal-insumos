@@ -19,15 +19,15 @@
   </article>
   <article class="stat-card card">
     <span>Itens cadastrados</span>
-    <strong>{{ totals.items }}</strong>
+    <strong>{{ totals["items"] }}</strong>
   </article>
   <article class="stat-card card">
     <span>Bases no filtro</span>
     <strong>{{ totals.bases }}</strong>
   </article>
   <article class="stat-card card">
-    <span>MG / SPN</span>
-    <strong>{{ totals.mg }} / {{ totals.spn }}</strong>
+    <span>MG / SPN / Matriz</span>
+    <strong>{{ totals.mg }} / {{ totals.spn }} / {{ totals.matriz }}</strong>
   </article>
 </section>
 
@@ -35,16 +35,17 @@
   <form class="asset-filter-form" method="get" action="{{ url_for('admin_assets') }}">
     <label>
       Base
-      <select name="base">
+      <select name="base" id="assetFilterBase">
         <option value="">Todas as bases</option>
         {% for unit in base_unit_options %}
-          <option value="{{ unit }}" {% if selected_base == unit %}selected{% endif %}>{{ unit }}</option>
+          <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}" {% if selected_base == unit %}selected{% endif %}>{{ unit }}</option>
         {% endfor %}
+        <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
       </select>
     </label>
     <label>
       Regional
-      <select name="regional">
+      <select name="regional" id="assetFilterRegional">
         <option value="">Todas as regionais</option>
         {% for regional in asset_regional_options %}
           <option value="{{ regional }}" {% if selected_regional == regional %}selected{% endif %}>{{ regional }}</option>
@@ -67,7 +68,7 @@
         <h3>{{ asset.name }}</h3>
         <p>{{ asset.base }}</p>
       </div>
-      <span class="asset-item-count">{{ asset.items|length }} item(ns)</span>
+      <span class="asset-item-count">{{ asset.items|sum(attribute='quantity') }} item(ns)</span>
     </div>
     <dl class="asset-meta">
       <div><dt>Setor</dt><dd>{{ asset.sector }}</dd></div>
@@ -77,7 +78,7 @@
     <div class="asset-items-list">
       {% for item in asset.items %}
         <div class="asset-item-pill">
-          <strong>{{ item.item_name }}</strong>
+          <strong>{{ item.quantity }}x {{ item.item_name }}</strong>
           <span>{{ item.serial_number or 'Sem patrimônio/série' }}</span>
         </div>
       {% endfor %}
@@ -108,16 +109,17 @@
         </label>
         <label>
           Base
-          <select name="base" required>
+          <select name="base" id="assetModalBase" required data-required-when-base="true">
             <option value="" selected disabled>Selecione a base</option>
             {% for unit in base_unit_options %}
-              <option value="{{ unit }}">{{ unit }}</option>
+              <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}">{{ unit }}</option>
             {% endfor %}
+            <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
           </select>
         </label>
         <label>
           Regional
-          <select name="regional" required>
+          <select name="regional" id="assetModalRegional" required>
             <option value="" selected disabled>Selecione</option>
             {% for regional in asset_regional_options %}
               <option value="{{ regional }}">{{ regional }}</option>
@@ -146,7 +148,15 @@
           <div class="asset-item-row">
             <label>
               Item
-              <input name="item_name" required placeholder="Ex.: Notebook, celular, impressora">
+              <span class="asset-product-search">
+                <input name="item_name" required placeholder="Digite para buscar um produto" autocomplete="off" data-asset-product-search>
+                <input type="hidden" name="product_id" data-asset-product-id>
+                <span class="asset-product-suggestions hidden" data-asset-product-suggestions></span>
+              </span>
+            </label>
+            <label>
+              Quantidade
+              <input name="quantity" type="number" min="1" value="1" required>
             </label>
             <label>
               Patrimônio/Número de série (Opcional)
@@ -167,15 +177,143 @@
 
 <script>
 (function () {
+  const assetProducts = {{ asset_product_options|tojson }};
   const modal = document.getElementById('assetModal');
   const openButton = document.querySelector('[data-open-asset-modal]');
   const closeButtons = document.querySelectorAll('[data-close-asset-modal]');
   const itemRows = document.getElementById('assetItemRows');
   const addItemButton = document.getElementById('addAssetItem');
+  const filterRegional = document.getElementById('assetFilterRegional');
+  const filterBase = document.getElementById('assetFilterBase');
+  const modalRegional = document.getElementById('assetModalRegional');
+  const modalBase = document.getElementById('assetModalBase');
   if (!modal || !openButton || !itemRows || !addItemButton) return;
 
   if (modal.parentElement !== document.body) {
     document.body.appendChild(modal);
+  }
+
+  function filterBaseSelect(baseSelect, regionalValue) {
+    if (!baseSelect) return;
+    const regional = (regionalValue || '').trim().toUpperCase();
+    const options = Array.from(baseSelect.options);
+    const emptyOption = options.find((option) => option.hasAttribute('data-empty-base-option'));
+    let visibleCount = 0;
+    const isMatriz = regional === 'MATRIZ';
+
+    baseSelect.disabled = false;
+    baseSelect.required = baseSelect.hasAttribute('data-required-when-base');
+
+    if (isMatriz) {
+      options.forEach(function (option) {
+        const isEmpty = option.hasAttribute('data-empty-base-option');
+        option.hidden = !isEmpty;
+        option.disabled = !isEmpty;
+        option.selected = isEmpty;
+      });
+      baseSelect.disabled = true;
+      baseSelect.required = false;
+      return;
+    }
+
+    options.forEach(function (option) {
+      if (option.hasAttribute('data-empty-base-option')) return;
+      if (!option.value) {
+        option.hidden = false;
+        option.disabled = option.defaultSelected && option.hasAttribute('disabled');
+        return;
+      }
+      const optionRegional = (option.dataset.assetRegional || '').toUpperCase();
+      const shouldShow = !regional || optionRegional === regional;
+      option.hidden = !shouldShow;
+      option.disabled = !shouldShow;
+      if (shouldShow) visibleCount += 1;
+    });
+
+    if (emptyOption) {
+      emptyOption.hidden = visibleCount > 0;
+      emptyOption.disabled = visibleCount > 0;
+      if (visibleCount <= 0) emptyOption.selected = true;
+    }
+
+    const selected = baseSelect.selectedOptions[0];
+    if (selected && selected.value && selected.hidden) {
+      baseSelect.value = '';
+    }
+    if (selected && selected.hasAttribute('data-empty-base-option') && selected.hidden) {
+      baseSelect.value = '';
+    }
+  }
+
+  function normalizeSearchText(value) {
+    return (value || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function hideProductSuggestions(row) {
+    const box = row ? row.querySelector('[data-asset-product-suggestions]') : null;
+    if (!box) return;
+    box.classList.add('hidden');
+    box.innerHTML = '';
+  }
+
+  function renderProductSuggestions(input) {
+    const row = input.closest('.asset-item-row');
+    if (!row) return;
+    const productIdInput = row.querySelector('[data-asset-product-id]');
+    const box = row.querySelector('[data-asset-product-suggestions]');
+    if (!box) return;
+    if (productIdInput) productIdInput.value = '';
+
+    const query = normalizeSearchText(input.value);
+    if (!query) {
+      hideProductSuggestions(row);
+      return;
+    }
+
+    const matches = assetProducts
+      .filter(function (product) {
+        const haystack = normalizeSearchText(`${product.name} ${product.category || ''}`);
+        return haystack.includes(query);
+      })
+      .slice(0, 10);
+
+    box.innerHTML = '';
+    if (!matches.length) {
+      box.innerHTML = '<span class="asset-product-empty">Nenhum produto encontrado.</span>';
+      box.classList.remove('hidden');
+      return;
+    }
+
+    matches.forEach(function (product) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'asset-product-option';
+      button.dataset.productId = String(product.id);
+      button.dataset.productName = product.name;
+      const name = document.createElement('strong');
+      name.textContent = product.name;
+      const meta = document.createElement('span');
+      meta.textContent = `${product.category || 'Sem categoria'} • Estoque ${product.stock_quantity} ${product.unit_measure || 'un'}`;
+      button.appendChild(name);
+      button.appendChild(meta);
+      box.appendChild(button);
+    });
+    box.classList.remove('hidden');
+  }
+
+  function selectProductOption(button) {
+    const row = button.closest('.asset-item-row');
+    if (!row) return;
+    const input = row.querySelector('[data-asset-product-search]');
+    const productIdInput = row.querySelector('[data-asset-product-id]');
+    if (input) input.value = button.dataset.productName || '';
+    if (productIdInput) productIdInput.value = button.dataset.productId || '';
+    hideProductSuggestions(row);
   }
 
   function refreshLanguage() {
@@ -213,7 +351,11 @@
     if (!source) return;
     const row = source.cloneNode(true);
     row.querySelectorAll('input').forEach(function (input) {
-      input.value = '';
+      input.value = input.name === 'quantity' ? '1' : '';
+    });
+    row.querySelectorAll('[data-asset-product-suggestions]').forEach(function (box) {
+      box.innerHTML = '';
+      box.classList.add('hidden');
     });
     itemRows.appendChild(row);
     updateRemoveButtons();
@@ -224,14 +366,43 @@
 
   openButton.addEventListener('click', openModal);
   closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  if (filterRegional) {
+    filterRegional.addEventListener('change', function () {
+      filterBaseSelect(filterBase, filterRegional.value);
+    });
+  }
+  if (modalRegional) {
+    modalRegional.addEventListener('change', function () {
+      filterBaseSelect(modalBase, modalRegional.value);
+    });
+  }
   addItemButton.addEventListener('click', addItemRow);
   itemRows.addEventListener('click', function (event) {
+    const productButton = event.target.closest('.asset-product-option');
+    if (productButton) {
+      selectProductOption(productButton);
+      return;
+    }
     const button = event.target.closest('[data-remove-asset-item]');
     if (!button) return;
     const rows = itemRows.querySelectorAll('.asset-item-row');
     if (rows.length <= 1) return;
     button.closest('.asset-item-row').remove();
     updateRemoveButtons();
+  });
+  itemRows.addEventListener('input', function (event) {
+    const input = event.target.closest('[data-asset-product-search]');
+    if (!input) return;
+    renderProductSuggestions(input);
+  });
+  itemRows.addEventListener('focusin', function (event) {
+    const input = event.target.closest('[data-asset-product-search]');
+    if (!input || !input.value) return;
+    renderProductSuggestions(input);
+  });
+  document.addEventListener('click', function (event) {
+    if (event.target.closest('.asset-product-search')) return;
+    itemRows.querySelectorAll('.asset-item-row').forEach(hideProductSuggestions);
   });
   modal.addEventListener('click', function (event) {
     if (event.target === modal) closeModal();
@@ -242,6 +413,8 @@
   window.addEventListener('jt-language-change', function () {
     if (modal.classList.contains('open')) refreshLanguage();
   });
+  filterBaseSelect(filterBase, filterRegional ? filterRegional.value : '');
+  filterBaseSelect(modalBase, modalRegional ? modalRegional.value : '');
   updateRemoveButtons();
 })();
 </script>
