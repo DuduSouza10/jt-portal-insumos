@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Gestão de Ativos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Gestão de Ativos{% endblock %}
+{% block page_subtitle %}Cadastre ativos por base, regional, setor e gestor, com itens e patrimônio ou número de série.{% endblock %}
+{% block content %}
+<section class="asset-toolbar card">
+  <div>
+    <span class="eyebrow">Controle patrimonial</span>
+    <h2>Relatórios de ativos</h2>
+    <p>Filtre por base ou regional e acompanhe os itens cadastrados.</p>
+  </div>
+  <button class="btn primary" type="button" data-open-asset-modal>Adicionar Ativos</button>
+</section>
+
+<section class="asset-stats stats-grid">
+  <article class="stat-card card">
+    <span>Ativos filtrados</span>
+    <strong>{{ totals.assets }}</strong>
+  </article>
+  <article class="stat-card card">
+    <span>Itens cadastrados</span>
+    <strong>{{ totals.items }}</strong>
+  </article>
+  <article class="stat-card card">
+    <span>Bases no filtro</span>
+    <strong>{{ totals.bases }}</strong>
+  </article>
+  <article class="stat-card card">
+    <span>MG / SPN</span>
+    <strong>{{ totals.mg }} / {{ totals.spn }}</strong>
+  </article>
+</section>
+
+<section class="card asset-filter-card">
+  <form class="asset-filter-form" method="get" action="{{ url_for('admin_assets') }}">
+    <label>
+      Base
+      <select name="base">
+        <option value="">Todas as bases</option>
+        {% for unit in base_unit_options %}
+          <option value="{{ unit }}" {% if selected_base == unit %}selected{% endif %}>{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Regional
+      <select name="regional">
+        <option value="">Todas as regionais</option>
+        {% for regional in asset_regional_options %}
+          <option value="{{ regional }}" {% if selected_regional == regional %}selected{% endif %}>{{ regional }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="asset-filter-actions">
+      <button class="btn primary" type="submit">Filtrar</button>
+      <a class="btn ghost" href="{{ url_for('admin_assets') }}">Limpar</a>
+    </div>
+  </form>
+</section>
+
+<section class="asset-report-grid">
+  {% for asset in assets %}
+  <article class="asset-report-card card">
+    <div class="asset-report-head">
+      <div>
+        <span class="asset-regional">{{ asset.regional }}</span>
+        <h3>{{ asset.name }}</h3>
+        <p>{{ asset.base }}</p>
+      </div>
+      <span class="asset-item-count">{{ asset.items|length }} item(ns)</span>
+    </div>
+    <dl class="asset-meta">
+      <div><dt>Setor</dt><dd>{{ asset.sector }}</dd></div>
+      <div><dt>Gestor</dt><dd>{{ asset.manager }}</dd></div>
+      <div><dt>Cadastrado em</dt><dd>{{ asset.created_at.strftime('%d/%m/%Y %H:%M') }}</dd></div>
+    </dl>
+    <div class="asset-items-list">
+      {% for item in asset.items %}
+        <div class="asset-item-pill">
+          <strong>{{ item.item_name }}</strong>
+          <span>{{ item.serial_number or 'Sem patrimônio/série' }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </article>
+  {% else %}
+  <div class="empty-state card">Nenhum ativo cadastrado para este filtro.</div>
+  {% endfor %}
+</section>
+
+<div id="assetModal" class="asset-modal" aria-hidden="true">
+  <div class="asset-modal-backdrop" data-close-asset-modal></div>
+  <section class="asset-modal-card card" role="dialog" aria-modal="true" aria-labelledby="assetModalTitle">
+    <form method="post" action="{{ url_for('admin_asset_new') }}" class="asset-form">
+      <div class="asset-modal-head">
+        <div>
+          <span class="eyebrow">Novo cadastro</span>
+          <h2 id="assetModalTitle">Adicionar Ativos</h2>
+          <p>Informe os dados do ativo e adicione um ou mais itens.</p>
+        </div>
+        <button class="permission-close" type="button" data-close-asset-modal aria-label="Fechar">×</button>
+      </div>
+
+      <div class="form-grid two-cols">
+        <label>
+          Nome
+          <input name="name" required placeholder="Ex.: Kit operacional">
+        </label>
+        <label>
+          Base
+          <select name="base" required>
+            <option value="" selected disabled>Selecione a base</option>
+            {% for unit in base_unit_options %}
+              <option value="{{ unit }}">{{ unit }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Regional
+          <select name="regional" required>
+            <option value="" selected disabled>Selecione</option>
+            {% for regional in asset_regional_options %}
+              <option value="{{ regional }}">{{ regional }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Setor
+          <input name="sector" required placeholder="Ex.: Operações">
+        </label>
+        <label class="full">
+          Gestor
+          <input name="manager" required placeholder="Nome do gestor responsável">
+        </label>
+      </div>
+
+      <div class="asset-items-editor">
+        <div class="section-head asset-items-head">
+          <div>
+            <h3>Itens do ativo</h3>
+            <p class="hint">Adicione o item e, se houver, patrimônio ou número de série.</p>
+          </div>
+          <button class="btn ghost" type="button" id="addAssetItem">Adicionar item</button>
+        </div>
+        <div id="assetItemRows" class="asset-item-rows">
+          <div class="asset-item-row">
+            <label>
+              Item
+              <input name="item_name" required placeholder="Ex.: Notebook, celular, impressora">
+            </label>
+            <label>
+              Patrimônio/Número de série (Opcional)
+              <input name="serial_number" placeholder="Ex.: JT-00123">
+            </label>
+            <button class="btn tiny ghost asset-remove-item" type="button" data-remove-asset-item aria-label="Remover item">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="asset-modal-actions">
+        <button class="btn primary" type="submit">Salvar ativo</button>
+        <button class="btn ghost" type="button" data-close-asset-modal>Cancelar</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<script>
+(function () {
+  const modal = document.getElementById('assetModal');
+  const openButton = document.querySelector('[data-open-asset-modal]');
+  const closeButtons = document.querySelectorAll('[data-close-asset-modal]');
+  const itemRows = document.getElementById('assetItemRows');
+  const addItemButton = document.getElementById('addAssetItem');
+  if (!modal || !openButton || !itemRows || !addItemButton) return;
+
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+
+  function refreshLanguage() {
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.JT_I18N.refresh(modal);
+      window.setTimeout(function () { window.JT_I18N.refresh(modal); }, 90);
+    }
+  }
+
+  function openModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('asset-modal-open');
+    refreshLanguage();
+    const firstInput = modal.querySelector('input, select, textarea');
+    if (firstInput) firstInput.focus({ preventScroll: true });
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('asset-modal-open');
+  }
+
+  function updateRemoveButtons() {
+    const rows = itemRows.querySelectorAll('.asset-item-row');
+    rows.forEach(function (row) {
+      const removeButton = row.querySelector('[data-remove-asset-item]');
+      if (removeButton) removeButton.disabled = rows.length <= 1;
+    });
+  }
+
+  function addItemRow() {
+    const source = itemRows.querySelector('.asset-item-row');
+    if (!source) return;
+    const row = source.cloneNode(true);
+    row.querySelectorAll('input').forEach(function (input) {
+      input.value = '';
+    });
+    itemRows.appendChild(row);
+    updateRemoveButtons();
+    const input = row.querySelector('input[name="item_name"]');
+    if (input) input.focus();
+    refreshLanguage();
+  }
+
+  openButton.addEventListener('click', openModal);
+  closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  addItemButton.addEventListener('click', addItemRow);
+  itemRows.addEventListener('click', function (event) {
+    const button = event.target.closest('[data-remove-asset-item]');
+    if (!button) return;
+    const rows = itemRows.querySelectorAll('.asset-item-row');
+    if (rows.length <= 1) return;
+    button.closest('.asset-item-row').remove();
+    updateRemoveButtons();
+  });
+  modal.addEventListener('click', function (event) {
+    if (event.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+  window.addEventListener('jt-language-change', function () {
+    if (modal.classList.contains('open')) refreshLanguage();
+  });
+  updateRemoveButtons();
+})();
+</script>
+{% endblock %}

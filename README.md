@@ -203,3 +203,11 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 
 - Tabelas compactas do painel administrativo agora respeitam a largura do card.
 - Linhas e divisórias não vazam para fora da borda arredondada.
+
+
+## v51 - Gestão de Ativos
+
+- Gestão de Estoque ganhou submenu com **Gestão de Ativos** e **Gestão de Insumos**.
+- Gestão de Insumos mantém a tela atual de estoque, gráficos e movimentações.
+- Gestão de Ativos permite adicionar ativos em modal com Nome, Base, Regional, Setor, Gestor e múltiplos itens.
+- Relatórios de ativos aparecem na própria tela e podem ser filtrados por base ou regional.

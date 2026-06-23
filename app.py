@@ -279,6 +279,8 @@ BASE_UNIT_OPTIONS = [unit for unit in BASE_FRANCHISE_OPTIONS if not unit.upper()
 BASE_FRANCHISE_OPTION_SET = set(BASE_FRANCHISE_OPTIONS)
 BASE_UNIT_OPTION_SET = set(BASE_UNIT_OPTIONS)
 FRANCHISE_UNIT_OPTION_SET = set(FRANCHISE_UNIT_OPTIONS)
+ASSET_REGIONAL_OPTIONS = ["MG", "SPN"]
+ASSET_REGIONAL_OPTION_SET = set(ASSET_REGIONAL_OPTIONS)
 ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
 ADMIN_ORGANIZATION_OPTIONS = [ADMIN_ORGANIZATION_NAME]
 
@@ -355,6 +357,29 @@ class SupplyRequest:
     @property
     def total_cents(self) -> int:
         return sum((item.price_cents_snapshot or 0) * item.quantity for item in self.items)
+
+
+@dataclass
+class AssetItem:
+    id: int
+    asset_id: int
+    item_name: str
+    serial_number: str = ""
+    created_at: datetime = field(default_factory=datetime.utcnow)
+
+
+@dataclass
+class AssetRecord:
+    id: int
+    name: str
+    base: str
+    regional: str
+    sector: str
+    manager: str
+    created_at: datetime
+    updated_at: datetime | None = None
+    created_by_id: int | None = None
+    items: list[AssetItem] = field(default_factory=list)
 
 
 # ---------- Banco SQLite sem SQLAlchemy ----------
@@ -549,6 +574,67 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
     return req
 
 
+def row_to_asset_item(row: Any | None) -> AssetItem | None:
+    if row is None:
+        return None
+    return AssetItem(
+        id=int(row["id"]),
+        asset_id=int(row["asset_id"]),
+        item_name=row["item_name"] or "",
+        serial_number=row["serial_number"] or "",
+        created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
+    )
+
+
+def get_asset_items(conn: Any, asset_id: int) -> list[AssetItem]:
+    rows = conn.execute(
+        "SELECT * FROM asset_items WHERE asset_id = ? ORDER BY id ASC",
+        (asset_id,),
+    ).fetchall()
+    return [item for row in rows if (item := row_to_asset_item(row)) is not None]
+
+
+def row_to_asset(row: Any | None, conn: Any | None = None, include_items: bool = True) -> AssetRecord | None:
+    if row is None:
+        return None
+    asset = AssetRecord(
+        id=int(row["id"]),
+        name=row["name"] or "",
+        base=row["base"] or "",
+        regional=row["regional"] or "",
+        sector=row["sector"] or "",
+        manager=row["manager"] or "",
+        created_by_id=row["created_by_id"],
+        created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
+        updated_at=parse_dt(row["updated_at"]),
+    )
+    if include_items:
+        if conn is not None:
+            asset.items = get_asset_items(conn, asset.id)
+        else:
+            with db_connect() as local_conn:
+                asset.items = get_asset_items(local_conn, asset.id)
+    return asset
+
+
+def list_assets(base: str = "", regional: str = "") -> list[AssetRecord]:
+    sql = "SELECT * FROM assets"
+    params: list[Any] = []
+    clauses: list[str] = []
+    if base:
+        clauses.append("base = ?")
+        params.append(base)
+    if regional:
+        clauses.append("regional = ?")
+        params.append(regional)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY created_at DESC, id DESC"
+    with db_connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+        return [asset for row in rows if (asset := row_to_asset(row, conn=conn)) is not None]
+
+
 def init_db() -> None:
     with db_connect() as conn:
         conn.executescript(
@@ -634,6 +720,28 @@ def init_db() -> None:
                 FOREIGN KEY(created_by_id) REFERENCES users(id)
             );
 
+            CREATE TABLE IF NOT EXISTS assets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                base TEXT NOT NULL,
+                regional TEXT NOT NULL,
+                sector TEXT NOT NULL,
+                manager TEXT NOT NULL,
+                created_by_id INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                FOREIGN KEY(created_by_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                serial_number TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS user_page_permissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -673,6 +781,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN min_stock INTEGER")
         if "max_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN max_stock INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_base_regional ON assets(base, regional)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_asset_items_asset_id ON asset_items(asset_id)")
         movement_count = conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"]
         if int(movement_count or 0) == 0:
             existing_products = conn.execute("SELECT id, stock_quantity FROM products WHERE stock_quantity > 0").fetchall()
@@ -884,6 +994,7 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
 
     conn.execute("DELETE FROM admin_login_codes WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
+    conn.execute("UPDATE assets SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE stock_movements SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE supply_requests SET reviewed_by_id = NULL WHERE reviewed_by_id = ?", (user_id,))
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -945,6 +1056,7 @@ def inject_globals():
         "base_unit_options": BASE_UNIT_OPTIONS,
         "franchise_unit_options": FRANCHISE_UNIT_OPTIONS,
         "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
+        "asset_regional_options": ASSET_REGIONAL_OPTIONS,
     }
 
 
@@ -2893,6 +3005,95 @@ def admin_requests():
 def admin_requests_attended():
     requests_list = list_supply_requests(status="approved")
     return render_template("admin/requests_attended.html", requests_list=requests_list, selected_status="approved")
+
+
+@app.route("/admin/assets")
+@admin_required
+@page_access_required("admin_stock")
+def admin_assets():
+    selected_base = request.args.get("base", "").strip()
+    selected_regional = request.args.get("regional", "").strip().upper()
+    if selected_base and selected_base not in BASE_UNIT_OPTION_SET:
+        selected_base = ""
+    if selected_regional and selected_regional not in ASSET_REGIONAL_OPTION_SET:
+        selected_regional = ""
+
+    assets = list_assets(base=selected_base, regional=selected_regional)
+    totals = {
+        "assets": len(assets),
+        "items": sum(len(asset.items) for asset in assets),
+        "bases": len({asset.base for asset in assets if asset.base}),
+        "mg": sum(1 for asset in assets if asset.regional == "MG"),
+        "spn": sum(1 for asset in assets if asset.regional == "SPN"),
+    }
+    return render_template(
+        "admin/assets.html",
+        assets=assets,
+        totals=totals,
+        selected_base=selected_base,
+        selected_regional=selected_regional,
+    )
+
+
+@app.post("/admin/assets/new")
+@admin_required
+@page_access_required("admin_stock")
+def admin_asset_new():
+    name = request.form.get("name", "").strip()
+    base = request.form.get("base", "").strip()
+    regional = request.form.get("regional", "").strip().upper()
+    sector = request.form.get("sector", "").strip()
+    manager = request.form.get("manager", "").strip()
+    item_names = request.form.getlist("item_name")
+    serial_numbers = request.form.getlist("serial_number")
+
+    item_rows: list[tuple[str, str]] = []
+    for index, raw_item_name in enumerate(item_names):
+        item_name = (raw_item_name or "").strip()
+        if not item_name:
+            continue
+        serial_number = (serial_numbers[index] if index < len(serial_numbers) else "").strip()
+        item_rows.append((item_name[:180], serial_number[:120]))
+
+    if not name or not base or not regional or not sector or not manager:
+        flash("Preencha nome, base, regional, setor e gestor para adicionar o ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+    if base not in BASE_UNIT_OPTION_SET:
+        flash("Selecione uma base válida para o ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+    if regional not in ASSET_REGIONAL_OPTION_SET:
+        flash("Selecione uma regional válida para o ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+    if not item_rows:
+        flash("Adicione pelo menos um item ao ativo.", "warning")
+        return redirect(url_for("admin_assets"))
+
+    try:
+        with db_connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO assets (name, base, regional, sector, manager, created_by_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name[:180], base, regional, sector[:120], manager[:120], require_current_user().id, now_iso()),
+            )
+            asset_id = get_cursor_lastrowid(cursor)
+            if asset_id is None:
+                raise RuntimeError("Não foi possível identificar o ativo criado.")
+            for item_name, serial_number in item_rows:
+                conn.execute(
+                    """
+                    INSERT INTO asset_items (asset_id, item_name, serial_number, created_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (int(asset_id), item_name, serial_number, now_iso()),
+                )
+            conn.commit()
+        flash("Ativo adicionado ao relatório.", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao adicionar ativo")
+        flash(f"Não consegui adicionar o ativo. Erro: {type(exc).__name__}.", "danger")
+    return redirect(url_for("admin_assets", base=base, regional=regional))
 
 
 @app.route("/admin/stock")

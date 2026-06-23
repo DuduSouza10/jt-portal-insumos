@@ -3755,3 +3755,270 @@ body.export-modal-open .export-language-modal * {
 .admin-split:not(.detail-grid) .table-card td:last-child {
   text-align: right !important;
 }
+
+
+/* v51 - Gestão de Ativos. */
+.asset-toolbar {
+  padding: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.asset-toolbar h2,
+.asset-modal-head h2 {
+  margin: 6px 0 6px;
+  color: var(--text-strong);
+}
+.asset-toolbar p,
+.asset-modal-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.asset-stats .stat-card strong {
+  font-size: 34px;
+}
+.asset-filter-card {
+  padding: 18px;
+}
+.asset-filter-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px) auto;
+  gap: 14px;
+  align-items: end;
+}
+.asset-filter-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.asset-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+}
+.asset-report-card {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  overflow: hidden;
+}
+.asset-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.asset-report-head h3 {
+  margin: 8px 0 6px;
+  color: var(--text-strong);
+  font-size: 20px;
+}
+.asset-report-head p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 850;
+}
+.asset-regional,
+.asset-item-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(230,0,18,.24);
+  background: rgba(230,0,18,.12);
+  color: var(--red-2);
+  font-size: 12px;
+  font-weight: 950;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.asset-item-count {
+  color: var(--text-strong);
+  background: var(--surface-soft);
+  border-color: var(--line);
+}
+.asset-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.asset-meta div {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.asset-meta dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.asset-meta dd {
+  margin: 5px 0 0;
+  color: var(--text-strong);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.asset-items-list {
+  display: grid;
+  gap: 10px;
+}
+.asset-item-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 13px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+}
+html[data-theme="light"] .asset-item-pill {
+  background: #fff;
+}
+.asset-item-pill strong,
+.asset-item-pill span {
+  overflow-wrap: anywhere;
+}
+.asset-item-pill strong {
+  color: var(--text-strong);
+}
+.asset-item-pill span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-align: right;
+}
+.asset-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 999999 !important;
+  display: none !important;
+  place-items: start center !important;
+  padding: 22px !important;
+  overflow-y: auto !important;
+}
+.asset-modal.open {
+  display: grid !important;
+}
+.asset-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .58);
+  backdrop-filter: blur(3px);
+}
+.asset-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(920px, calc(100vw - 32px));
+  margin: auto 0;
+  padding: 26px;
+  border-radius: 28px;
+  overflow: visible !important;
+  box-shadow: 0 30px 90px rgba(0,0,0,.45);
+}
+.asset-form {
+  display: grid;
+  gap: 20px;
+}
+.asset-modal-head,
+.asset-items-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.asset-items-editor {
+  display: grid;
+  gap: 12px;
+}
+.asset-items-head {
+  margin-bottom: 0;
+}
+.asset-items-head h3 {
+  margin: 0;
+  color: var(--text-strong);
+}
+.asset-item-rows {
+  display: grid;
+  gap: 12px;
+}
+.asset-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.asset-remove-item:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+.asset-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+body.asset-modal-open .page-shell,
+body.asset-modal-open .dev-credit,
+body.asset-modal-open .theme-toggle,
+body.asset-modal-open .language-toggle {
+  filter: blur(3px) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+body.asset-modal-open .asset-modal,
+body.asset-modal-open .asset-modal * {
+  filter: none !important;
+  pointer-events: auto;
+}
+@media (max-width: 860px) {
+  .asset-toolbar,
+  .asset-report-head,
+  .asset-modal-head,
+  .asset-items-head {
+    display: grid;
+  }
+  .asset-toolbar .btn,
+  .asset-modal-actions .btn,
+  .asset-filter-actions .btn {
+    width: 100%;
+  }
+  .asset-filter-form,
+  .asset-item-row,
+  .asset-meta {
+    grid-template-columns: 1fr;
+  }
+  .asset-filter-actions,
+  .asset-modal-actions {
+    display: grid;
+  }
+  .asset-item-pill {
+    display: grid;
+    justify-items: start;
+  }
+  .asset-item-pill span {
+    text-align: left;
+  }
+}
+@media (max-width: 560px) {
+  .asset-modal {
+    padding: 12px !important;
+  }
+  .asset-modal-card,
+  .asset-toolbar,
+  .asset-filter-card,
+  .asset-report-card {
+    border-radius: 18px !important;
+    padding: 16px !important;
+  }
+}

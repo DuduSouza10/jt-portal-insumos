@@ -83,6 +83,31 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     FOREIGN KEY(created_by_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    base TEXT NOT NULL,
+    regional TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    manager TEXT NOT NULL,
+    created_by_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    FOREIGN KEY(created_by_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS asset_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL,
+    item_name TEXT NOT NULL,
+    serial_number TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_base_regional ON assets(base, regional);
+CREATE INDEX IF NOT EXISTS idx_asset_items_asset_id ON asset_items(asset_id);
+
 CREATE TABLE IF NOT EXISTS user_page_permissions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
