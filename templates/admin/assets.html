@@ -7,7 +7,7 @@
   <div>
     <span class="eyebrow">Controle patrimonial</span>
     <h2>Relatórios de ativos</h2>
-    <p>Filtre por base/franquia ou regional e acompanhe os itens cadastrados.</p>
+    <p>Filtre bases e franquias separadamente, acompanhe os itens cadastrados e gere relatórios por período.</p>
   </div>
   <button class="btn primary" type="button" data-open-asset-modal>Adicionar Ativos</button>
 </section>
@@ -32,13 +32,30 @@
 </section>
 
 <section class="card asset-filter-card">
-  <form class="asset-filter-form" method="get" action="{{ url_for('admin_assets') }}">
+  <div class="section-head compact-section-head">
+    <div>
+      <span class="eyebrow">Filtros</span>
+      <h2>Filtrar ativos</h2>
+      <p class="hint">Base e franquia ficam separadas. Use apenas uma seleção por vez.</p>
+    </div>
+  </div>
+  <form class="asset-filter-form asset-filter-form-separated" method="get" action="{{ url_for('admin_assets') }}" data-separated-unit-form>
     <label>
-      Base/Franquia
-      <select name="base" id="assetFilterBase">
-        <option value="">Todas as bases/franquias</option>
-        {% for unit in asset_unit_options %}
+      Base
+      <select name="base" id="assetFilterBase" data-base-select>
+        <option value="">Selecione uma base</option>
+        {% for unit in filtered_asset_base_options %}
           <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}" {% if selected_base == unit %}selected{% endif %}>{{ unit }}</option>
+        {% endfor %}
+        <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
+      </select>
+    </label>
+    <label>
+      Franquia
+      <select name="franchise" id="assetFilterFranchise" data-franchise-select>
+        <option value="">Selecione uma franquia</option>
+        {% for unit in filtered_asset_franchise_options %}
+          <option value="{{ unit }}" data-asset-regional="{{ asset_regional_for_base(unit) }}" {% if selected_franchise == unit %}selected{% endif %}>{{ unit }}</option>
         {% endfor %}
         <option value="" disabled data-empty-base-option hidden>Sem Dados</option>
       </select>
@@ -56,6 +73,51 @@
       <button class="btn primary" type="submit">Filtrar</button>
       <a class="btn ghost" href="{{ url_for('admin_assets') }}">Limpar</a>
     </div>
+  </form>
+</section>
+
+<section class="card monthly-report-card asset-monthly-report-card">
+  <div class="section-head stock-panel-head">
+    <div>
+      <span class="eyebrow">Relatórios</span>
+      <h2>Relatório mensal de ativos</h2>
+      <p class="hint">Gere um PDF completo com todos os ativos cadastrados no período selecionado. É obrigatório escolher uma base ou uma franquia.</p>
+    </div>
+  </div>
+  <form class="monthly-report-form monthly-report-form-wide monthly-report-form-select-all" method="get" action="{{ url_for('admin_assets_period_report') }}" target="_blank" data-unit-required-form>
+    <label>
+      <span>Data inicial</span>
+      <input type="date" name="start_date" required>
+    </label>
+    <label>
+      <span>Data final</span>
+      <input type="date" name="end_date" required>
+    </label>
+    <label class="report-all-toggle">
+      <input type="checkbox" name="all_units" value="1" data-report-all-units>
+      <span>Selecionar todos</span>
+      <small>Gera o relatório com todas as bases e franquias do período.</small>
+    </label>
+    <label>
+      <span>Base</span>
+      <select name="base" data-report-base-select>
+        <option value="">Selecione uma base</option>
+        {% for unit in base_unit_options %}
+          <option value="{{ unit }}">{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Franquia</span>
+      <select name="franchise" data-report-franchise-select>
+        <option value="">Selecione uma franquia</option>
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}">{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Gerar relatório</button>
+    <p class="report-form-hint">Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.</p>
   </form>
 </section>
 
@@ -188,6 +250,7 @@
   const addItemButton = document.getElementById('addAssetItem');
   const filterRegional = document.getElementById('assetFilterRegional');
   const filterBase = document.getElementById('assetFilterBase');
+  const filterFranchise = document.getElementById('assetFilterFranchise');
   const modalRegional = document.getElementById('assetModalRegional');
   const modalBase = document.getElementById('assetModalBase');
   if (!modal || !openButton || !itemRows || !addItemButton) return;
@@ -372,6 +435,17 @@
   if (filterRegional) {
     filterRegional.addEventListener('change', function () {
       filterBaseSelect(filterBase, filterRegional.value);
+      filterBaseSelect(filterFranchise, filterRegional.value);
+    });
+  }
+  if (filterBase) {
+    filterBase.addEventListener('change', function () {
+      if (filterBase.value && filterFranchise) filterFranchise.value = '';
+    });
+  }
+  if (filterFranchise) {
+    filterFranchise.addEventListener('change', function () {
+      if (filterFranchise.value && filterBase) filterBase.value = '';
     });
   }
   if (modalRegional) {
@@ -417,6 +491,7 @@
     if (modal.classList.contains('open')) refreshLanguage();
   });
   filterBaseSelect(filterBase, filterRegional ? filterRegional.value : '');
+  filterBaseSelect(filterFranchise, filterRegional ? filterRegional.value : '');
   filterBaseSelect(modalBase, modalRegional ? modalRegional.value : '');
   updateRemoveButtons();
 })();

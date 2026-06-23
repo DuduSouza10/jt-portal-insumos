@@ -718,6 +718,54 @@ def base_options_for_asset_regional(regional: str = "") -> list[str]:
     return [unit for unit in BASE_FRANCHISE_OPTIONS if asset_regional_for_base(unit) == normalized]
 
 
+def base_unit_options_for_asset_regional(regional: str = "") -> list[str]:
+    normalized = normalize_asset_regional(regional)
+    options = BASE_UNIT_OPTIONS
+    if normalized and normalized != "Matriz":
+        options = [unit for unit in options if asset_regional_for_base(unit) == normalized]
+    elif normalized == "Matriz":
+        options = []
+    return options
+
+
+def franchise_unit_options_for_asset_regional(regional: str = "") -> list[str]:
+    normalized = normalize_asset_regional(regional)
+    options = FRANCHISE_UNIT_OPTIONS
+    if normalized and normalized != "Matriz":
+        options = [unit for unit in options if asset_regional_for_base(unit) == normalized]
+    elif normalized == "Matriz":
+        options = []
+    return options
+
+
+def validate_unit_selection(base: str, franchise: str, *, required: bool = False) -> tuple[str, str]:
+    """Valida seleção separada de base/franquia.
+
+    Retorna (unidade, tipo), onde tipo é "base", "franchise" ou "".
+    """
+    base = (base or "").strip()
+    franchise = (franchise or "").strip()
+    if base and franchise:
+        raise ValueError("Selecione somente uma base ou uma franquia, não as duas.")
+    if required and not base and not franchise:
+        raise ValueError("Selecione obrigatoriamente uma base ou uma franquia para gerar o relatório.")
+    if base:
+        if base not in BASE_UNIT_OPTION_SET:
+            raise ValueError("Base selecionada inválida.")
+        return base, "base"
+    if franchise:
+        if franchise not in FRANCHISE_UNIT_OPTION_SET:
+            raise ValueError("Franquia selecionada inválida.")
+        return franchise, "franchise"
+    return "", ""
+
+
+def unit_kind_label(kind: str) -> str:
+    if kind == "all":
+        return "Todas as unidades"
+    return "Franquia" if kind == "franchise" else "Base" if kind == "base" else "Unidade"
+
+
 def init_db() -> None:
     with db_connect() as conn:
         conn.executescript(
@@ -2104,21 +2152,53 @@ def parse_report_date(value: str, field_label: str) -> datetime:
         raise ValueError(f"{field_label} inválida. Use uma data válida.") from exc
 
 
-def list_supply_requests_between(start_dt: datetime, end_dt: datetime) -> list[SupplyRequest]:
+def list_supply_requests_between(start_dt: datetime, end_dt: datetime, organization_name: str = "") -> list[SupplyRequest]:
     start_sql = start_dt.strftime("%Y-%m-%d %H:%M:%S")
     end_sql = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+    params: list[Any] = [start_sql, end_sql]
+    unit_filter = (organization_name or "").strip()
+    unit_clause = ""
+    if unit_filter:
+        unit_clause = " AND u.organization_name = ?"
+        params.append(unit_filter)
     with db_connect() as conn:
         rows = conn.execute(
-            """
-            SELECT *
-              FROM supply_requests
-             WHERE created_at >= ?
-               AND created_at <= ?
-             ORDER BY created_at ASC, id ASC
+            f"""
+            SELECT sr.*
+              FROM supply_requests sr
+              LEFT JOIN users u ON u.id = sr.user_id
+             WHERE sr.created_at >= ?
+               AND sr.created_at <= ?
+               {unit_clause}
+             ORDER BY sr.created_at ASC, sr.id ASC
             """,
-            (start_sql, end_sql),
+            params,
         ).fetchall()
     return [req for row in rows if (req := row_to_supply_request(row)) is not None]
+
+
+def list_assets_between(start_dt: datetime, end_dt: datetime, unit_name: str = "") -> list[AssetRecord]:
+    start_sql = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+    end_sql = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+    unit_filter = (unit_name or "").strip()
+    unit_clause = ""
+    params: list[Any] = [start_sql, end_sql]
+    if unit_filter:
+        unit_clause = " AND base = ?"
+        params.append(unit_filter)
+    with db_connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT *
+              FROM assets
+             WHERE created_at >= ?
+               AND created_at <= ?
+               {unit_clause}
+             ORDER BY created_at ASC, id ASC
+            """,
+            params,
+        ).fetchall()
+        return [asset for row in rows if (asset := row_to_asset(row, conn=conn)) is not None]
 
 
 def build_supply_requests_period_report_pdf(
@@ -2126,6 +2206,8 @@ def build_supply_requests_period_report_pdf(
     start_dt: datetime,
     end_dt: datetime,
     viewer: User,
+    unit_name: str = "",
+    unit_kind: str = "",
 ) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -2167,13 +2249,14 @@ def build_supply_requests_period_report_pdf(
         logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="ReportFallbackLogo", fontName=PDF_TEXT_FONT_BOLD, fontSize=13, textColor=colors.HexColor("#e60012")))
 
     period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
+    unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
     generated_label = datetime.now().strftime("%d/%m/%Y %H:%M")
     story: list[Any] = []
     header = Table(
         [[
             logo_cell,
             Paragraph("Relatório de Solicitações de Insumos", styles["ReportTitle"]),
-            Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["ReportMeta"]),
+            Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><b>Unidade</b><br/>{pdf_clean_text(unit_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["ReportMeta"]),
         ]],
         colWidths=[36 * mm, 92 * mm, 50 * mm],
     )
@@ -2188,7 +2271,7 @@ def build_supply_requests_period_report_pdf(
     ]))
     story.append(header)
     story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph("Relatório consolidado com todas as solicitações registradas no intervalo selecionado, incluindo solicitante, base/franquia, status, número de pessoas, itens e valores.", styles["ReportSubtitle"]))
+    story.append(Paragraph(f"Relatório consolidado das solicitações registradas no intervalo selecionado para {pdf_clean_text(unit_label)}, incluindo solicitante, status, número de pessoas, itens, quantidades, valores e observações.", styles["ReportSubtitle"]))
     story.append(Spacer(1, 6 * mm))
 
     status_counts: dict[str, int] = {}
@@ -2336,6 +2419,160 @@ def build_supply_requests_period_report_pdf(
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     buffer.seek(0)
     return buffer
+
+def build_assets_period_report_pdf(
+    assets: list[AssetRecord],
+    start_dt: datetime,
+    end_dt: datetime,
+    viewer: User,
+    unit_name: str,
+    unit_kind: str,
+) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=16 * mm,
+        rightMargin=16 * mm,
+        topMargin=16 * mm,
+        bottomMargin=18 * mm,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="AssetReportTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=18.5, leading=22, textColor=colors.HexColor("#141414"), spaceAfter=2))
+    styles.add(ParagraphStyle(name="AssetReportSubtitle", fontName=PDF_TEXT_FONT, fontSize=8.8, leading=12, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="AssetReportLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
+    styles.add(ParagraphStyle(name="AssetReportCell", fontName=PDF_TEXT_FONT, fontSize=7.5, leading=9.8, textColor=colors.HexColor("#222222")))
+    styles.add(ParagraphStyle(name="AssetReportCellBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.6, leading=9.8, textColor=colors.HexColor("#111111")))
+    styles.add(ParagraphStyle(name="AssetReportSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=12.0, leading=15, textColor=colors.HexColor("#111111"), spaceBefore=7, spaceAfter=7))
+    styles.add(ParagraphStyle(name="AssetReportSmall", fontName=PDF_TEXT_FONT, fontSize=6.8, leading=8.8, textColor=colors.HexColor("#666666")))
+
+    def p(value: Any, style_name: str = "AssetReportCell") -> Paragraph:
+        return Paragraph(pdf_clean_text(value), styles[style_name])
+
+    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
+    try:
+        drawing = svg2rlg(str(logo_path))
+        if drawing is not None and drawing.width:
+            scale = (34 * mm) / drawing.width
+            drawing.width *= scale
+            drawing.height *= scale
+            drawing.scale(scale, scale)
+            logo_cell: Any = drawing
+        else:
+            raise ValueError("Logo SVG inválida")
+    except Exception:
+        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="AssetReportFallbackLogo", fontName=PDF_TEXT_FONT_BOLD, fontSize=13, textColor=colors.HexColor("#e60012")))
+
+    period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
+    unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
+    generated_label = datetime.now().strftime("%d/%m/%Y %H:%M")
+    total_assets = len(assets)
+    total_item_lines = sum(len(asset.items) for asset in assets)
+    total_quantity = sum(sum(max(0, int(item.quantity or 0)) for item in asset.items) for asset in assets)
+    sectors = len({asset.sector for asset in assets if asset.sector})
+    managers = len({asset.manager for asset in assets if asset.manager})
+
+    story: list[Any] = []
+    header = Table(
+        [[
+            logo_cell,
+            Paragraph("Relatório de Ativos", styles["AssetReportTitle"]),
+            Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><b>Unidade</b><br/>{pdf_clean_text(unit_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["AssetReportCell"]),
+        ]],
+        colWidths=[36 * mm, 90 * mm, 52 * mm],
+    )
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.0, colors.HexColor("#e60012")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.append(header)
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Relatório consolidado dos ativos cadastrados no período selecionado, com dados da unidade, setor, gestor e itens vinculados.", styles["AssetReportSubtitle"]))
+    story.append(Spacer(1, 6 * mm))
+
+    summary = Table([
+        [p("ATIVOS", "AssetReportLabel"), p("LINHAS DE ITENS", "AssetReportLabel"), p("QUANTIDADE TOTAL", "AssetReportLabel"), p("SETORES", "AssetReportLabel"), p("GESTORES", "AssetReportLabel")],
+        [p(total_assets, "AssetReportCellBold"), p(total_item_lines, "AssetReportCellBold"), p(total_quantity, "AssetReportCellBold"), p(sectors, "AssetReportCellBold"), p(managers, "AssetReportCellBold")],
+    ], colWidths=[35.6 * mm] * 5)
+    summary.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(summary)
+    story.append(Spacer(1, 7 * mm))
+
+    story.append(Paragraph("Ativos do período", styles["AssetReportSection"]))
+    if not assets:
+        empty = Table([[Paragraph("Nenhum ativo encontrado para o período e unidade selecionados.", styles["AssetReportCell"])]], colWidths=[178 * mm])
+        empty.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff8f8")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ]))
+        story.append(empty)
+    else:
+        for asset in assets:
+            item_parts = []
+            for item in asset.items:
+                product = get_product(item.product_id) if item.product_id else None
+                unit = product.unit_measure if product and product.unit_measure else "un"
+                serial = item.serial_number or "Sem patrimônio/série"
+                item_parts.append(f"{item.quantity} {unit} - {item.item_name} • {serial}")
+            if not item_parts:
+                item_parts.append("Sem itens")
+            detail_rows = [
+                [p(f"Ativo #{asset.id}", "AssetReportCellBold"), p(asset.name, "AssetReportCellBold"), p(asset.created_at.strftime("%d/%m/%Y %H:%M"), "AssetReportCellBold")],
+                [p("Base/Franquia", "AssetReportLabel"), p("Setor", "AssetReportLabel"), p("Gestor", "AssetReportLabel")],
+                [p(asset.base), p(asset.sector), p(asset.manager)],
+                [p("Itens vinculados", "AssetReportLabel"), p("Regional", "AssetReportLabel"), p("Total do ativo", "AssetReportLabel")],
+                [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_parts), styles["AssetReportSmall"]), p(asset.regional), p(str(sum(max(0, int(item.quantity or 0)) for item in asset.items)), "AssetReportCellBold")],
+            ]
+            detail = Table(detail_rows, colWidths=[82 * mm, 54 * mm, 42 * mm])
+            detail.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fffafa")),
+                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#fffafa")),
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6d6d8")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#eeeeee")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(detail)
+            story.append(Spacer(1, 3.5 * mm))
+
+    def footer(canvas, document):
+        canvas.saveState()
+        width, _height = A4
+        canvas.setStrokeColor(colors.HexColor("#e60012"))
+        canvas.setLineWidth(0.7)
+        canvas.line(16 * mm, 13 * mm, width - 16 * mm, 13 * mm)
+        canvas.setFont(PDF_TEXT_FONT, 7.2)
+        canvas.setFillColor(colors.HexColor("#777777"))
+        canvas.drawString(16 * mm, 8.5 * mm, "J&T Express Brazil • Relatório mensal de ativos")
+        canvas.drawRightString(width - 16 * mm, 8.5 * mm, f"Página {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return buffer
+
 
 def build_asset_pdf(asset: AssetRecord, viewer: User) -> BytesIO:
     buffer = BytesIO()
@@ -3877,13 +4114,22 @@ def admin_requests_attended():
 @admin_required
 @page_access_required("admin_stock")
 def admin_assets():
-    selected_base = request.args.get("base", "").strip()
+    selected_base = (request.args.get("base") or "").strip()
+    selected_franchise = (request.args.get("franchise") or "").strip()
     selected_regional = normalize_asset_regional(request.args.get("regional", ""))
-    filtered_base_options = base_options_for_asset_regional(selected_regional)
-    if selected_base and (selected_base not in BASE_FRANCHISE_OPTION_SET or selected_base not in filtered_base_options):
-        selected_base = ""
+    filtered_asset_base_options = base_unit_options_for_asset_regional(selected_regional)
+    filtered_asset_franchise_options = franchise_unit_options_for_asset_regional(selected_regional)
 
-    assets = list_assets(base=selected_base, regional=selected_regional)
+    if selected_base and selected_base not in filtered_asset_base_options:
+        selected_base = ""
+    if selected_franchise and selected_franchise not in filtered_asset_franchise_options:
+        selected_franchise = ""
+    if selected_base and selected_franchise:
+        flash("Selecione somente uma base ou uma franquia para filtrar.", "warning")
+        selected_franchise = ""
+
+    selected_unit = selected_base or selected_franchise
+    assets = list_assets(base=selected_unit, regional=selected_regional)
     with db_connect() as conn:
         product_rows = conn.execute("SELECT * FROM products WHERE active = 1 ORDER BY category ASC, name ASC").fetchall()
     asset_product_options = [
@@ -3910,8 +4156,11 @@ def admin_assets():
         assets=assets,
         totals=totals,
         selected_base=selected_base,
+        selected_franchise=selected_franchise,
         selected_regional=selected_regional,
-        filtered_base_options=filtered_base_options,
+        filtered_asset_base_options=filtered_asset_base_options,
+        filtered_asset_franchise_options=filtered_asset_franchise_options,
+        filtered_base_options=base_options_for_asset_regional(selected_regional),
         asset_product_options=asset_product_options,
     )
 
@@ -4230,6 +4479,8 @@ def admin_stock():
         chart_products=chart_products,
         chart_categories=chart_categories,
         movement_type_label=movement_type_label,
+        base_unit_options=BASE_UNIT_OPTIONS,
+        franchise_unit_options=FRANCHISE_UNIT_OPTIONS,
     )
 
 
@@ -4239,11 +4490,18 @@ def admin_stock():
 def admin_stock_requests_report():
     start_raw = (request.args.get("start_date") or "").strip()
     end_raw = (request.args.get("end_date") or "").strip()
+    base_raw = (request.args.get("base") or "").strip()
+    franchise_raw = (request.args.get("franchise") or "").strip()
+    all_units = (request.args.get("all_units") or "").strip().lower() in {"1", "true", "on", "all", "todos"}
     if not start_raw or not end_raw:
         flash("Informe a data inicial e a data final para gerar o relatório.", "warning")
         return redirect(url_for("admin_stock"))
 
     try:
+        if all_units:
+            selected_unit, selected_kind = "", "all"
+        else:
+            selected_unit, selected_kind = validate_unit_selection(base_raw, franchise_raw, required=True)
         start_dt = parse_report_date(start_raw, "Data inicial")
         end_base = parse_report_date(end_raw, "Data final")
         end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
@@ -4255,14 +4513,58 @@ def admin_stock_requests_report():
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect(url_for("admin_stock"))
 
-    requests_list = list_supply_requests_between(start_dt, end_dt)
-    buffer = build_supply_requests_period_report_pdf(requests_list, start_dt, end_dt, require_current_user())
-    filename = f"relatorio_solicitacoes_insumos_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    requests_list = list_supply_requests_between(start_dt, end_dt, selected_unit)
+    buffer = build_supply_requests_period_report_pdf(requests_list, start_dt, end_dt, require_current_user(), selected_unit, selected_kind)
+    unit_slug = "todas_unidades" if selected_kind == "all" else (re.sub(r"[^A-Za-z0-9]+", "_", selected_unit).strip("_").lower() or "unidade")
+    filename = f"relatorio_solicitacoes_insumos_{unit_slug}_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(
         storage_key("reports", "supply_requests", filename),
         buffer,
         "application/pdf",
-        {"type": "supply_requests_period_report", "start_date": start_raw, "end_date": end_raw},
+        {"type": "supply_requests_period_report", "start_date": start_raw, "end_date": end_raw, "unit": selected_unit, "unit_kind": selected_kind},
+    )
+    buffer.seek(0)
+    return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
+
+
+@app.get("/admin/assets/period-report")
+@admin_required
+@page_access_required("admin_stock")
+def admin_assets_period_report():
+    start_raw = (request.args.get("start_date") or "").strip()
+    end_raw = (request.args.get("end_date") or "").strip()
+    base_raw = (request.args.get("base") or "").strip()
+    franchise_raw = (request.args.get("franchise") or "").strip()
+    all_units = (request.args.get("all_units") or "").strip().lower() in {"1", "true", "on", "all", "todos"}
+    if not start_raw or not end_raw:
+        flash("Informe a data inicial e a data final para gerar o relatório de ativos.", "warning")
+        return redirect(url_for("admin_assets"))
+
+    try:
+        if all_units:
+            selected_unit, selected_kind = "", "all"
+        else:
+            selected_unit, selected_kind = validate_unit_selection(base_raw, franchise_raw, required=True)
+        start_dt = parse_report_date(start_raw, "Data inicial")
+        end_base = parse_report_date(end_raw, "Data final")
+        end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
+    except ValueError as exc:
+        flash(str(exc), "danger")
+        return redirect(url_for("admin_assets"))
+
+    if end_dt < start_dt:
+        flash("A data final não pode ser menor que a data inicial.", "warning")
+        return redirect(url_for("admin_assets"))
+
+    assets = list_assets_between(start_dt, end_dt, selected_unit)
+    buffer = build_assets_period_report_pdf(assets, start_dt, end_dt, require_current_user(), selected_unit, selected_kind)
+    unit_slug = "todas_unidades" if selected_kind == "all" else (re.sub(r"[^A-Za-z0-9]+", "_", selected_unit).strip("_").lower() or "unidade")
+    filename = f"relatorio_ativos_{unit_slug}_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    store_generated_file(
+        storage_key("reports", "assets", filename),
+        buffer,
+        "application/pdf",
+        {"type": "assets_period_report", "start_date": start_raw, "end_date": end_raw, "unit": selected_unit, "unit_kind": selected_kind},
     )
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)

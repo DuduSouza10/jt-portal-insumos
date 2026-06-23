@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
-{% block title %}Gestão de Estoque • Portal de Insumos J&T{% endblock %}
-{% block page_title %}Gestão de Estoque{% endblock %}
-{% block page_subtitle %}Painel de controle com níveis mínimos e máximos, saúde do estoque e movimentações registradas.{% endblock %}
+{% block title %}Gestão de Insumos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Gestão de Insumos{% endblock %}
+{% block page_subtitle %}Painel de controle dos insumos, níveis mínimos e máximos, saúde do estoque, movimentações e relatórios por unidade.{% endblock %}
 {% block content %}
 <section class="stock-hero card">
   <div class="stock-hero-copy">
     <span class="eyebrow">Controle operacional</span>
-    <h2>Visão geral do estoque</h2>
-    <p>Acompanhe produtos críticos, estoque saudável, faixa mínima/máxima e todo o histórico de movimentações.</p>
+    <h2>Visão geral dos insumos</h2>
+    <p>Acompanhe insumos críticos, estoque saudável, faixa mínima/máxima e todo o histórico de movimentações.</p>
   </div>
   <div class="stock-hero-kpis">
     <div><span>Produtos</span><strong>{{ totals.products }}</strong></div>
@@ -25,7 +25,7 @@
       <p class="hint">Gere um PDF completo com todas as solicitações realizadas no período desejado, incluindo base/franquia, solicitante, pessoas na base, status, itens, quantidades, valores e observações.</p>
     </div>
   </div>
-  <form class="monthly-report-form" method="get" action="{{ url_for('admin_stock_requests_report') }}" target="_blank">
+  <form class="monthly-report-form monthly-report-form-wide monthly-report-form-select-all" method="get" action="{{ url_for('admin_stock_requests_report') }}" target="_blank" data-unit-required-form>
     <label>
       <span>Data inicial</span>
       <input type="date" name="start_date" required>
@@ -34,7 +34,31 @@
       <span>Data final</span>
       <input type="date" name="end_date" required>
     </label>
+    <label class="report-all-toggle">
+      <input type="checkbox" name="all_units" value="1" data-report-all-units>
+      <span>Selecionar todos</span>
+      <small>Gera o relatório com todas as bases e franquias do período.</small>
+    </label>
+    <label>
+      <span>Base</span>
+      <select name="base" data-report-base-select>
+        <option value="">Selecione uma base</option>
+        {% for unit in base_unit_options %}
+          <option value="{{ unit }}">{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>Franquia</span>
+      <select name="franchise" data-report-franchise-select>
+        <option value="">Selecione uma franquia</option>
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}">{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <button class="btn primary" type="submit">Gerar relatório</button>
+    <p class="report-form-hint">Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.</p>
   </form>
 </section>
 

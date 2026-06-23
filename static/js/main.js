@@ -229,3 +229,59 @@ window.addEventListener('jt-language-change', function () {
   if (Array.isArray(products)) renderProducts();
   renderCart();
 });
+
+// v63 - formulários com base/franquia separados em relatórios
+(function () {
+  function setupSeparatedUnitForms() {
+    document.querySelectorAll('[data-unit-required-form], [data-separated-unit-form]').forEach(function (form) {
+      if (form.dataset.unitFormReady === '1') return;
+      form.dataset.unitFormReady = '1';
+      const baseSelect = form.querySelector('[data-report-base-select], [data-base-select]');
+      const franchiseSelect = form.querySelector('[data-report-franchise-select], [data-franchise-select]');
+      const allUnitsToggle = form.querySelector('[data-report-all-units]');
+      function sync(changed) {
+        if (!baseSelect || !franchiseSelect) return;
+        if (allUnitsToggle && allUnitsToggle.checked) {
+          baseSelect.value = '';
+          franchiseSelect.value = '';
+          baseSelect.disabled = true;
+          franchiseSelect.disabled = true;
+          return;
+        }
+        if (baseSelect) baseSelect.disabled = false;
+        if (franchiseSelect) franchiseSelect.disabled = false;
+        if (changed === baseSelect && baseSelect.value) franchiseSelect.value = '';
+        if (changed === franchiseSelect && franchiseSelect.value) baseSelect.value = '';
+      }
+      if (allUnitsToggle) {
+        allUnitsToggle.addEventListener('change', function () { sync(allUnitsToggle); });
+        sync(allUnitsToggle);
+      }
+      if (baseSelect) baseSelect.addEventListener('change', function () { sync(baseSelect); });
+      if (franchiseSelect) franchiseSelect.addEventListener('change', function () { sync(franchiseSelect); });
+      if (form.hasAttribute('data-unit-required-form')) {
+        form.addEventListener('submit', function (event) {
+          const allSelected = !!(allUnitsToggle && allUnitsToggle.checked);
+          const hasBase = !!(baseSelect && baseSelect.value);
+          const hasFranchise = !!(franchiseSelect && franchiseSelect.value);
+          if (allSelected) return;
+          if (hasBase && hasFranchise) {
+            event.preventDefault();
+            alert(window.jtText ? window.jtText('Selecione somente uma base ou uma franquia, não as duas.') : 'Selecione somente uma base ou uma franquia, não as duas.');
+            return;
+          }
+          if (!hasBase && !hasFranchise) {
+            event.preventDefault();
+            alert(window.jtText ? window.jtText('Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.') : 'Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.');
+          }
+        });
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSeparatedUnitForms);
+  } else {
+    setupSeparatedUnitForms();
+  }
+  window.addEventListener('jt-language-change', setupSeparatedUnitForms);
+})();

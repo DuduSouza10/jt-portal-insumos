@@ -45,7 +45,7 @@
             {% if can_access('admin_stock') %}
               <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_assets','admin_asset_new','admin_stock'] else '' }}">
                 <button class="nav-drop-toggle" type="button" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle>
-                  Gestão de Estoque <span aria-hidden="true">▾</span>
+                  Gestão <span aria-hidden="true">▾</span>
                 </button>
                 <div class="nav-drop-menu" role="menu">
                   <a role="menuitem" href="{{ url_for('admin_assets') }}" class="{{ 'active' if request.endpoint in ['admin_assets','admin_asset_new'] else '' }}">Gestão de Ativos</a>
