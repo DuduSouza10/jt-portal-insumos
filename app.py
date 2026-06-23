@@ -1457,14 +1457,14 @@ def get_header_value(row_values: list[Any], header_map: dict[str, int], names: l
 
 
 PRODUCT_IMPORT_HEADER_ALIASES = {
-    "id": ["ID", "Código", "Codigo", "编号", "編號"],
-    "name": ["Nome do produto", "Nome", "Produto", "Insumo", "产品名称", "產品名稱", "商品名称", "产品"],
-    "category": ["Categoria", "Categoria do produto", "类别", "類別", "分类", "分類"],
-    "unit_measure": ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "Medida", "计量单位", "計量單位", "单位", "單位"],
-    "description": ["Descrição", "Descricao", "Descrição do produto", "Descricao do produto", "描述", "说明", "說明"],
-    "stock_quantity": ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "Qtd", "可用库存", "可用庫存", "库存", "庫存"],
-    "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "单价", "單價", "价格", "價格"],
-    "limit_base": ["Limite para bases", "Limite base", "Base", "基地限制"],
+    "id": ["ID", "Código", "Codigo", "Cod", "编号", "編號"],
+    "name": ["Nome do produto", "Nome", "Produto", "Insumo", "Item", "Descrição do item", "Descricao do item", "产品名称", "產品名稱", "商品名称", "产品", "品名"],
+    "category": ["Categoria", "Categoria do produto", "Grupo", "Tipo", "类别", "類別", "分类", "分類"],
+    "unit_measure": ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "U.M.", "Medida", "计量单位", "計量單位", "单位", "單位"],
+    "description": ["Descrição", "Descricao", "Descrição do produto", "Descricao do produto", "Observação", "Observacao", "Detalhes", "描述", "说明", "說明", "备注", "備註"],
+    "stock_quantity": ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "Qtd", "Qtde", "Saldo", "可用库存", "可用庫存", "库存", "庫存", "数量", "數量"],
+    "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "Custo", "单价", "單價", "价格", "價格"],
+    "limit_base": ["Limite para bases", "Limite base", "Base", "基地限制", "网点限制"],
     "limit_franchise": ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制", "加盟限制"],
     "min_stock": ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "Min", "最低库存", "最低庫存"],
     "max_stock": ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "Max", "最高库存", "最高庫存"],
@@ -1533,15 +1533,42 @@ def parse_product_import_record(row_number: int, row_values: list[Any], header_m
     )
 
 
+
+def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
+    """Assinatura exata da linha. Não junta produtos só pelo nome para não sumir item da planilha."""
+    return (
+        record.product_id,
+        normalize_product_lookup_key(record.name),
+        normalize_product_lookup_key(record.category),
+        normalize_product_lookup_key(record.unit_measure),
+        normalize_product_lookup_key(record.description),
+        int(record.stock_quantity or 0),
+        int(record.price_cents or 0),
+        record.limit_base,
+        record.limit_franchise,
+        record.min_stock,
+        record.max_stock,
+        bool(record.active),
+    )
+
+
 def dedupe_import_records(records: list[ProductImportRecord]) -> tuple[list[ProductImportRecord], int]:
-    ordered: dict[str, ProductImportRecord] = {}
+    """Remove somente linhas 100% iguais.
+
+    Versões anteriores juntavam tudo pelo nome do produto. Isso fazia produto desaparecer
+    quando a planilha tinha itens parecidos, variações ou o mesmo nome em categorias diferentes.
+    """
+    seen: set[tuple[Any, ...]] = set()
+    result: list[ProductImportRecord] = []
     duplicates = 0
     for record in records:
-        key = f"id:{record.product_id}" if record.product_id is not None else f"name:{normalize_product_lookup_key(record.name)}"
-        if key in ordered:
+        signature = product_import_signature(record)
+        if signature in seen:
             duplicates += 1
-        ordered[key] = record
-    return list(ordered.values()), duplicates
+            continue
+        seen.add(signature)
+        result.append(record)
+    return result, duplicates
 
 
 def flash_import_errors(row_errors: list[str]) -> None:
@@ -1583,7 +1610,7 @@ def header_map_score(header_map: dict[str, int]) -> int:
     return required
 
 
-def detect_product_header_row(worksheet: Any, max_scan_rows: int = 12) -> tuple[int, dict[str, int]]:
+def detect_product_header_row(worksheet: Any, max_scan_rows: int = 40) -> tuple[int, dict[str, int]]:
     """Encontra a linha de cabeçalho mesmo quando a planilha tem título antes da tabela."""
     best_row_number = 1
     best_map: dict[str, int] = {}
@@ -1623,95 +1650,126 @@ def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
     )
 
 
-def execute_insert_products_bulk(conn: Any, records: list[ProductImportRecord], row_errors: list[str]) -> tuple[int, int]:
-    """Insere produtos em blocos para evitar timeout no D1/Render."""
-    created = 0
+def sql_literal(value: Any) -> str:
+    """Literal SQL seguro para reduzir centenas de chamadas HTTP ao D1 sem limite de parâmetros."""
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value != value:
+            return "NULL"
+        return str(value)
+    text_value = str(value)
+    # Remove caracteres de controle que podem quebrar SQL/planilha.
+    text_value = "".join(ch for ch in text_value if ch == "\n" or ch == "\t" or ord(ch) >= 32)
+    return "'" + text_value.replace("'", "''") + "'"
+
+
+def product_upsert_sql_rows(rows: list[tuple[int | None, ProductImportRecord]], created_at: str, updated_at: str) -> str:
+    values_sql: list[str] = []
+    for target_id, record in rows:
+        values = [
+            target_id,
+            record.name,
+            record.category,
+            record.unit_measure,
+            record.description,
+            int(record.stock_quantity or 0),
+            int(record.price_cents or 0),
+            record.limit_base,
+            record.limit_franchise,
+            record.min_stock,
+            record.max_stock,
+            1 if record.active else 0,
+            created_at,
+            updated_at,
+        ]
+        values_sql.append("(" + ", ".join(sql_literal(value) for value in values) + ")")
+    return ",\n".join(values_sql)
+
+
+def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, ProductImportRecord]], row_errors: list[str]) -> tuple[int, int, int]:
+    """Cria/atualiza produtos em poucos comandos, sem explodir a página em timeout/500.
+
+    A versão anterior caía para centenas de requisições linha a linha no Cloudflare D1.
+    Isso fazia o Render estourar tempo, abrir Internal Server Error e deixar a importação pela metade.
+    """
+    created = sum(1 for target_id, _record in rows if target_id is None)
+    updated = len(rows) - created
     skipped = 0
-    fields = "name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at"
-    single_placeholder = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    for chunk in chunk_list(records, 40):
+    fields = "id, name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at, updated_at"
+    update_set = """
+        name = excluded.name,
+        category = excluded.category,
+        unit_measure = excluded.unit_measure,
+        description = excluded.description,
+        stock_quantity = excluded.stock_quantity,
+        price_cents = excluded.price_cents,
+        limit_base = excluded.limit_base,
+        limit_franchise = excluded.limit_franchise,
+        min_stock = excluded.min_stock,
+        max_stock = excluded.max_stock,
+        active = excluded.active,
+        updated_at = excluded.updated_at
+    """
+    # 60 linhas por SQL mantém o payload pequeno e evita timeout; ainda reduz muito as chamadas ao D1.
+    for chunk in chunk_list(rows, 60):
         if not chunk:
             continue
-        placeholders = ", ".join([single_placeholder] * len(chunk))
-        params: list[Any] = []
         created_at = now_iso()
-        for record in chunk:
-            params.extend(product_record_db_values(record))
-            params.append(created_at)
+        updated_at = now_iso()
+        sql = f"""
+        INSERT INTO products ({fields})
+        VALUES {product_upsert_sql_rows(chunk, created_at, updated_at)}
+        ON CONFLICT(id) DO UPDATE SET {update_set}
+        """
         try:
-            conn.execute(f"INSERT INTO products ({fields}) VALUES {placeholders}", tuple(params))
-            created += len(chunk)
-        except Exception as bulk_exc:
-            print(f"[IMPORTAÇÃO PRODUTOS] Inserção em bloco falhou; tentando linha a linha: {bulk_exc}")
-            for record in chunk:
-                try:
-                    conn.execute(
-                        f"INSERT INTO products ({fields}) VALUES {single_placeholder}",
-                        (*product_record_db_values(record), now_iso()),
-                    )
-                    created += 1
-                except Exception as exc:
-                    skipped += 1
-                    row_errors.append(f"linha {record.source_row}: {exc}")
-                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao inserir linha {record.source_row} ({record.name}): {exc}")
-    return created, skipped
-
-
-def execute_update_products_bulk(conn: Any, updates: list[tuple[int, ProductImportRecord]], row_errors: list[str]) -> tuple[int, int]:
-    """Atualiza produtos em blocos via CASE para reduzir centenas de chamadas HTTP no D1."""
-    updated = 0
-    skipped = 0
-    field_getters: list[tuple[str, Any]] = [
-        ("name", lambda r: r.name),
-        ("category", lambda r: r.category),
-        ("unit_measure", lambda r: r.unit_measure),
-        ("description", lambda r: r.description),
-        ("stock_quantity", lambda r: int(r.stock_quantity or 0)),
-        ("price_cents", lambda r: int(r.price_cents or 0)),
-        ("limit_base", lambda r: r.limit_base),
-        ("limit_franchise", lambda r: r.limit_franchise),
-        ("min_stock", lambda r: r.min_stock),
-        ("max_stock", lambda r: r.max_stock),
-        ("active", lambda r: 1 if r.active else 0),
-    ]
-    for chunk in chunk_list(updates, 25):
-        if not chunk:
-            continue
-        ids = [int(product_id) for product_id, _record in chunk]
-        id_sql = ", ".join(str(product_id) for product_id in ids)
-        assignments: list[str] = []
-        params: list[Any] = []
-        for field_name, getter in field_getters:
-            case_parts = []
-            for product_id, record in chunk:
-                case_parts.append(f"WHEN {int(product_id)} THEN ?")
-                params.append(getter(record))
-            assignments.append(f"{field_name} = CASE id {' '.join(case_parts)} ELSE {field_name} END")
-        assignments.append("updated_at = ?")
-        params.append(now_iso())
-        sql = f"UPDATE products SET {', '.join(assignments)} WHERE id IN ({id_sql})"
-        try:
-            conn.execute(sql, tuple(params))
-            updated += len(chunk)
-        except Exception as bulk_exc:
-            print(f"[IMPORTAÇÃO PRODUTOS] Atualização em bloco falhou; tentando linha a linha: {bulk_exc}")
-            for product_id, record in chunk:
-                try:
-                    conn.execute(
+            conn.execute(sql)
+        except Exception as chunk_exc:
+            print(f"[IMPORTAÇÃO PRODUTOS] Upsert em bloco falhou; tentando bloco menor: {chunk_exc}")
+            # Divide novamente para impedir que uma célula problemática derrube 60 produtos.
+            if len(chunk) > 1:
+                for small in chunk_list(chunk, 10):
+                    try:
+                        small_sql = f"""
+                        INSERT INTO products ({fields})
+                        VALUES {product_upsert_sql_rows(small, now_iso(), now_iso())}
+                        ON CONFLICT(id) DO UPDATE SET {update_set}
                         """
-                        UPDATE products
-                           SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
-                               limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
-                         WHERE id = ?
-                        """,
-                        (*product_record_db_values(record), now_iso(), int(product_id)),
-                    )
-                    updated += 1
-                except Exception as exc:
-                    skipped += 1
-                    row_errors.append(f"linha {record.source_row}: {exc}")
-                    print(f"[IMPORTAÇÃO PRODUTOS] Erro ao atualizar linha {record.source_row} ({record.name}): {exc}")
-    return updated, skipped
+                        conn.execute(small_sql)
+                    except Exception as small_exc:
+                        print(f"[IMPORTAÇÃO PRODUTOS] Upsert em sub-bloco falhou; tentando linha a linha: {small_exc}")
+                        for target_id, record in small:
+                            try:
+                                one_sql = f"""
+                                INSERT INTO products ({fields})
+                                VALUES {product_upsert_sql_rows([(target_id, record)], now_iso(), now_iso())}
+                                ON CONFLICT(id) DO UPDATE SET {update_set}
+                                """
+                                conn.execute(one_sql)
+                            except Exception as exc:
+                                skipped += 1
+                                if target_id is None:
+                                    created -= 1
+                                else:
+                                    updated -= 1
+                                msg = f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:180]}"
+                                row_errors.append(msg)
+                                print(f"[IMPORTAÇÃO PRODUTOS] Erro ao importar linha {record.source_row} ({record.name}): {exc}")
+            else:
+                target_id, record = chunk[0]
+                skipped += 1
+                if target_id is None:
+                    created -= 1
+                else:
+                    updated -= 1
+                msg = f"linha {record.source_row}: {type(chunk_exc).__name__} - {str(chunk_exc)[:180]}"
+                row_errors.append(msg)
+                print(f"[IMPORTAÇÃO PRODUTOS] Erro ao importar linha {record.source_row} ({record.name}): {chunk_exc}")
+    return max(0, created), max(0, updated), skipped
 
 
 def ensure_product_import_columns(conn: Any) -> None:
@@ -1741,6 +1799,13 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
         return 0, 0, 0, ["planilha vazia"]
 
     header_row_number, header_map = detect_product_header_row(worksheet)
+    if not header_map_contains_alias(header_map, PRODUCT_IMPORT_HEADER_ALIASES["name"]):
+        try:
+            workbook.close()
+        except Exception:
+            pass
+        return 0, 0, 0, ["não encontrei a coluna Nome do produto / 产品名称 na planilha"]
+
     parsed_records: list[ProductImportRecord] = []
     skipped = 0
     row_errors: list[str] = []
@@ -1757,40 +1822,38 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
             parsed_records.append(record)
         except Exception as exc:
             skipped += 1
-            row_errors.append(f"linha {row_number}: {exc}")
+            row_errors.append(f"linha {row_number}: {type(exc).__name__} - {str(exc)[:180]}")
             print(f"[IMPORTAÇÃO PRODUTOS] Erro ao interpretar linha {row_number}: {exc}")
 
     parsed_records, duplicates_merged = dedupe_import_records(parsed_records)
     skipped += duplicates_merged
     if not parsed_records:
+        try:
+            workbook.close()
+        except Exception:
+            pass
         return 0, 0, skipped, row_errors
 
     with db_connect() as conn:
         ensure_product_import_columns(conn)
         existing_rows = conn.execute("SELECT id, name FROM products").fetchall()
-        existing_by_id = {int(row["id"]): row for row in existing_rows}
+        existing_by_id = {int(row["id"]): row for row in existing_rows if row["id"] is not None}
         existing_by_name = {normalize_product_lookup_key(row["name"]): row for row in existing_rows if row["name"] is not None}
 
-        updates: list[tuple[int, ProductImportRecord]] = []
-        inserts: list[ProductImportRecord] = []
-        reserved_names: set[str] = set()
+        upsert_rows: list[tuple[int | None, ProductImportRecord]] = []
         for record in parsed_records:
-            existing_row = existing_by_id.get(record.product_id) if record.product_id is not None else None
-            if existing_row is None:
-                existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
-            if existing_row is not None:
-                updates.append((int(existing_row["id"]), record))
+            target_id: int | None = None
+            if record.product_id is not None:
+                # Se a planilha exportada do sistema tem ID, usa o ID para atualizar o produto certo.
+                target_id = int(record.product_id)
             else:
-                name_key = normalize_product_lookup_key(record.name)
-                if name_key in reserved_names:
-                    skipped += 1
-                    continue
-                reserved_names.add(name_key)
-                inserts.append(record)
+                existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
+                if existing_row is not None:
+                    target_id = int(existing_row["id"])
+            upsert_rows.append((target_id, record))
 
-        updated, skipped_updates = execute_update_products_bulk(conn, updates, row_errors)
-        created, skipped_inserts = execute_insert_products_bulk(conn, inserts, row_errors)
-        skipped += skipped_updates + skipped_inserts
+        created, updated, skipped_upsert = execute_upsert_products_chunked(conn, upsert_rows, row_errors)
+        skipped += skipped_upsert
         conn.commit()
     try:
         workbook.close()
@@ -2745,6 +2808,21 @@ def not_found(_):
 @app.errorhandler(401)
 def unauthorized(_):
     return redirect(url_for("login"))
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    try:
+        import traceback
+        traceback.print_exc()
+    except Exception:
+        pass
+    print(f"[ERRO 500 CAPTURADO] {type(error).__name__} - {error}")
+    return render_template(
+        "error.html",
+        title="Erro interno",
+        message="O sistema encontrou um erro, mas a página não foi perdida. Volte e tente novamente. Se acontecer na importação, confira o relatório e os logs do Render."
+    ), 500
 
 
 setup_database()
