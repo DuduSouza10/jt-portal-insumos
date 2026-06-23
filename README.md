@@ -197,3 +197,9 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Listas dentro dos cards agora crescem junto com o conteúdo em vez de criar rolagem interna.
 - Tabelas administrativas viram cartões responsivos em telas menores.
 - Carrinho, cards de estoque, permissões e movimentações foram ajustados para quebrar linha sem esconder conteúdo.
+
+
+## v50.3 - Linhas contidas nos cards
+
+- Tabelas compactas do painel administrativo agora respeitam a largura do card.
+- Linhas e divisórias não vazam para fora da borda arredondada.

@@ -3731,3 +3731,27 @@ body.export-modal-open .export-language-modal * {
     padding: 10px !important;
   }
 }
+
+
+/* v50.3 - tabelas compactas do painel sempre ficam dentro do card. */
+.admin-split:not(.detail-grid) .table-card {
+  overflow: hidden !important;
+}
+
+.admin-split:not(.detail-grid) .table-card table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.admin-split:not(.detail-grid) .table-card th,
+.admin-split:not(.detail-grid) .table-card td {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.admin-split:not(.detail-grid) .table-card th:last-child,
+.admin-split:not(.detail-grid) .table-card td:last-child {
+  text-align: right !important;
+}
