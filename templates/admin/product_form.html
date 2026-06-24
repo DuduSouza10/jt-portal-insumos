@@ -18,7 +18,7 @@
             id="categorySearch"
             type="search"
             value="{{ product.category if product else '' }}"
-            placeholder="Pesquisar categoria..."
+            placeholder="Pesquisar ou selecionar categoria..."
             autocomplete="off"
             aria-autocomplete="list"
             aria-controls="categorySuggestions"
@@ -33,7 +33,6 @@
         <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
         <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
       </div>
-      <small id="categoryHelp" class="hint">Escolha uma categoria existente ou use o botão para criar uma nova.</small>
     </div>
     <label>
       Unidade de medida

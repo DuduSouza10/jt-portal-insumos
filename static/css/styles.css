@@ -4938,3 +4938,7 @@ html[data-theme="light"] .file-input-control {
     justify-content: center;
   }
 }
+
+
+.category-field { align-self: start; }
+.category-field > label { margin-bottom: 2px; }
