@@ -4392,26 +4392,11 @@ def login():
             flash("Seu cadastro ainda não foi aprovado por um administrador.", "warning")
             return redirect(url_for("login"))
 
-        if user.is_admin:
-            code = generate_code()
-            expires_at = (datetime.utcnow() + timedelta(minutes=ADMIN_CODE_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
-            with db_connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO admin_login_codes (user_id, code_hash, expires_at, created_at)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (user.id, generate_password_hash(code), expires_at, now_iso()),
-                )
-                conn.commit()
-            session["pending_admin_user_id"] = user.id
-            if not send_admin_login_code(user, code):
-                session.pop("pending_admin_user_id", None)
-                return redirect(url_for("login"))
-            return redirect(url_for("verify_admin"))
-
+        session.pop("pending_admin_user_id", None)
         session["user_id"] = user.id
         flash("Login realizado com sucesso.", "success")
+        if user.is_admin:
+            return redirect(url_for("admin_dashboard"))
         return redirect(url_for("home"))
 
     return render_template("login.html")

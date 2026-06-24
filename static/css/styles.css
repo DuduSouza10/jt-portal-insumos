@@ -6034,3 +6034,233 @@ body.product-image-modal-open {
     justify-self: stretch !important;
   }
 }
+
+
+/* v83 - Topbar sem sobreposição + tabela de produtos contida no card */
+@media (min-width: 1280px) {
+  .page-shell {
+    width: min(1760px, calc(100% - 32px)) !important;
+  }
+}
+
+.site-header.compact-header {
+  grid-template-columns: minmax(0, 1fr) 220px !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.site-header.compact-header > .nav-header.premium-topbar {
+  display: grid !important;
+  grid-template-columns: minmax(185px, 240px) minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  column-gap: 12px !important;
+  row-gap: 10px !important;
+  min-height: 72px !important;
+  height: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  padding: 10px 14px !important;
+  overflow: visible !important;
+}
+
+.site-header.compact-header > .dev-credit,
+.site-header.compact-header > .dev-credit:hover {
+  width: 220px !important;
+  max-width: 220px !important;
+  min-height: 72px !important;
+  align-self: stretch !important;
+}
+
+.brand-top {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: none !important;
+}
+
+.brand-logo-top {
+  width: 92px !important;
+  max-width: 92px !important;
+}
+
+.brand-top-copy {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.brand-top-copy strong,
+.brand-top-copy small {
+  max-width: 120px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.nav-center-group {
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow: visible !important;
+}
+
+.nav-header .top-nav {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 5px !important;
+  overflow: visible !important;
+}
+
+.nav-header .top-nav > a,
+.nav-header .nav-dropdown > .nav-drop-toggle,
+.nav-header .logout,
+.nav-header .public-actions .btn {
+  min-width: 0 !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 11px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  flex: 0 0 auto !important;
+}
+
+.nav-header .header-tools,
+.nav-header .public-actions,
+.account-area {
+  min-width: 0 !important;
+  max-width: 210px !important;
+  flex: none !important;
+  justify-content: flex-end !important;
+}
+
+.nav-header .user-pill.compact {
+  max-width: 138px !important;
+  height: 42px !important;
+  padding: 5px 8px 5px 5px !important;
+}
+
+.nav-header .user-pill.compact strong,
+.nav-header .user-pill.compact small {
+  max-width: 82px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@media (max-width: 1480px) {
+  .site-header.compact-header {
+    grid-template-columns: 1fr !important;
+  }
+  .site-header.compact-header > .dev-credit,
+  .site-header.compact-header > .dev-credit:hover {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 56px !important;
+    align-self: auto !important;
+  }
+  .site-header.compact-header > .nav-header.premium-topbar {
+    grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) auto !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .site-header.compact-header > .nav-header.premium-topbar {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+  .nav-center-group {
+    grid-column: 1 / -1 !important;
+    order: 3 !important;
+  }
+  .nav-header .top-nav {
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    scrollbar-width: none !important;
+  }
+  .nav-header .top-nav::-webkit-scrollbar { display: none !important; }
+}
+
+@media (max-width: 760px) {
+  .site-header.compact-header > .nav-header.premium-topbar {
+    grid-template-columns: 1fr !important;
+  }
+  .brand-top,
+  .nav-header .header-tools,
+  .nav-header .public-actions,
+  .account-area {
+    justify-self: stretch !important;
+    max-width: 100% !important;
+    justify-content: center !important;
+  }
+  .nav-header .user-pill.compact { display: flex !important; max-width: calc(100% - 72px) !important; }
+  .nav-header .user-pill.compact strong,
+  .nav-header .user-pill.compact small { max-width: 180px !important; }
+}
+
+.table-card:has(.products-table-wrap) {
+  overflow: hidden !important;
+  max-width: 100% !important;
+  padding: 18px !important;
+}
+
+.products-table-wrap {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 18px !important;
+  margin-top: 14px !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  background: rgba(255,255,255,.015) !important;
+  contain: inline-size !important;
+}
+
+.products-admin-table {
+  width: max-content !important;
+  min-width: 1320px !important;
+  max-width: none !important;
+  table-layout: fixed !important;
+  margin: 0 !important;
+}
+
+.products-admin-table th,
+.products-admin-table td {
+  box-sizing: border-box !important;
+}
+
+.products-admin-table tr {
+  max-width: none !important;
+}
+
+.products-admin-table .actions-cell {
+  width: 174px !important;
+  min-width: 174px !important;
+  max-width: 174px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  flex-wrap: nowrap !important;
+  overflow: visible !important;
+}
+
+.products-admin-table .actions-cell .btn {
+  min-width: 0 !important;
+  min-height: 32px !important;
+  padding: 7px 9px !important;
+  font-size: 10.5px !important;
+}
+
+.products-admin-table th:last-child,
+.products-admin-table td:last-child {
+  padding-right: 10px !important;
+}

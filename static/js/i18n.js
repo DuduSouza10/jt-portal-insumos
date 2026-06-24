@@ -13,6 +13,7 @@
   "Acesso ao Portal": "登录门户网站",
   "Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código para concluir o login.": "请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。",
   "Entre com seu nome de usuário e senha.": "请输入用户名和密码。",
+  "Entre com seu nome de usuário e senha para acessar o portal.": "请输入用户名和密码以访问门户。",
   "Se sua conta exigir confirmação, informe o código para concluir o login.": "如果您的账号需要确认，请输入代码完成登录。",
   "Ainda não tem cadastro? Solicitar acesso": "还没有账号？申请权限",
   "Ex.: admin": "例如：admin",
