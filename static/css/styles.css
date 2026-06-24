@@ -6663,3 +6663,152 @@ html[data-theme="light"] .user-pill-simple {
     max-width: 210px !important;
   }
 }
+
+
+/* v90 - botão de configurações com idioma e tema recolhidos */
+.settings-dock {
+  position: fixed;
+  right: 24px;
+  bottom: 18px;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.settings-toggle {
+  pointer-events: auto;
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #fff;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,.24), transparent 32px),
+    linear-gradient(135deg, var(--red), var(--red-3));
+  box-shadow: 0 18px 38px rgba(230,0,18,.24), var(--shadow-soft);
+  backdrop-filter: blur(16px);
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease, border-radius .22s ease;
+}
+
+.settings-toggle svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  transform: rotate(0deg);
+  transition: transform .42s cubic-bezier(.22, 1, .36, 1);
+}
+
+.settings-toggle:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 24px 52px rgba(230,0,18,.30), var(--shadow-strong);
+}
+
+.settings-dock.open .settings-toggle {
+  border-radius: 20px;
+}
+
+.settings-dock.open .settings-toggle svg {
+  transform: rotate(90deg);
+}
+
+.settings-panel {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  box-shadow: 0 22px 54px rgba(0,0,0,.24);
+  backdrop-filter: blur(18px);
+  opacity: 0;
+  transform: translateX(16px) translateY(4px) scale(.94);
+  transform-origin: right center;
+  transition: opacity .22s ease, transform .28s cubic-bezier(.22, 1, .36, 1), border-color .22s ease;
+}
+
+.settings-dock.open .settings-panel {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateX(0) translateY(0) scale(1);
+  border-color: rgba(230,0,18,.28);
+}
+
+.settings-dock .language-toggle,
+.settings-dock .theme-toggle {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: auto !important;
+  margin: 0 !important;
+  animation: none !important;
+  transform: none;
+  box-shadow: none;
+}
+
+.settings-dock .language-toggle {
+  min-height: 44px;
+  padding: 7px 11px 7px 7px !important;
+}
+
+.settings-dock .theme-toggle {
+  min-height: 44px;
+  padding: 7px 11px 7px 7px !important;
+}
+
+.settings-dock .language-toggle:hover,
+.settings-dock .theme-toggle:hover {
+  transform: translateY(-2px) !important;
+}
+
+html[data-theme="light"] .settings-toggle {
+  color: #fff;
+  border-color: rgba(230,0,18,.24);
+}
+
+html[data-theme="light"] .settings-panel {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(230,0,18,.14);
+  box-shadow: 0 18px 42px rgba(0,0,0,.14);
+}
+
+body.permission-modal-open .settings-dock,
+body.export-modal-open .settings-dock,
+body.asset-modal-open .settings-dock,
+body.product-image-modal-open .settings-dock {
+  filter: blur(3px) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+@media (max-width: 760px) {
+  .settings-dock {
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .settings-toggle {
+    width: 50px;
+    height: 50px;
+    border-radius: 17px;
+  }
+
+  .settings-panel {
+    gap: 7px;
+    padding: 7px;
+    max-width: calc(100vw - 78px);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-panel::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=69">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=69">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=89">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=90">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -142,24 +142,33 @@
     </section>
   </div>
 
-  <button id="languageToggle" class="language-toggle" type="button" aria-label="Alternar idioma entre português e chinês simplificado" aria-pressed="false">
-    <span class="language-toggle-track">
-      <span class="language-option language-pt">PT</span>
-      <span class="language-option language-zh">简中</span>
-      <span class="language-toggle-thumb"></span>
-    </span>
-    <span class="language-toggle-text">Idioma</span>
-  </button>
+  <div id="settingsDock" class="settings-dock" aria-label="Configurações rápidas">
+    <div id="settingsPanel" class="settings-panel" aria-hidden="true">
+      <button id="languageToggle" class="language-toggle" type="button" aria-label="Alternar idioma entre português e chinês simplificado" aria-pressed="false">
+        <span class="language-toggle-track">
+          <span class="language-option language-pt">PT</span>
+          <span class="language-option language-zh">简中</span>
+          <span class="language-toggle-thumb"></span>
+        </span>
+        <span class="language-toggle-text">Idioma</span>
+      </button>
 
-  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema claro ou escuro">
-    <span class="theme-toggle-track">
-      <span class="theme-toggle-thumb"></span>
-    </span>
-    <span class="theme-toggle-text">Tema</span>
-  </button>
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Alternar tema claro ou escuro">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-thumb"></span>
+        </span>
+        <span class="theme-toggle-text">Tema</span>
+      </button>
+    </div>
 
-
-  <script>
+    <button id="settingsToggle" class="settings-toggle" type="button" aria-label="Abrir configurações" aria-expanded="false" aria-controls="settingsPanel" title="Configurações">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 8.35a3.65 3.65 0 1 0 0 7.3 3.65 3.65 0 0 0 0-7.3Z"/>
+        <path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.02-1.58a.5.5 0 0 0 .12-.64l-1.91-3.3a.5.5 0 0 0-.6-.22l-2.38.96a7.33 7.33 0 0 0-1.7-.99l-.36-2.54a.5.5 0 0 0-.5-.43h-3.82a.5.5 0 0 0-.5.43l-.36 2.54c-.61.24-1.18.57-1.7.99l-2.38-.96a.5.5 0 0 0-.6.22L2.43 8.8a.5.5 0 0 0 .12.64l2.02 1.58c-.04.32-.07.65-.07.98s.02.66.07.98l-2.02 1.58a.5.5 0 0 0-.12.64l1.91 3.3c.13.23.4.33.64.22l2.38-.96c.52.42 1.09.75 1.7.99l.36 2.54c.04.25.25.43.5.43h3.82c.25 0 .46-.18.5-.43l.36-2.54c.61-.24 1.18-.57 1.7-.99l2.38.96c.24.1.51 0 .64-.22l1.91-3.3a.5.5 0 0 0-.12-.64l-2.02-1.58Z"/>
+      </svg>
+    </button>
+  </div>
+<script>
     window.addEventListener('DOMContentLoaded', function () {
       const closeDropdowns = function () {
         document.querySelectorAll('.nav-dropdown.open').forEach(function (item) {
@@ -234,6 +243,39 @@
         if (event.key === 'Escape' && imageModal && imageModal.classList.contains('open')) {
           closeImagePreview();
         }
+      });
+    });
+  </script>
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const dock = document.getElementById('settingsDock');
+      const toggle = document.getElementById('settingsToggle');
+      const panel = document.getElementById('settingsPanel');
+      if (!dock || !toggle || !panel) return;
+
+      function setOpen(open) {
+        dock.classList.toggle('open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.setAttribute('aria-label', open ? 'Fechar configurações' : 'Abrir configurações');
+        panel.setAttribute('aria-hidden', String(!open));
+      }
+
+      toggle.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(!dock.classList.contains('open'));
+      });
+
+      panel.addEventListener('click', function (event) {
+        event.stopPropagation();
+      });
+
+      document.addEventListener('click', function (event) {
+        if (!dock.contains(event.target)) setOpen(false);
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') setOpen(false);
       });
     });
   </script>
