@@ -6812,3 +6812,73 @@ body.product-image-modal-open .settings-dock {
     display: none;
   }
 }
+
+
+/* v91 - coelho no botão de configurações */
+.settings-toggle.bunny-settings-toggle {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255,255,255,.96), rgba(255,255,255,.72) 46%, rgba(255,255,255,.10) 72%),
+    linear-gradient(135deg, rgba(230,0,18,.86), rgba(118,0,10,.92));
+  border-color: rgba(230,0,18,.42);
+  box-shadow: 0 18px 38px rgba(230,0,18,.22), var(--shadow-soft);
+}
+
+.settings-toggle.bunny-settings-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  background: radial-gradient(circle, rgba(255,255,255,.92), rgba(255,255,255,.26) 27%, transparent 58%);
+  opacity: 0;
+  transform: scale(.62);
+  transition: opacity .22s ease, transform .32s cubic-bezier(.22, 1, .36, 1);
+  pointer-events: none;
+}
+
+.settings-bunny-icon {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  transform: scale(1);
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.22));
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), filter .22s ease;
+}
+
+.settings-toggle.bunny-settings-toggle:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.settings-toggle.bunny-settings-toggle:active,
+.settings-dock.open .settings-toggle.bunny-settings-toggle {
+  box-shadow: 0 20px 48px rgba(230,0,18,.34), 0 0 0 1px rgba(255,255,255,.10) inset, var(--shadow-strong);
+}
+
+.settings-toggle.bunny-settings-toggle:active::before,
+.settings-dock.open .settings-toggle.bunny-settings-toggle::before {
+  opacity: .92;
+  transform: scale(1);
+}
+
+.settings-toggle.bunny-settings-toggle:active .settings-bunny-icon,
+.settings-dock.open .settings-bunny-icon {
+  transform: scale(1.06);
+  filter: drop-shadow(0 0 8px rgba(255,255,255,.94)) drop-shadow(0 0 18px rgba(230,0,18,.72));
+}
+
+.settings-dock.open .settings-toggle.bunny-settings-toggle {
+  border-radius: 18px;
+}
+
+.settings-dock.open .settings-toggle.bunny-settings-toggle svg,
+.settings-toggle.bunny-settings-toggle svg {
+  transform: none !important;
+}
+
+html[data-theme="light"] .settings-toggle.bunny-settings-toggle {
+  background:
+    radial-gradient(circle at 50% 45%, #ffffff, rgba(255,255,255,.82) 48%, rgba(255,255,255,.28) 73%),
+    linear-gradient(135deg, #ffebee, #e60012);
+}
