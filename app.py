@@ -367,15 +367,18 @@ class Product:
     id: int = 0
     name: str = ""
     category: str = ""
+    category_emoji: str = ""
     unit_measure: str = "un"
     description: str = ""
     stock_quantity: int = 0
     price_cents: int = 0
     limit_base: int | None = None
     limit_franchise: int | None = None
+    min_order_quantity: int | None = None
     min_stock: int | None = None
     max_stock: int | None = None
     active: bool = True
+    catalog_archived: bool = False
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
 
@@ -681,22 +684,57 @@ def row_to_user(row: Any | None) -> User | None:
     )
 
 
+def default_category_emoji(category: str) -> str:
+    normalized = "".join(
+        char
+        for char in unicodedata.normalize("NFD", str(category or "").casefold())
+        if unicodedata.category(char) != "Mn"
+    )
+    emoji_by_keyword = (
+        (("administrativo", "escritorio", "papelaria"), "🗂️"),
+        (("epi", "seguranca", "protecao"), "🦺"),
+        (("embalagem", "envelope", "caixa"), "📦"),
+        (("etiqueta", "label"), "🏷️"),
+        (("limpeza", "higiene"), "🧹"),
+        (("tecnologia", "informatica", "eletronico"), "💻"),
+        (("uniforme", "vestuario"), "👕"),
+        (("ferramenta", "manutencao", "operacional"), "🛠️"),
+        (("impressao", "grafico"), "🖨️"),
+    )
+    for keywords, emoji in emoji_by_keyword:
+        if any(keyword in normalized for keyword in keywords):
+            return emoji
+    return "📦"
+
+
+def clean_category_emoji(value: Any, category: str = "") -> str:
+    emoji = str(value or "").strip()
+    return emoji[:16] if emoji else default_category_emoji(category)
+
+
 def row_to_product(row: Any | None) -> Product | None:
     if row is None:
         return None
+    category = row["category"] or ""
     return Product(
         id=int(row["id"]),
         name=row["name"] or "",
-        category=row["category"] or "",
+        category=category,
+        category_emoji=clean_category_emoji(
+            row["category_emoji"] if "category_emoji" in row.keys() else "",
+            category,
+        ),
         unit_measure=(row["unit_measure"] if "unit_measure" in row.keys() else None) or "un",
         description=row["description"] or "",
         stock_quantity=int(row["stock_quantity"] or 0),
         price_cents=int(row["price_cents"] or 0),
         limit_base=row["limit_base"] if "limit_base" in row.keys() and row["limit_base"] is not None else None,
         limit_franchise=row["limit_franchise"] if "limit_franchise" in row.keys() and row["limit_franchise"] is not None else None,
+        min_order_quantity=row["min_order_quantity"] if "min_order_quantity" in row.keys() and row["min_order_quantity"] is not None else None,
         min_stock=row["min_stock"] if "min_stock" in row.keys() and row["min_stock"] is not None else None,
         max_stock=row["max_stock"] if "max_stock" in row.keys() and row["max_stock"] is not None else None,
         active=bool(row["active"]),
+        catalog_archived=bool(row["catalog_archived"]) if "catalog_archived" in row.keys() else False,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
     )
@@ -917,15 +955,18 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 category TEXT,
+                category_emoji TEXT,
                 unit_measure TEXT NOT NULL DEFAULT 'un',
                 description TEXT,
                 stock_quantity INTEGER NOT NULL DEFAULT 0,
                 price_cents INTEGER NOT NULL DEFAULT 0,
                 limit_base INTEGER,
                 limit_franchise INTEGER,
+                min_order_quantity INTEGER,
                 min_stock INTEGER,
                 max_stock INTEGER,
                 active INTEGER NOT NULL DEFAULT 1,
+                catalog_archived INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1080,12 +1121,18 @@ def init_db() -> None:
             conn.execute("ALTER TABLE supply_requests ADD COLUMN people_count INTEGER")
 
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
+        if "category_emoji" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN category_emoji TEXT")
         if "unit_measure" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'")
+        if "min_order_quantity" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN min_order_quantity INTEGER")
         if "min_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN min_stock INTEGER")
         if "max_stock" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN max_stock INTEGER")
+        if "catalog_archived" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN catalog_archived INTEGER NOT NULL DEFAULT 0")
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
@@ -1193,7 +1240,10 @@ def get_product(product_id: int | None) -> Product | None:
 
 def get_product_by_name(name: str) -> Product | None:
     with db_connect() as conn:
-        row = conn.execute("SELECT * FROM products WHERE lower(name) = lower(?) LIMIT 1", (name.strip(),)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM products WHERE catalog_archived = 0 AND lower(name) = lower(?) LIMIT 1",
+            (name.strip(),),
+        ).fetchone()
     return row_to_product(row)
 
 
@@ -2031,6 +2081,10 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             if limit is not None and quantity > limit:
                 return [], f"Limite de insumos excedido para {product.name}. Limite permitido: {limit}."
 
+        minimum = product.min_order_quantity
+        if minimum is not None and minimum > 0 and quantity < minimum:
+            return [], f"A quantidade mínima para solicitar {product.name} é {minimum}."
+
         normalized.append((product, quantity))
     return normalized, None
 
@@ -2038,6 +2092,7 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
 def fill_product_from_form(product: Product) -> Product:
     product.name = request.form.get("name", "").strip()
     product.category = request.form.get("category", "").strip()
+    product.category_emoji = clean_category_emoji(request.form.get("category_emoji"), product.category)
     product.unit_measure = request.form.get("unit_measure", "").strip() or "un"
     product.description = request.form.get("description", "").strip()
     product.stock_quantity = parse_required_positive_int(request.form.get("stock_quantity")) or 0
@@ -2050,24 +2105,37 @@ def fill_product_from_form(product: Product) -> Product:
         product.price_cents = 0
     product.limit_base = parse_optional_int(request.form.get("limit_base"))
     product.limit_franchise = parse_optional_int(request.form.get("limit_franchise"))
+    product.min_order_quantity = parse_optional_int(request.form.get("min_order_quantity"))
+    if product.min_order_quantity is not None and product.min_order_quantity < 1:
+        product.min_order_quantity = None
     product.min_stock = parse_optional_int(request.form.get("min_stock"))
     product.max_stock = parse_optional_int(request.form.get("max_stock"))
     product.active = request.form.get("active") == "on"
     return product
 
 
-def list_product_categories() -> list[str]:
+def list_product_categories() -> list[dict[str, str]]:
     with db_connect() as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT TRIM(category) AS category
-              FROM products
+            SELECT TRIM(category) AS category,
+                   MAX(NULLIF(TRIM(category_emoji), '')) AS category_emoji
+             FROM products
              WHERE category IS NOT NULL
                AND TRIM(category) <> ''
+               AND catalog_archived = 0
+             GROUP BY LOWER(TRIM(category))
              ORDER BY category COLLATE NOCASE ASC
             """
         ).fetchall()
-    return [str(row["category"]).strip() for row in rows if row["category"]]
+    return [
+        {
+            "name": str(row["category"]).strip(),
+            "emoji": clean_category_emoji(row["category_emoji"], str(row["category"])),
+        }
+        for row in rows
+        if row["category"]
+    ]
 
 
 def product_to_api(product: Product, user: User) -> dict[str, Any]:
@@ -2078,11 +2146,13 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "id": product.id,
         "name": product.name,
         "category": product.category or "Sem categoria",
+        "category_emoji": product.category_emoji or default_category_emoji(product.category),
         "unit_measure": product.unit_measure or "un",
         "description": product.description or "",
         "price": format_brl(product.price_cents),
         "stock_quantity": product.stock_quantity if show_stock else None,
         "limit": limit,
+        "min_order_quantity": product.min_order_quantity,
         "show_stock": show_stock,
         "show_price": show_price,
     }
@@ -2994,12 +3064,14 @@ PRODUCT_EXPORT_HEADERS_PT = [
     "ID",
     "Nome do produto",
     "Categoria",
+    "Ícone da categoria",
     "Unidade de medida",
     "Descrição",
     "Estoque disponível",
     "Valor unitário",
     "Limite para bases",
     "Limite para franquias",
+    "Quantidade mínima por pedido",
     "Estoque mínimo",
     "Estoque máximo",
     "Ativo",
@@ -3009,12 +3081,14 @@ PRODUCT_EXPORT_HEADERS_ZH = [
     "ID",
     "产品名称 / Nome do produto",
     "类别 / Categoria",
+    "类别图标 / Ícone da categoria",
     "计量单位 / Unidade de medida",
     "描述 / Descrição",
     "可用库存 / Estoque disponível",
     "单价 / Valor unitário",
     "基地限制 / Limite para bases",
     "加盟店限制 / Limite para franquias",
+    "最低订购量 / Quantidade mínima por pedido",
     "最低库存 / Estoque mínimo",
     "最高库存 / Estoque máximo",
     "启用 / Ativo",
@@ -3067,12 +3141,14 @@ def product_row_for_excel_language(product: Product, language: str = "pt") -> li
             product.id,
             translate_excel_value_to_zh(product.name),
             translate_excel_value_to_zh(product.category),
+            product.category_emoji,
             translate_excel_value_to_zh(product.unit_measure),
             translate_excel_value_to_zh(product.description),
             product.stock_quantity,
             product.price_brl,
             product.limit_base,
             product.limit_franchise,
+            product.min_order_quantity,
             product.min_stock,
             product.max_stock,
             translate_excel_value_to_zh("Sim" if product.active else "Não"),
@@ -3084,12 +3160,14 @@ def product_row_for_excel(product: Product) -> list[Any]:
         product.id,
         product.name,
         product.category,
+        product.category_emoji,
         product.unit_measure,
         product.description,
         product.stock_quantity,
         product.price_brl,
         product.limit_base,
         product.limit_franchise,
+        product.min_order_quantity,
         product.min_stock,
         product.max_stock,
         "Sim" if product.active else "Não",
@@ -3117,12 +3195,14 @@ PRODUCT_IMPORT_HEADER_ALIASES = {
     "id": ["ID", "Código", "Codigo", "Cod", "编号", "編號"],
     "name": ["Nome do produto", "Nome", "Produto", "Insumo", "Item", "Descrição do item", "Descricao do item", "产品名称", "產品名稱", "商品名称", "产品", "品名"],
     "category": ["Categoria", "Categoria do produto", "Grupo", "Tipo", "类别", "類別", "分类", "分類"],
+    "category_emoji": ["Ícone da categoria", "Icone da categoria", "Emoji", "Ícone", "Icone", "类别图标"],
     "unit_measure": ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "U.M.", "Medida", "计量单位", "計量單位", "单位", "單位"],
     "description": ["Descrição", "Descricao", "Descrição do produto", "Descricao do produto", "Observação", "Observacao", "Detalhes", "描述", "说明", "說明", "备注", "備註"],
     "stock_quantity": ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "Qtd", "Qtde", "Saldo", "可用库存", "可用庫存", "库存", "庫存", "数量", "數量"],
     "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "Custo", "单价", "單價", "价格", "價格"],
     "limit_base": ["Limite para bases", "Limite base", "Base", "基地限制", "网点限制"],
     "limit_franchise": ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制", "加盟限制"],
+    "min_order_quantity": ["Quantidade mínima por pedido", "Quantidade minima por pedido", "Pedido mínimo", "Pedido minimo", "Qtd mínima", "Qtd minima", "最低订购量"],
     "min_stock": ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "Min", "最低库存", "最低庫存"],
     "max_stock": ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "Max", "最高库存", "最高庫存"],
     "active": ["Ativo", "Status", "Produto ativo", "启用", "啟用", "状态", "狀態"],
@@ -3158,12 +3238,14 @@ class ProductImportRecord:
     product_id: int | None
     name: str
     category: str
+    category_emoji: str
     unit_measure: str
     description: str
     stock_quantity: int
     price_cents: int
     limit_base: int | None
     limit_franchise: int | None
+    min_order_quantity: int | None
     min_stock: int | None
     max_stock: int | None
     active: bool
@@ -3178,12 +3260,17 @@ def parse_product_import_record(row_number: int, row_values: list[Any], header_m
         product_id=parse_optional_int(get_import_value(row_values, header_map, "id")),
         name=name,
         category=clean_import_text(get_import_value(row_values, header_map, "category")),
+        category_emoji=clean_category_emoji(
+            get_import_value(row_values, header_map, "category_emoji"),
+            clean_import_text(get_import_value(row_values, header_map, "category")),
+        ),
         unit_measure=clean_import_text(get_import_value(row_values, header_map, "unit_measure"), "un") or "un",
         description=clean_import_text(get_import_value(row_values, header_map, "description")),
         stock_quantity=parse_optional_int(get_import_value(row_values, header_map, "stock_quantity")) or 0,
         price_cents=parse_money_to_cents(get_import_value(row_values, header_map, "price_cents")),
         limit_base=parse_optional_int(get_import_value(row_values, header_map, "limit_base")),
         limit_franchise=parse_optional_int(get_import_value(row_values, header_map, "limit_franchise")),
+        min_order_quantity=parse_optional_int(get_import_value(row_values, header_map, "min_order_quantity")),
         min_stock=parse_optional_int(get_import_value(row_values, header_map, "min_stock")),
         max_stock=parse_optional_int(get_import_value(row_values, header_map, "max_stock")),
         active=parse_bool_value(get_import_value(row_values, header_map, "active"), default=True),
@@ -3197,12 +3284,14 @@ def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
         record.product_id,
         normalize_product_lookup_key(record.name),
         normalize_product_lookup_key(record.category),
+        record.category_emoji,
         normalize_product_lookup_key(record.unit_measure),
         normalize_product_lookup_key(record.description),
         int(record.stock_quantity or 0),
         int(record.price_cents or 0),
         record.limit_base,
         record.limit_franchise,
+        record.min_order_quantity,
         record.min_stock,
         record.max_stock,
         bool(record.active),
@@ -3210,20 +3299,17 @@ def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
 
 
 def dedupe_import_records(records: list[ProductImportRecord]) -> tuple[list[ProductImportRecord], int]:
-    """Remove somente linhas 100% iguais.
-
-    Versões anteriores juntavam tudo pelo nome do produto. Isso fazia produto desaparecer
-    quando a planilha tinha itens parecidos, variações ou o mesmo nome em categorias diferentes.
-    """
-    seen: set[tuple[Any, ...]] = set()
+    """Mantém apenas a última linha de cada nome para impedir produtos duplicados."""
+    positions: dict[str, int] = {}
     result: list[ProductImportRecord] = []
     duplicates = 0
     for record in records:
-        signature = product_import_signature(record)
-        if signature in seen:
+        key = normalize_product_lookup_key(record.name)
+        if key in positions:
             duplicates += 1
+            result[positions[key]] = record
             continue
-        seen.add(signature)
+        positions[key] = len(result)
         result.append(record)
     return result, duplicates
 
@@ -3295,12 +3381,14 @@ def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
     return (
         record.name,
         record.category,
+        record.category_emoji,
         record.unit_measure,
         record.description,
         int(record.stock_quantity or 0),
         int(record.price_cents or 0),
         record.limit_base,
         record.limit_franchise,
+        record.min_order_quantity,
         record.min_stock,
         record.max_stock,
         1 if record.active else 0,
@@ -3332,15 +3420,18 @@ def product_upsert_sql_rows(rows: list[tuple[int | None, ProductImportRecord]], 
             target_id,
             record.name,
             record.category,
+            record.category_emoji,
             record.unit_measure,
             record.description,
             int(record.stock_quantity or 0),
             int(record.price_cents or 0),
             record.limit_base,
             record.limit_franchise,
+            record.min_order_quantity,
             record.min_stock,
             record.max_stock,
             1 if record.active else 0,
+            0,
             created_at,
             updated_at,
         ]
@@ -3357,19 +3448,22 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
     created = sum(1 for target_id, _record in rows if target_id is None)
     updated = len(rows) - created
     skipped = 0
-    fields = "id, name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at, updated_at"
+    fields = "id, name, category, category_emoji, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, active, catalog_archived, created_at, updated_at"
     update_set = """
         name = excluded.name,
         category = excluded.category,
+        category_emoji = excluded.category_emoji,
         unit_measure = excluded.unit_measure,
         description = excluded.description,
         stock_quantity = excluded.stock_quantity,
         price_cents = excluded.price_cents,
         limit_base = excluded.limit_base,
         limit_franchise = excluded.limit_franchise,
+        min_order_quantity = excluded.min_order_quantity,
         min_stock = excluded.min_stock,
         max_stock = excluded.max_stock,
         active = excluded.active,
+        catalog_archived = 0,
         updated_at = excluded.updated_at
     """
     # 60 linhas por SQL mantém o payload pequeno e evita timeout; ainda reduz muito as chamadas ao D1.
@@ -3441,9 +3535,12 @@ def ensure_product_import_columns(conn: Any) -> None:
         print(f"[IMPORTAÇÃO PRODUTOS] Não foi possível verificar colunas por PRAGMA: {exc}")
         return
     migrations = [
+        ("category_emoji", "ALTER TABLE products ADD COLUMN category_emoji TEXT"),
         ("unit_measure", "ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'"),
+        ("min_order_quantity", "ALTER TABLE products ADD COLUMN min_order_quantity INTEGER"),
         ("min_stock", "ALTER TABLE products ADD COLUMN min_stock INTEGER"),
         ("max_stock", "ALTER TABLE products ADD COLUMN max_stock INTEGER"),
+        ("catalog_archived", "ALTER TABLE products ADD COLUMN catalog_archived INTEGER NOT NULL DEFAULT 0"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -3453,11 +3550,56 @@ def ensure_product_import_columns(conn: Any) -> None:
                 print(f"[IMPORTAÇÃO PRODUTOS] Migração ignorada para {column_name}: {exc}")
 
 
-def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, int, list[str]]:
+def archive_products_outside_import(
+    conn: Any,
+    imported_names: set[str],
+    preferred_ids: dict[str, int],
+    visible_before: set[int],
+) -> int:
+    rows = conn.execute("SELECT id, name FROM products").fetchall()
+    keep_ids: set[int] = set()
+    grouped: dict[str, list[int]] = {}
+    for row in rows:
+        key = normalize_product_lookup_key(row["name"])
+        grouped.setdefault(key, []).append(int(row["id"]))
+
+    for key in imported_names:
+        ids = sorted(grouped.get(key, []))
+        if not ids:
+            continue
+        preferred = preferred_ids.get(key)
+        keep_ids.add(preferred if preferred in ids else ids[0])
+
+    archive_ids = [
+        int(row["id"])
+        for row in rows
+        if int(row["id"]) not in keep_ids
+    ]
+    for chunk in chunked_ids(archive_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        conn.execute(
+            f"UPDATE products SET catalog_archived = 1, active = 0, updated_at = ? WHERE id IN ({placeholders})",
+            [now_iso(), *chunk],
+        )
+    if keep_ids:
+        for chunk in chunked_ids(list(keep_ids)):
+            placeholders = ",".join("?" for _ in chunk)
+            conn.execute(
+                f"UPDATE products SET catalog_archived = 0 WHERE id IN ({placeholders})",
+                chunk,
+            )
+    return len(visible_before.intersection(archive_ids))
+
+
+def import_products_from_workbook_bytes(
+    uploaded_bytes: bytes,
+    import_mode: str = "merge",
+) -> tuple[int, int, int, int, list[str]]:
+    import_mode = "replace" if import_mode == "replace" else "merge"
     workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
     worksheet = workbook.active
     if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
-        return 0, 0, 0, ["planilha vazia"]
+        return 0, 0, 0, 0, ["planilha vazia"]
 
     header_row_number, header_map = detect_product_header_row(worksheet)
     if not header_map_contains_alias(header_map, PRODUCT_IMPORT_HEADER_ALIASES["name"]):
@@ -3465,7 +3607,7 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
             workbook.close()
         except Exception:
             pass
-        return 0, 0, 0, ["não encontrei a coluna Nome do produto / 产品名称 na planilha"]
+        return 0, 0, 0, 0, ["não encontrei a coluna Nome do produto / 产品名称 na planilha"]
 
     parsed_records: list[ProductImportRecord] = []
     skipped = 0
@@ -3488,39 +3630,68 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
 
     parsed_records, duplicates_merged = dedupe_import_records(parsed_records)
     skipped += duplicates_merged
+    if import_mode == "replace" and row_errors:
+        try:
+            workbook.close()
+        except Exception:
+            pass
+        row_errors.append("a substituição foi cancelada para evitar um catálogo incompleto")
+        return 0, 0, skipped, 0, row_errors
     if not parsed_records:
         try:
             workbook.close()
         except Exception:
             pass
-        return 0, 0, skipped, row_errors
+        return 0, 0, skipped, 0, row_errors
 
     with db_connect() as conn:
         ensure_product_import_columns(conn)
-        existing_rows = conn.execute("SELECT id, name FROM products").fetchall()
-        existing_by_id = {int(row["id"]): row for row in existing_rows if row["id"] is not None}
-        existing_by_name = {normalize_product_lookup_key(row["name"]): row for row in existing_rows if row["name"] is not None}
+        existing_rows = conn.execute(
+            "SELECT id, name, catalog_archived FROM products ORDER BY catalog_archived ASC, id ASC"
+        ).fetchall()
+        visible_before = {
+            int(row["id"])
+            for row in existing_rows
+            if not bool(row["catalog_archived"])
+        }
+        existing_by_name: dict[str, Any] = {}
+        for row in existing_rows:
+            key = normalize_product_lookup_key(row["name"])
+            if key and key not in existing_by_name:
+                existing_by_name[key] = row
 
         upsert_rows: list[tuple[int | None, ProductImportRecord]] = []
+        preferred_ids: dict[str, int] = {}
         for record in parsed_records:
-            target_id: int | None = None
-            if record.product_id is not None:
-                # Se a planilha exportada do sistema tem ID, usa o ID para atualizar o produto certo.
-                target_id = int(record.product_id)
-            else:
-                existing_row = existing_by_name.get(normalize_product_lookup_key(record.name))
-                if existing_row is not None:
-                    target_id = int(existing_row["id"])
+            key = normalize_product_lookup_key(record.name)
+            existing_row = existing_by_name.get(key)
+            target_id = int(existing_row["id"]) if existing_row is not None else None
+            if target_id is not None:
+                preferred_ids[key] = target_id
             upsert_rows.append((target_id, record))
 
         created, updated, skipped_upsert = execute_upsert_products_chunked(conn, upsert_rows, row_errors)
         skipped += skipped_upsert
+        archived = 0
+        if import_mode == "replace" and not row_errors:
+            imported_names = {normalize_product_lookup_key(record.name) for record in parsed_records}
+            archived = archive_products_outside_import(conn, imported_names, preferred_ids, visible_before)
+        category_emojis = {
+            normalize_product_lookup_key(record.category): (record.category, record.category_emoji)
+            for record in parsed_records
+            if record.category
+        }
+        for category_name, category_emoji in category_emojis.values():
+            conn.execute(
+                "UPDATE products SET category_emoji = ? WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))",
+                (category_emoji, category_name),
+            )
         conn.commit()
     try:
         workbook.close()
     except Exception:
         pass
-    return created, updated, skipped, row_errors
+    return created, updated, skipped, archived, row_errors
 
 
 USER_IMPORT_HEADER_ALIASES = {
@@ -3835,13 +4006,16 @@ def find_product_by_name(conn: Any, name: str) -> Product | None:
     if not cleaned_name:
         return None
     # Primeiro tenta busca exata para evitar varrer a tabela inteira no D1 a cada entrada.
-    row = conn.execute("SELECT * FROM products WHERE name = ? LIMIT 1", (cleaned_name,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM products WHERE catalog_archived = 0 AND name = ? LIMIT 1",
+        (cleaned_name,),
+    ).fetchone()
     product = row_to_product(row) if row is not None else None
     if product is not None:
         return product
     # Fallback tolerante para diferenças de caixa/acentuação.
     key = normalize_product_lookup_key(cleaned_name)
-    rows = conn.execute("SELECT * FROM products").fetchall()
+    rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0").fetchall()
     for row in rows:
         product = row_to_product(row)
         if product and normalize_product_lookup_key(product.name) == key:
@@ -4103,7 +4277,7 @@ def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: da
 @login_required
 @page_access_required("home")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", product_categories=list_product_categories())
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -4262,7 +4436,9 @@ def logout():
 def api_products():
     user = require_current_user()
     q = request.args.get("q", "").strip()
-    sql = "SELECT * FROM products WHERE active = 1"
+    category = request.args.get("category", "").strip()
+    sort = request.args.get("sort", "name").strip().lower()
+    sql = "SELECT * FROM products WHERE active = 1 AND catalog_archived = 0"
     params: list[Any] = []
     if not user.is_admin:
         sql += " AND stock_quantity > 0"
@@ -4270,7 +4446,16 @@ def api_products():
         like = f"%{q}%"
         sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
         params.extend([like, like, like])
-    sql += " ORDER BY category ASC, name ASC"
+    if category:
+        sql += " AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))"
+        params.append(category)
+    sort_map = {
+        "name": "name COLLATE NOCASE ASC",
+        "stock_desc": "stock_quantity DESC, name COLLATE NOCASE ASC",
+        "price_asc": "price_cents ASC, name COLLATE NOCASE ASC",
+        "price_desc": "price_cents DESC, name COLLATE NOCASE ASC",
+    }
+    sql += " ORDER BY " + sort_map.get(sort, sort_map["name"])
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
@@ -4399,10 +4584,10 @@ def admin_dashboard():
         counts = {
             "users_pending": conn.execute("SELECT COUNT(*) AS total FROM users WHERE status = 'pending'").fetchone()["total"],
             "requests_pending": conn.execute("SELECT COUNT(*) AS total FROM supply_requests WHERE status = 'pending'").fetchone()["total"],
-            "products": conn.execute("SELECT COUNT(*) AS total FROM products").fetchone()["total"],
-            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products").fetchone()["total"],
+            "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
         }
-        low_rows = conn.execute("SELECT * FROM products WHERE stock_quantity <= 20 ORDER BY stock_quantity ASC LIMIT 8").fetchall()
+        low_rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 AND stock_quantity <= 20 ORDER BY stock_quantity ASC LIMIT 8").fetchall()
     low_stock = [product for row in low_rows if (product := row_to_product(row)) is not None]
     latest_requests = list_supply_requests(limit=8)
     return render_template("admin/dashboard.html", counts=counts, low_stock=low_stock, latest_requests=latest_requests)
@@ -4816,7 +5001,7 @@ def admin_products():
     status_filter = (request.args.get("status") or "all").strip().lower()
     sort_filter = (request.args.get("sort") or "default").strip().lower()
 
-    where_clauses: list[str] = []
+    where_clauses: list[str] = ["catalog_archived = 0"]
     params: list[Any] = []
 
     if search:
@@ -4859,9 +5044,9 @@ def admin_products():
 
     with db_connect() as conn:
         rows = conn.execute(sql, tuple(params)).fetchall()
-        total_products = conn.execute("SELECT COUNT(*) AS total FROM products").fetchone()["total"]
-        active_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE active = 1").fetchone()["total"]
-        inactive_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE active = 0").fetchone()["total"]
+        total_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"]
+        active_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 1").fetchone()["total"]
+        inactive_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 0").fetchone()["total"]
     products = [product for row in rows if (product := row_to_product(row)) is not None]
     return render_template(
         "admin/products.html",
@@ -4878,7 +5063,7 @@ def admin_products():
 @page_access_required("admin_products")
 def admin_products_export():
     with db_connect() as conn:
-        rows = conn.execute("SELECT * FROM products ORDER BY active DESC, category ASC, name ASC").fetchall()
+        rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 ORDER BY active DESC, category ASC, name ASC").fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
 
     export_language = (request.args.get("lang") or "pt").strip().lower()
@@ -4908,9 +5093,9 @@ def admin_products_export():
         for cell in row:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-        if len(row) >= 7:
-            row[6].number_format = 'R$ #,##0.00'
-    widths = [10, 38, 24, 24, 48, 18, 18, 22, 24, 18, 18, 14]
+        if len(row) >= 8:
+            row[7].number_format = 'R$ #,##0.00'
+    widths = [10, 38, 24, 16, 24, 48, 18, 18, 22, 24, 24, 18, 18, 14]
     for idx, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(idx)].width = width
     worksheet.freeze_panes = "A2"
@@ -4935,6 +5120,9 @@ def admin_products_export():
 @page_access_required("admin_products")
 def admin_products_import():
     try:
+        import_mode = (request.form.get("import_mode") or "merge").strip().lower()
+        if import_mode not in {"merge", "replace"}:
+            import_mode = "merge"
         uploaded = request.files.get("spreadsheet")
         if uploaded is None or not uploaded.filename:
             flash("Selecione uma planilha .xlsx para importar.", "warning")
@@ -4960,13 +5148,16 @@ def admin_products_import():
                 storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
                 uploaded_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                {"type": "products_import"},
+                {"type": "products_import", "mode": import_mode},
             )
         except Exception as exc:
             print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
 
         try:
-            created, updated, skipped, row_errors = import_products_from_workbook_bytes(uploaded_bytes)
+            created, updated, skipped, archived, row_errors = import_products_from_workbook_bytes(
+                uploaded_bytes,
+                import_mode=import_mode,
+            )
         except Exception as exc:
             try:
                 import traceback
@@ -4979,7 +5170,15 @@ def admin_products_import():
 
         flash_import_errors(row_errors)
         if created or updated:
-            flash(f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).", "success")
+            mode_message = (
+                f" Catálogo substituído; {archived} produto(s) anterior(es) removido(s) das telas."
+                if import_mode == "replace"
+                else " Os produtos foram comparados pelo nome, sem criar duplicatas."
+            )
+            flash(
+                f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} ignorado(s).{mode_message}",
+                "success",
+            )
         elif skipped or row_errors:
             flash(f"Nenhum produto foi criado ou atualizado. {skipped} linha(s) ignorada(s).", "warning")
         else:
@@ -5009,18 +5208,24 @@ def admin_product_new():
         with db_connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (
+                    name, category, category_emoji, unit_measure, description, stock_quantity,
+                    price_cents, limit_base, limit_franchise, min_order_quantity,
+                    min_stock, max_stock, active, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
                     product.category,
+                    product.category_emoji,
                     product.unit_measure,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,
                     product.limit_base,
                     product.limit_franchise,
+                    product.min_order_quantity,
                     product.min_stock,
                     product.max_stock,
                     1 if product.active else 0,
@@ -5028,6 +5233,11 @@ def admin_product_new():
                 ),
             )
             new_id = get_cursor_lastrowid(cursor)
+            if product.category:
+                conn.execute(
+                    "UPDATE products SET category_emoji = ? WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))",
+                    (product.category_emoji, product.category),
+                )
             if product.stock_quantity > 0 and new_id is not None:
                 record_stock_movement(conn, int(new_id), product.stock_quantity, 0, product.stock_quantity, "product_created", "Produto cadastrado manualmente.", created_by_id=require_current_user().id)
             conn.commit()
@@ -5053,19 +5263,22 @@ def admin_product_edit(product_id: int):
             conn.execute(
                 """
                 UPDATE products
-                SET name = ?, category = ?, unit_measure = ?, description = ?, stock_quantity = ?, price_cents = ?,
-                    limit_base = ?, limit_franchise = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
+                SET name = ?, category = ?, category_emoji = ?, unit_measure = ?, description = ?,
+                    stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
+                    min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     product.name,
                     product.category,
+                    product.category_emoji,
                     product.unit_measure,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,
                     product.limit_base,
                     product.limit_franchise,
+                    product.min_order_quantity,
                     product.min_stock,
                     product.max_stock,
                     1 if product.active else 0,
@@ -5073,6 +5286,11 @@ def admin_product_edit(product_id: int):
                     product_id,
                 ),
             )
+            if product.category:
+                conn.execute(
+                    "UPDATE products SET category_emoji = ? WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))",
+                    (product.category_emoji, product.category),
+                )
             if old_stock_quantity != product.stock_quantity:
                 record_stock_movement(conn, product_id, product.stock_quantity - old_stock_quantity, old_stock_quantity, product.stock_quantity, "manual_adjustment", "Estoque alterado na edição do produto.", created_by_id=require_current_user().id)
             conn.commit()
@@ -5320,7 +5538,7 @@ def admin_assets():
     selected_unit = selected_base or selected_franchise
     assets = list_assets(base=selected_unit, regional=selected_regional)
     with db_connect() as conn:
-        product_rows = conn.execute("SELECT * FROM products WHERE active = 1 ORDER BY category ASC, name ASC").fetchall()
+        product_rows = conn.execute("SELECT * FROM products WHERE active = 1 AND catalog_archived = 0 ORDER BY category ASC, name ASC").fetchall()
     asset_product_options = [
         {
             "id": product.id,
@@ -5490,7 +5708,10 @@ def admin_asset_new_with_stock():
 
             product_ids_unique = sorted(requested_by_product)
             placeholders = ", ".join(["?"] * len(product_ids_unique))
-            product_rows = conn.execute(f"SELECT * FROM products WHERE id IN ({placeholders})", product_ids_unique).fetchall()
+            product_rows = conn.execute(
+                f"SELECT * FROM products WHERE catalog_archived = 0 AND id IN ({placeholders})",
+                product_ids_unique,
+            ).fetchall()
             product_map = {
                 int(row["id"]): product
                 for row in product_rows
@@ -5588,7 +5809,7 @@ app.view_functions["admin_asset_new"] = admin_required(page_access_required("adm
 @page_access_required("admin_stock")
 def admin_stock():
     with db_connect() as conn:
-        product_rows = conn.execute("SELECT * FROM products ORDER BY active DESC, category ASC, name ASC").fetchall()
+        product_rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 ORDER BY active DESC, category ASC, name ASC").fetchall()
         movement_rows = conn.execute(
             """
             SELECT sm.*,
@@ -5606,9 +5827,9 @@ def admin_stock():
             """
         ).fetchall()
         totals = {
-            "products": conn.execute("SELECT COUNT(*) AS total FROM products").fetchone()["total"],
-            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products").fetchone()["total"],
-            "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE min_stock IS NOT NULL AND stock_quantity <= min_stock").fetchone()["total"],
+            "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+            "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND min_stock IS NOT NULL AND stock_quantity <= min_stock").fetchone()["total"],
             "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"],
         }
 

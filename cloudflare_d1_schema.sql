@@ -23,15 +23,18 @@ CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     category TEXT,
+    category_emoji TEXT,
     unit_measure TEXT NOT NULL DEFAULT 'un',
     description TEXT,
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     price_cents INTEGER NOT NULL DEFAULT 0,
     limit_base INTEGER,
     limit_franchise INTEGER,
+    min_order_quantity INTEGER,
     min_stock INTEGER,
     max_stock INTEGER,
     active INTEGER NOT NULL DEFAULT 1,
+    catalog_archived INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT
 );

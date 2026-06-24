@@ -277,3 +277,16 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 
 - PDFs de solicitações e ativos agora usam fonte CJK compatível com chinês simplificado.
 - Corrigido problema de caracteres chineses aparecendo como quadradinhos/caixas pretas no PDF.
+# Atualização v76
+
+- A importação de produtos permite escolher entre manter os dados atuais ou substituir todo o catálogo.
+- No modo de manutenção, os produtos são comparados pelo nome normalizado e têm estoque e demais dados atualizados sem duplicação.
+- No modo de substituição, somente os produtos da nova planilha permanecem nas telas, sem apagar o histórico de solicitações e movimentações anteriores.
+
+# Atualização v75
+
+- A página **Solicitar insumos** ganhou filtros por categoria, ordenação por nome, estoque ou preço e visualização em cards ou lista.
+- Os cards foram realinhados para manter ícone, categoria, descrição, indicadores e quantidade bem distribuídos.
+- Categorias agora aceitam um emoji próprio; o ícone escolhido é aplicado a todos os produtos da mesma categoria.
+- Produtos podem ter uma quantidade mínima opcional por pedido, validada tanto na tela quanto no servidor.
+- Exportação e importação de produtos incluem o ícone da categoria e a quantidade mínima por pedido.

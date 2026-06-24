@@ -1,6 +1,10 @@
 const productGrid = document.getElementById('productGrid');
 const productSearch = document.getElementById('productSearch');
 const refreshProducts = document.getElementById('refreshProducts');
+const categoryFilter = document.getElementById('categoryFilter');
+const productSort = document.getElementById('productSort');
+const productResultCount = document.getElementById('productResultCount');
+const productViewButtons = Array.from(document.querySelectorAll('[data-product-view]'));
 const emptyState = document.getElementById('emptyState');
 const cartItems = document.getElementById('cartItems');
 const cartCount = document.getElementById('cartCount');
@@ -14,6 +18,13 @@ const downloadLastPdf = document.getElementById('downloadLastPdf');
 let products = [];
 let cart = new Map();
 let debounceTimer = null;
+let productView = 'grid';
+
+try {
+  productView = window.localStorage.getItem('jt-product-view') === 'list' ? 'list' : 'grid';
+} catch (error) {
+  productView = 'grid';
+}
 
 function jtText(text) {
   return window.JT_I18N && typeof window.JT_I18N.t === 'function' ? window.JT_I18N.t(text) : text;
@@ -47,15 +58,36 @@ function escapeHtml(value) {
 
 async function loadProducts() {
   const q = productSearch.value.trim();
+  const category = categoryFilter ? categoryFilter.value : '';
+  const sort = productSort ? productSort.value : 'name';
   productGrid.innerHTML = `<div class="card empty-state">${jtText('Carregando insumos...')}</div>`;
   emptyState.classList.add('hidden');
-  const response = await fetch(`/api/products?q=${encodeURIComponent(q)}`);
-  products = await response.json();
-  renderProducts();
+  const params = new URLSearchParams({ q, category, sort });
+  try {
+    const response = await fetch(`/api/products?${params.toString()}`);
+    products = await response.json();
+    renderProducts();
+  } catch (error) {
+    products = [];
+    renderProducts();
+    setMessage(jtText('Não foi possível carregar os insumos.'), 'err');
+  }
+}
+
+function applyProductView() {
+  productGrid.classList.toggle('view-list', productView === 'list');
+  productGrid.classList.toggle('view-grid', productView === 'grid');
+  productViewButtons.forEach((button) => {
+    const active = button.dataset.productView === productView;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
 }
 
 function renderProducts() {
   productGrid.innerHTML = '';
+  if (productResultCount) productResultCount.textContent = String(products.length);
+  applyProductView();
   if (!products.length) {
     emptyState.classList.remove('hidden');
     return;
@@ -75,29 +107,35 @@ function renderProducts() {
     const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
     const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
     const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unitLabel)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
+    const minimum = Number(product.min_order_quantity || 1);
+    const minimumBadge = minimum > 1 ? `<span class="badge minimum-badge">${jtText('Pedido mínimo')}: ${minimum} ${escapeHtml(unitLabel)}</span>` : '';
+    const categoryEmoji = escapeHtml(product.category_emoji || '📦');
 
     card.innerHTML = `
-      <div class="product-head">
-        <span class="product-icon">📦</span>
-        <span class="product-category">${escapeHtml(productCategory)}</span>
-      </div>
-      <div>
-        <h3>${escapeHtml(productName)}</h3>
-        <p>${escapeHtml(productDescription)}</p>
-      </div>
-      <div class="meta-row">
-        ${priceBadge}
-        ${unitBadge}
-        ${stockBadge}
-        ${limitBadge}
+      <div class="product-card-content">
+        <div class="product-head">
+          <span class="product-icon" aria-hidden="true">${categoryEmoji}</span>
+          <span class="product-category">${escapeHtml(productCategory)}</span>
+        </div>
+        <div class="product-copy">
+          <h3>${escapeHtml(productName)}</h3>
+          <p>${escapeHtml(productDescription)}</p>
+        </div>
+        <div class="meta-row">
+          ${priceBadge}
+          ${unitBadge}
+          ${stockBadge}
+          ${limitBadge}
+          ${minimumBadge}
+        </div>
       </div>
       <div class="add-row">
-        <input type="number" min="1" value="1" aria-label="${jtText('Quantidade')}">
+        <input type="number" min="${minimum}" value="${minimum}" aria-label="${jtText('Quantidade')}">
         <button class="btn primary" type="button">${jtText('Adicionar')}</button>
       </div>
     `;
-    const qtyInput = card.querySelector('input');
-    const button = card.querySelector('button');
+    const qtyInput = card.querySelector('.add-row input');
+    const button = card.querySelector('.add-row button');
     button.addEventListener('click', () => {
       const quantity = parseInt(qtyInput.value, 10);
       if (!quantity || quantity <= 0) {
@@ -105,11 +143,16 @@ function renderProducts() {
         return;
       }
       const current = cart.get(product.id)?.quantity || 0;
-      if (product.limit !== null && product.limit !== undefined && current + quantity > product.limit) {
+      const requestedQuantity = current + quantity;
+      if (requestedQuantity < minimum) {
+        setMessage(jtText(`A quantidade mínima para ${productName} é ${minimum}.`), 'err');
+        return;
+      }
+      if (product.limit !== null && product.limit !== undefined && requestedQuantity > product.limit) {
         setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
         return;
       }
-      cart.set(product.id, { product, quantity: current + quantity });
+      cart.set(product.id, { product, quantity: requestedQuantity });
       renderCart();
       setMessage(jtText(`${productName} adicionado à solicitação.`), 'ok');
     });
@@ -132,12 +175,14 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-item';
     div.style.animationDelay = `${Math.min(index * 0.035, 0.25)}s`;
+    const minimum = Number(item.product.min_order_quantity || 1);
+    const minimumText = minimum > 1 ? ` • ${jtText('Mínimo')}: ${minimum}` : '';
     div.innerHTML = `
       <div>
         <strong>${escapeHtml(jtText(item.product.name))}</strong>
-        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(jtText(item.product.unit_measure || 'un'))}</span>
+        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(jtText(item.product.unit_measure || 'un'))}${minimumText}</span>
       </div>
-      <input type="number" min="1" value="${item.quantity}">
+      <input type="number" min="${minimum}" value="${item.quantity}">
       <button class="btn ghost danger" type="button">×</button>
     `;
     const input = div.querySelector('input');
@@ -146,6 +191,11 @@ function renderCart() {
       const quantity = parseInt(input.value, 10);
       if (!quantity || quantity <= 0) {
         input.value = item.quantity;
+        return;
+      }
+      if (quantity < minimum) {
+        input.value = item.quantity;
+        setMessage(jtText(`A quantidade mínima para ${jtText(item.product.name)} é ${minimum}.`), 'err');
         return;
       }
       if (item.product.limit !== null && item.product.limit !== undefined && quantity > item.product.limit) {
@@ -214,6 +264,19 @@ async function sendRequest() {
 productSearch.addEventListener('input', () => {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(loadProducts, 250);
+});
+if (categoryFilter) categoryFilter.addEventListener('change', loadProducts);
+if (productSort) productSort.addEventListener('change', loadProducts);
+productViewButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    productView = button.dataset.productView === 'list' ? 'list' : 'grid';
+    try {
+      window.localStorage.setItem('jt-product-view', productView);
+    } catch (error) {
+      // A visualização continua funcionando mesmo se o navegador bloquear o armazenamento local.
+    }
+    applyProductView();
+  });
 });
 refreshProducts.addEventListener('click', loadProducts);
 clearCart.addEventListener('click', () => {

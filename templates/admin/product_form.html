@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}{{ 'Editar' if product else 'Novo' }} produto • Portal de Insumos J&T{% endblock %}
 {% block page_title %}{{ 'Editar produto' if product else 'Novo produto' }}{% endblock %}
-{% block page_subtitle %}Defina estoque, valor, limites de solicitação e estoque mínimo/máximo.{% endblock %}
+{% block page_subtitle %}Defina estoque, valor, limites, quantidade mínima por pedido e parâmetros de estoque.{% endblock %}
 {% block content %}
 <div class="card wide-card">
   <form id="productForm" method="post" class="form-grid two-cols">
@@ -12,7 +12,9 @@
     <div class="category-field">
       <label for="categorySearch">Categoria</label>
       <input type="hidden" name="category" id="categoryValue" value="{{ product.category if product else '' }}">
+      <input type="hidden" name="category_emoji" id="categoryEmojiValue" value="{{ product.category_emoji if product else '' }}">
       <div class="category-picker">
+        <span id="categoryEmojiPreview" class="category-emoji-preview" aria-hidden="true">{{ product.category_emoji if product else '📦' }}</span>
         <div class="category-search-wrap">
           <input
             id="categorySearch"
@@ -29,10 +31,15 @@
         <button id="openNewCategory" class="btn ghost category-new-button" type="button">+ Nova categoria</button>
       </div>
       <div id="newCategoryPanel" class="new-category-panel hidden">
+        <label class="new-category-emoji">
+          Ícone
+          <input id="newCategoryEmoji" type="text" value="📦" maxlength="8" aria-label="Emoji da categoria">
+        </label>
         <input id="newCategoryInput" type="text" placeholder="Nome da nova categoria" maxlength="120">
         <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
         <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
       </div>
+      <small class="hint">O ícone escolhido será usado em todos os produtos dessa categoria.</small>
     </div>
     <label>
       Unidade de medida
@@ -53,6 +60,10 @@
     <label>
       Limite para franquias
       <input name="limit_franchise" type="number" min="0" value="{{ product.limit_franchise if product and product.limit_franchise is not none else '' }}" placeholder="Vazio = sem limite">
+    </label>
+    <label>
+      Quantidade mínima por pedido
+      <input name="min_order_quantity" type="number" min="1" value="{{ product.min_order_quantity if product and product.min_order_quantity is not none else '' }}" placeholder="Opcional, ex.: 5">
     </label>
     <label>
       Estoque mínimo
@@ -83,17 +94,21 @@
   const form = document.getElementById('productForm');
   const search = document.getElementById('categorySearch');
   const valueInput = document.getElementById('categoryValue');
+  const emojiValueInput = document.getElementById('categoryEmojiValue');
+  const emojiPreview = document.getElementById('categoryEmojiPreview');
   const suggestions = document.getElementById('categorySuggestions');
   const openButton = document.getElementById('openNewCategory');
   const panel = document.getElementById('newCategoryPanel');
   const newInput = document.getElementById('newCategoryInput');
+  const newEmojiInput = document.getElementById('newCategoryEmoji');
   const confirmButton = document.getElementById('confirmNewCategory');
   const cancelButton = document.getElementById('cancelNewCategory');
   const categories = {{ product_categories|default([])|tojson }};
   const currentCategory = valueInput ? valueInput.value.trim() : '';
+  const currentEmoji = emojiValueInput ? emojiValueInput.value.trim() : '';
 
-  if (currentCategory && !categories.some((item) => item.toLocaleLowerCase('pt-BR') === currentCategory.toLocaleLowerCase('pt-BR'))) {
-    categories.push(currentCategory);
+  if (currentCategory && !categories.some((item) => item.name.toLocaleLowerCase('pt-BR') === currentCategory.toLocaleLowerCase('pt-BR'))) {
+    categories.push({ name: currentCategory, emoji: currentEmoji || '📦' });
   }
 
   function normalize(value) {
@@ -119,8 +134,10 @@
   }
 
   function selectCategory(category) {
-    search.value = category;
-    valueInput.value = category;
+    search.value = category.name;
+    valueInput.value = category.name;
+    emojiValueInput.value = category.emoji || '📦';
+    emojiPreview.textContent = category.emoji || '📦';
     search.setCustomValidity('');
     panel.classList.add('hidden');
     closeSuggestions();
@@ -129,8 +146,8 @@
   function matchingCategories(query) {
     const normalizedQuery = normalize(query);
     return categories
-      .filter((category) => !normalizedQuery || normalize(category).includes(normalizedQuery))
-      .sort((left, right) => left.localeCompare(right, 'pt-BR'))
+      .filter((category) => !normalizedQuery || normalize(category.name).includes(normalizedQuery))
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
       .slice(0, 12);
   }
 
@@ -139,8 +156,8 @@
     if (!matches.length) {
       suggestions.innerHTML = '<div class="category-suggestion-empty">Nenhuma categoria encontrada. Use “Nova categoria”.</div>';
     } else {
-      suggestions.innerHTML = matches.map((category) => (
-        `<button type="button" class="category-suggestion" role="option" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
+      suggestions.innerHTML = matches.map((category, index) => (
+        `<button type="button" class="category-suggestion" role="option" data-category-index="${index}"><span>${escapeHtml(category.emoji || '📦')}</span>${escapeHtml(category.name)}</button>`
       )).join('');
     }
     suggestions.classList.remove('hidden');
@@ -149,30 +166,36 @@
 
   search.addEventListener('focus', renderSuggestions);
   search.addEventListener('input', function () {
-    const exact = categories.find((category) => normalize(category) === normalize(search.value));
-    valueInput.value = exact || '';
+    const exact = categories.find((category) => normalize(category.name) === normalize(search.value));
+    valueInput.value = exact ? exact.name : '';
+    emojiValueInput.value = exact ? (exact.emoji || '📦') : '';
+    emojiPreview.textContent = exact ? (exact.emoji || '📦') : '＋';
     search.setCustomValidity('');
     renderSuggestions();
   });
   search.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') closeSuggestions();
     if (event.key === 'Enter' && !suggestions.classList.contains('hidden')) {
-      const first = suggestions.querySelector('[data-category]');
+      const first = suggestions.querySelector('[data-category-index]');
       if (first) {
         event.preventDefault();
-        selectCategory(first.dataset.category || '');
+        selectCategory(matchingCategories(search.value)[Number(first.dataset.categoryIndex || 0)]);
       }
     }
   });
 
   suggestions.addEventListener('click', function (event) {
-    const button = event.target.closest('[data-category]');
-    if (button) selectCategory(button.dataset.category || '');
+    const button = event.target.closest('[data-category-index]');
+    if (button) {
+      const match = matchingCategories(search.value)[Number(button.dataset.categoryIndex || 0)];
+      if (match) selectCategory(match);
+    }
   });
 
   openButton.addEventListener('click', function () {
     panel.classList.remove('hidden');
     newInput.value = search.value.trim();
+    newEmojiInput.value = '📦';
     closeSuggestions();
     newInput.focus();
   });
@@ -183,14 +206,17 @@
       newInput.focus();
       return;
     }
-    const existing = categories.find((item) => normalize(item) === normalize(category));
-    if (!existing) categories.push(category);
-    selectCategory(existing || category);
+    const emoji = newEmojiInput.value.trim() || '📦';
+    const existing = categories.find((item) => normalize(item.name) === normalize(category));
+    const selected = existing || { name: category, emoji };
+    if (!existing) categories.push(selected);
+    selectCategory(selected);
   });
 
   cancelButton.addEventListener('click', function () {
     panel.classList.add('hidden');
     newInput.value = '';
+    newEmojiInput.value = '📦';
     search.focus();
   });
 

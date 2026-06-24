@@ -12,6 +12,41 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
         <input id="productSearch" placeholder="Pesquisar por insumo, categoria ou descrição..." autocomplete="off">
         <button id="refreshProducts" class="btn ghost" type="button">Atualizar</button>
       </div>
+      <div class="catalog-filter-row">
+        <label>
+          Categoria
+          <select id="categoryFilter">
+            <option value="">Todas as categorias</option>
+            {% for category in product_categories %}
+            <option value="{{ category.name }}">{{ category.emoji }} {{ category.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Ordenar por
+          <select id="productSort">
+            <option value="name">Nome A-Z</option>
+            <option value="stock_desc">Maior quantidade em estoque</option>
+            <option value="price_asc">Menor preço</option>
+            <option value="price_desc">Maior preço</option>
+          </select>
+        </label>
+        <div class="catalog-view-control" role="group" aria-label="Modo de visualização">
+          <span>Visualização</span>
+          <div class="catalog-view-buttons">
+            <button class="catalog-view-button active" type="button" data-product-view="grid" aria-pressed="true" title="Visualizar em cards">
+              <span aria-hidden="true">▦</span> Cards
+            </button>
+            <button class="catalog-view-button" type="button" data-product-view="list" aria-pressed="false" title="Visualizar em lista">
+              <span aria-hidden="true">☷</span> Lista
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="catalog-result-line">
+        <strong id="productResultCount">0</strong>
+        <span>produto(s) encontrado(s)</span>
+      </div>
       {% if current_user.role == 'base' %}
         <p class="hint">Perfil base: valores e estoque não são exibidos.</p>
       {% elif current_user.role == 'franchise' %}
@@ -53,5 +88,5 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}?v=70"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=75"></script>
 {% endblock %}

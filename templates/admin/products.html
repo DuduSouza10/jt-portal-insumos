@@ -75,27 +75,45 @@
       </div>
     </section>
   </div>
-  <form class="import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data">
+  <form class="import-form product-import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data" data-product-import-form>
     <label>
       Importar planilha de produtos (.xlsx)
       <input type="file" name="spreadsheet" accept=".xlsx" required>
     </label>
+    <fieldset class="import-mode-fieldset">
+      <legend>Como deseja importar?</legend>
+      <label class="import-mode-option">
+        <input type="radio" name="import_mode" value="merge" checked>
+        <span>
+          <strong>Manter dados atuais</strong>
+          <small>Compara pelo nome, atualiza estoque e demais dados e não cria duplicatas.</small>
+        </span>
+      </label>
+      <label class="import-mode-option danger-option">
+        <input type="radio" name="import_mode" value="replace">
+        <span>
+          <strong>Substituir todo o catálogo</strong>
+          <small>Remove os produtos atuais das telas e mantém somente os itens da nova planilha.</small>
+        </span>
+      </label>
+    </fieldset>
     <button class="btn primary" type="submit">Importar dados</button>
-    <small>Colunas aceitas: ID, Nome do produto, Categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Estoque mínimo, Estoque máximo e Ativo.</small>
+    <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.</small>
   </form>
   <table>
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="productTableBody">
       {% for product in products %}
       <tr data-product-row>
         <td data-label="Produto"><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
-        <td data-label="Categoria">{{ product.category or '-' }}</td>
+        <td data-label="Categoria">{{ product.category_emoji }} {{ product.category or '-' }}</td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
         <td data-label="Estoque"><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
+        <td data-label="Pedido mín.">{{ product.min_order_quantity if product.min_order_quantity is not none else '-' }}</td>
         <td data-label="Min.">{{ product.min_stock if product.min_stock is not none else '-' }}</td>
         <td data-label="Max.">{{ product.max_stock if product.max_stock is not none else '-' }}</td>
         <td data-label="Valor">{{ format_brl(product.price_cents) }}</td>
@@ -112,10 +130,10 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="12" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="13" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
       {% if products %}
-      <tr id="productLiveEmpty" class="hidden"><td colspan="12" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      <tr id="productLiveEmpty" class="hidden"><td colspan="13" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -123,6 +141,17 @@
 
 <script>
 (function () {
+  const importForm = document.querySelector('[data-product-import-form]');
+  if (importForm) {
+    importForm.addEventListener('submit', function (event) {
+      const selectedMode = importForm.querySelector('input[name="import_mode"]:checked');
+      if (selectedMode && selectedMode.value === 'replace') {
+        const confirmed = window.confirm('Substituir todo o catálogo? Os produtos atuais sairão das telas e apenas os itens desta planilha permanecerão disponíveis.');
+        if (!confirmed) event.preventDefault();
+      }
+    });
+  }
+
   const modal = document.getElementById('exportLanguageModal');
   const openButton = document.querySelector('[data-open-export-modal]');
   const closeButtons = document.querySelectorAll('[data-close-export-modal]');
