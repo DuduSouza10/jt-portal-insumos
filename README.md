@@ -277,6 +277,12 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 
 - PDFs de solicitações e ativos agora usam fonte CJK compatível com chinês simplificado.
 - Corrigido problema de caracteres chineses aparecendo como quadradinhos/caixas pretas no PDF.
+# Atualização v77
+
+- Tradução chinesa ampliada para relatórios, entradas de materiais, ativos, usuários, produtos e mensagens administrativas.
+- Datas, botões e instruções agora usam frases completas, evitando textos misturados em português e chinês.
+- Alertas, confirmações e rótulos das tabelas responsivas também respeitam o idioma selecionado.
+
 # Atualização v76
 
 - A importação de produtos permite escolher entre manter os dados atuais ou substituir todo o catálogo.

@@ -630,7 +630,99 @@
     "Selecione uma franquia": "请选择加盟店"
   });
 
-  const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
+  Object.assign(zh, {
+    "Relatórios": "报告",
+    "Relatório mensal de solicitações": "月度申请报告",
+    "Gere um PDF completo com todas as solicitações realizadas no período desejado, incluindo base/franquia, solicitante, pessoas na base, status, itens, quantidades, valores e observações.": "生成所选期间内所有申请的完整 PDF，包括基地/加盟店、申请人、基地人数、状态、项目、数量、金额和备注。",
+    "Data inicial": "开始日期",
+    "Data final": "结束日期",
+    "Gerar relatório": "生成报告",
+    "Cadastrado em": "登记时间",
+    "Filtros": "筛选",
+    "item(ns)": "项",
+    "Selecione": "请选择",
+    "Nome do gestor responsável": "负责人姓名",
+    "Remover item": "移除项目",
+    "Ex.: JT-00123": "例如：JT-00123",
+    "Ex.: Kit operacional": "例如：运营工具包",
+    "Ex.: Operações": "例如：运营部",
+    "Ao anexar a nota, os campos abaixo serão exibidos.": "附上发票后，将显示以下字段。",
+    "Conteúdo do relatório": "报告内容",
+    "Entradas do período": "期间入库记录",
+    "Ex.: 0,65": "例如：0.65",
+    "Ex.: 1.250,00": "例如：1,250.00",
+    "Ex.: Envelope de segurança M": "例如：M 型安全信封",
+    "Ex.: NF-12345": "例如：NF-12345",
+    "Ex.: un, caixa, rolo": "例如：个、箱、卷",
+    "Histórico recente de materiais adicionados ao estoque.": "最近添加到库存的材料记录。",
+    "Importação": "导入",
+    "Informe item, quantidade, valor e unidade. A nota fiscal é opcional.": "填写项目、数量、金额和单位。发票为可选项。",
+    "Nenhuma entrada de material registrada ainda.": "尚未登记任何材料入库。",
+    "Nota fiscal": "发票",
+    "Notas fiscais": "发票",
+    "Nova entrada": "新增入库",
+    "O PDF será aberto em uma nova aba e pode ser salvo ou enviado para conferência.": "PDF 将在新标签页中打开，可保存或发送审核。",
+    "Observações sobre a entrada, fornecedor, compra, divergências etc.": "填写入库、供应商、采购、差异等备注。",
+    "Os materiais adicionados conversam com Produtos: se o item já existir, o estoque será somado; se não existir, o produto será criado automaticamente.": "新增材料会与产品目录同步：若项目已存在则增加库存，否则自动创建产品。",
+    "Selecione o período para gerar um PDF completo com entradas, notas fiscais, valores, quantidades e observações.": "选择期间以生成包含入库、发票、金额、数量和备注的完整 PDF。",
+    "Use a planilha modelo para importar várias entradas de uma só vez.": "使用模板表格一次导入多条入库记录。",
+    "Valores e estoque": "金额与库存",
+    "Pesquisar ou selecionar categoria...": "搜索或选择类别...",
+    "Pedido mín.": "最低申请量",
+    "Pessoas na base:": "基地人数：",
+    "Movimentado por": "操作人",
+    "Não registrado": "未记录",
+    "Registro automático": "自动记录",
+    "Sistema": "系统",
+    "As páginas administrativas ficam disponíveis apenas para administradores.": "管理页面仅对管理员开放。",
+    "Base e franquia usam Solicitar insumos e Minhas solicitações. Administradores recebem todas as páginas.": "基地和加盟店可使用“申请耗材”和“我的申请”；管理员可使用所有页面。",
+    "Ex.: Franquia Centro": "例如：中心加盟店",
+    "opcional": "可选",
+    "Ver páginas": "查看页面",
+    "Número": "编号",
+    "Use o modelo acima. Usuários repetidos ou linhas inválidas são ignorados e informados após a importação.": "请使用上方模板。重复用户或无效行将被忽略，并在导入后提示。",
+    "Min.": "最低",
+    "Max.": "最高",
+    "Situacao": "状态",
+    "Acoes": "操作",
+    "Acao": "操作",
+    "Solicitacao": "申请",
+    "Observacao": "备注",
+    "Observacao admin": "管理员备注",
+    "Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.": "接受字段：ID、产品名称、类别、类别图标、计量单位、描述、可用库存、单价、基地限制、加盟店限制、每次申请最低数量、最低库存、最高库存和启用状态。",
+    "Selecione uma planilha .xlsx de usuários.": "请选择用户 .xlsx 电子表格。",
+    "Selecione uma planilha .xlsx de entrada de materiais.": "请选择材料入库 .xlsx 电子表格。",
+    "Informe a data inicial e a data final para gerar o relatório de entradas.": "请输入开始日期和结束日期以生成入库报告。",
+    "Informe a data inicial e a data final para gerar o relatório.": "请输入开始日期和结束日期以生成报告。",
+    "Informe a data inicial e a data final para gerar o relatório de ativos.": "请输入开始日期和结束日期以生成资产报告。",
+    "A data final não pode ser menor que a data inicial.": "结束日期不能早于开始日期。",
+    "Selecione somente uma base ou uma franquia para filtrar.": "筛选时只能选择一个基地或一个加盟店。",
+    "Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.": "请填写名称、基地/加盟店、区域、部门和负责人以添加资产。",
+    "Selecione uma base ou franquia válida para o ativo.": "请选择有效的基地或加盟店。",
+    "Selecione uma base ou franquia valida para o ativo.": "请选择有效的基地或加盟店。",
+    "Selecione uma regional válida para o ativo.": "请选择有效区域。",
+    "Selecione uma regional valida para o ativo.": "请选择有效区域。",
+    "A base/franquia selecionada não pertence à regional informada.": "所选基地/加盟店不属于指定区域。",
+    "A base/franquia selecionada nao pertence a regional informada.": "所选基地/加盟店不属于指定区域。",
+    "Adicione pelo menos um item ao ativo.": "请至少为资产添加一个项目。",
+    "Ativo adicionado ao relatório.": "资产已添加到报告。",
+    "Ativo adicionado ao relatorio e estoque baixado.": "资产已添加到报告并扣减库存。",
+    "Selecione cada item pela lista de produtos do portal.": "请从门户产品列表中选择每个项目。",
+    "Informe uma quantidade valida para cada item.": "请为每个项目填写有效数量。",
+    "Preencha responsável, nome de usuário e senha.": "请填写负责人、用户名和密码。",
+    "Preencha responsável e nome de usuário.": "请填写负责人和用户名。",
+    "A planilha enviada está vazia.": "上传的电子表格为空。",
+    "Não foi possível ler o arquivo enviado.": "无法读取上传的文件。",
+    "Não consegui importar essa planilha. O erro foi registrado nos logs do Render; envie o trecho vermelho se continuar acontecendo.": "无法导入此电子表格。错误已记录在 Render 日志中；若问题持续，请发送红色错误片段。",
+    "Nenhum produto válido foi encontrado na planilha. Confira se a primeira linha contém os cabeçalhos corretos.": "电子表格中未找到有效产品。请检查第一行是否包含正确字段标题。",
+    "A importação falhou, mas o site não quebrou. Veja os logs do Render para o detalhe do erro.": "导入失败，但网站仍可运行。请查看 Render 日志了解错误详情。",
+    "Informe nome do item e quantidade válida para adicionar a entrada.": "请填写项目名称和有效数量以添加入库。",
+    "Entrada de material registrada e estoque atualizado.": "材料入库已登记，库存已更新。",
+    "Um ou mais produtos selecionados nao existem mais no cadastro.": "一个或多个所选产品已不在目录中。",
+    "Selecione uma base ou uma franquia para cadastrar o ativo.": "请选择一个基地或加盟店以登记资产。"
+  });
+
+  const ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-label'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
   const VIEWPORT_PADDING = 2200;
@@ -798,6 +890,7 @@
     if ((match = core.match(/^Insira o código para confirmar o seu login:\s*(\d{6})$/))) return `请输入代码以确认您的登入：${match[1]}`;
     if ((match = core.match(/^Solicitação #(\d+) enviada para aprovação\. PDF disponível para download\.$/))) return `申请 #${match[1]} 已送交批准。PDF 可供下载。`;
     if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${match[1]} 超出耗材限制。允许限制：${match[2]}。`;
+    if ((match = core.match(/^A quantidade mínima para (.+) é (.+)\.$/))) return `${match[1]} 的最低申请数量为 ${match[2]}。`;
     if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${match[1]} 已加入申请。`;
     if ((match = core.match(/^Estoque:\s*(.+)$/))) return `库存：${match[1]}`;
     if ((match = core.match(/^Limite:\s*(.+)$/))) return `限制：${match[1]}`;
@@ -815,6 +908,8 @@
     if ((match = core.match(/^(\d+)\s+caixas$/))) return `${match[1]} 箱`;
     if ((match = core.match(/^(\d+)\s+pacote$/))) return `${match[1]} 包`;
     if ((match = core.match(/^(\d+)\s+pacotes$/))) return `${match[1]} 包`;
+    if ((match = core.match(/^(\d+)\s+produto\(s\)$/))) return `${match[1]} 个产品`;
+    if ((match = core.match(/^(\d+)\s+item\(ns\)$/))) return `${match[1]} 项`;
     if ((match = core.match(/^Admin\s*•\s*(.+)$/))) return `管理员 • ${match[1]}`;
     if ((match = core.match(/^Base\s*•\s*(.+)$/))) return `基地 • ${match[1]}`;
     if ((match = core.match(/^Franquia\s*•\s*(.+)$/))) return `加盟店 • ${match[1]}`;
@@ -822,7 +917,19 @@
     if ((match = core.match(/^Produto\s*•\s*(.+)$/))) return `产品 • ${match[1]}`;
     if ((match = core.match(/^Estoque atual:\s*(.+)$/))) return `当前库存：${match[1]}`;
     if ((match = core.match(/^Mín\.?:\s*(.+)\s*•\s*Máx\.?:\s*(.+)$/))) return `最低：${match[1]} • 最高：${match[2]}`;
-    if ((match = core.match(/^Importação concluída:\s*(.+)$/))) return `导入完成：${match[1]}`;
+    if ((match = core.match(/^Pesquisa:\s*(.+)$/))) return `搜索：${match[1]}`;
+    if ((match = core.match(/^Importação concluída:\s*(\d+) criado\(s\),\s*(\d+) atualizado\(s\),\s*(\d+) ignorado\(s\)\.(.*)$/))) {
+      let suffix = match[4] || '';
+      suffix = suffix
+        .replace(' Catálogo substituído; ', ' 已替换产品目录；')
+        .replace(' produto(s) anterior(es) removido(s) das telas.', ' 个旧产品已从页面移除。')
+        .replace(' Os produtos foram comparados pelo nome, sem criar duplicatas.', ' 产品已按名称匹配，未创建重复项。');
+      return `导入完成：新建 ${match[1]} 个，更新 ${match[2]} 个，忽略 ${match[3]} 个。${suffix}`;
+    }
+    if ((match = core.match(/^Importação concluída:\s*(.+)$/))) return `导入完成：${translateFallback(match[1])}`;
+    if ((match = core.match(/^Produto '(.+)' ativado para solicitação\.$/))) return `产品“${match[1]}”已启用，可供申请。`;
+    if ((match = core.match(/^Produto '(.+)' inativado para solicitação\. Ele continua salvo no banco de dados\.$/))) return `产品“${match[1]}”已停用申请，但仍保存在数据库中。`;
+    if ((match = core.match(/^Produto '(.+)' excluído definitivamente do banco de dados\.(.*)$/))) return `产品“${match[1]}”已从数据库中永久删除。${match[2] || ''}`;
     if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `库存不足，无法批准：${match[1]}`;
     return translateFallback(core);
   }
@@ -1095,6 +1202,7 @@
   }
 
   window.JT_I18N = { t: t, applyLanguage: applyLanguage, refresh: refresh, getLanguage: currentLanguage };
+  window.jtText = t;
 
   document.addEventListener('DOMContentLoaded', function () {
     if (!localStorage.getItem(STORAGE_KEY)) localStorage.setItem(STORAGE_KEY, 'pt-BR');

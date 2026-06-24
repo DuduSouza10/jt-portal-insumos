@@ -68,7 +68,7 @@
         <button class="btn danger" type="submit">Recusar solicitação</button>
       </form>
     {% endif %}
-    <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm('Excluir definitivamente esta solicitação do banco de dados?')">
+    <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente esta solicitação do banco de dados?') : 'Excluir definitivamente esta solicitação do banco de dados?')">
       <button class="btn ghost danger" type="submit">Excluir solicitação</button>
     </form>
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Voltar</a>

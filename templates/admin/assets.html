@@ -253,6 +253,9 @@
 <script>
 (function () {
   const assetProducts = {{ asset_product_options|tojson }};
+  function tr(text) {
+    return window.JT_I18N && typeof window.JT_I18N.t === 'function' ? window.JT_I18N.t(text) : text;
+  }
   const modal = document.getElementById('assetModal');
   const openButton = document.querySelector('[data-open-asset-modal]');
   const closeButtons = document.querySelectorAll('[data-close-asset-modal]');
@@ -362,7 +365,7 @@
 
     box.innerHTML = '';
     if (!matches.length) {
-      box.innerHTML = '<span class="asset-product-empty">Nenhum produto encontrado.</span>';
+      box.innerHTML = `<span class="asset-product-empty">${tr('Nenhum produto encontrado.')}</span>`;
       box.classList.remove('hidden');
       return;
     }
@@ -374,9 +377,9 @@
       button.dataset.productId = String(product.id);
       button.dataset.productName = product.name;
       const name = document.createElement('strong');
-      name.textContent = product.name;
+      name.textContent = tr(product.name);
       const meta = document.createElement('span');
-      meta.textContent = `${product.category || 'Sem categoria'} • Estoque ${product.stock_quantity} ${product.unit_measure || 'un'}`;
+      meta.textContent = `${tr(product.category || 'Sem categoria')} • ${tr('Estoque')} ${product.stock_quantity} ${tr(product.unit_measure || 'un')}`;
       button.appendChild(name);
       button.appendChild(meta);
       box.appendChild(button);
@@ -484,12 +487,12 @@
       const hasFranchise = !!(modalFranchise && modalFranchise.value);
       if (hasBase && hasFranchise) {
         event.preventDefault();
-        alert('Selecione somente uma base ou uma franquia, não as duas.');
+        alert(tr('Selecione somente uma base ou uma franquia, não as duas.'));
         return;
       }
       if (!hasBase && !hasFranchise) {
         event.preventDefault();
-        alert('Selecione uma base ou uma franquia para cadastrar o ativo.');
+        alert(tr('Selecione uma base ou uma franquia para cadastrar o ativo.'));
       }
     });
   }

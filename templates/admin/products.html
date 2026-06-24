@@ -123,10 +123,10 @@
         <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
         <td class="actions-cell" data-label="Acoes">
           <a class="btn tiny ghost" href="{{ url_for('admin_product_edit', product_id=product.id) }}">Editar</a>
-          <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
+          <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}') : '{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
             <button class="btn tiny ghost" type="submit">{{ 'Inativar' if product.active else 'Ativar' }}</button>
           </form>
-          <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')"><button class="btn tiny danger" type="submit">Excluir</button></form>
+          <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.') : 'Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')"><button class="btn tiny danger" type="submit">Excluir</button></form>
         </td>
       </tr>
       {% else %}
@@ -146,7 +146,8 @@
     importForm.addEventListener('submit', function (event) {
       const selectedMode = importForm.querySelector('input[name="import_mode"]:checked');
       if (selectedMode && selectedMode.value === 'replace') {
-        const confirmed = window.confirm('Substituir todo o catálogo? Os produtos atuais sairão das telas e apenas os itens desta planilha permanecerão disponíveis.');
+        const message = 'Substituir todo o catálogo? Os produtos atuais sairão das telas e apenas os itens desta planilha permanecerão disponíveis.';
+        const confirmed = window.confirm(window.jtText ? window.jtText(message) : message);
         if (!confirmed) event.preventDefault();
       }
     });
