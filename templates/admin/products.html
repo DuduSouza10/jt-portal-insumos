@@ -103,14 +103,28 @@
   <table>
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Público</th><th>Unidade</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="productTableBody">
       {% for product in products %}
       <tr data-product-row>
-        <td data-label="Produto"><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
+        <td data-label="Produto">
+          <div class="admin-product-main">
+            {% if product.image_key %}
+            <button class="admin-product-thumb" type="button" data-image-preview="{{ url_for('product_image', product_id=product.id) }}" data-image-title="{{ product.name }}" title="Ampliar imagem">
+              <img src="{{ url_for('product_image', product_id=product.id) }}" alt="{{ product.name }}">
+            </button>
+            {% endif %}
+            <div><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></div>
+          </div>
+        </td>
         <td data-label="Categoria">{{ product.category_emoji }} {{ product.category or '-' }}</td>
+        <td data-label="Público">
+          {% if product.visible_base %}<span class="audience-pill">Base</span>{% endif %}
+          {% if product.visible_franchise %}<span class="audience-pill">Franquia</span>{% endif %}
+          {% if not product.visible_base and not product.visible_franchise %}<span class="muted">Somente admin</span>{% endif %}
+        </td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
         <td data-label="Estoque"><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
         <td data-label="Pedido mín.">{{ product.min_order_quantity if product.min_order_quantity is not none else '-' }}</td>
@@ -130,10 +144,10 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="13" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="14" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
       {% if products %}
-      <tr id="productLiveEmpty" class="hidden"><td colspan="13" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      <tr id="productLiveEmpty" class="hidden"><td colspan="14" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
       {% endif %}
     </tbody>
   </table>

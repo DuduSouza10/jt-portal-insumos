@@ -98,11 +98,21 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from svglib.svglib import svg2rlg
 
 from cloudflare_d1 import cloudflare_d1_connect_from_env
-from cloudflare_r2 import upload_bytes_to_r2
+from cloudflare_r2 import download_bytes_from_r2, upload_bytes_to_r2
 
 BASE_DIR = Path(__file__).resolve().parent
 INSTANCE_DIR = BASE_DIR / "instance"
 INSTANCE_DIR.mkdir(exist_ok=True)
+PRODUCT_IMAGE_DIR = INSTANCE_DIR / "product_images"
+PRODUCT_IMAGE_DIR.mkdir(exist_ok=True)
+PRODUCT_IMAGE_MAX_BYTES = 3 * 1024 * 1024
+PRODUCT_IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
 
 # Fonte CJK para PDFs. As fontes padrão do ReportLab (Helvetica) não
 # renderizam caracteres chineses, por isso o PDF acabava mostrando
@@ -368,6 +378,9 @@ class Product:
     name: str = ""
     category: str = ""
     category_emoji: str = ""
+    image_name: str = ""
+    image_key: str = ""
+    image_content_type: str = ""
     unit_measure: str = "un"
     description: str = ""
     stock_quantity: int = 0
@@ -379,6 +392,8 @@ class Product:
     max_stock: int | None = None
     active: bool = True
     catalog_archived: bool = False
+    visible_base: bool = True
+    visible_franchise: bool = True
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
 
@@ -724,6 +739,9 @@ def row_to_product(row: Any | None) -> Product | None:
             row["category_emoji"] if "category_emoji" in row.keys() else "",
             category,
         ),
+        image_name=(row["image_name"] if "image_name" in row.keys() else "") or "",
+        image_key=(row["image_key"] if "image_key" in row.keys() else "") or "",
+        image_content_type=(row["image_content_type"] if "image_content_type" in row.keys() else "") or "",
         unit_measure=(row["unit_measure"] if "unit_measure" in row.keys() else None) or "un",
         description=row["description"] or "",
         stock_quantity=int(row["stock_quantity"] or 0),
@@ -735,6 +753,8 @@ def row_to_product(row: Any | None) -> Product | None:
         max_stock=row["max_stock"] if "max_stock" in row.keys() and row["max_stock"] is not None else None,
         active=bool(row["active"]),
         catalog_archived=bool(row["catalog_archived"]) if "catalog_archived" in row.keys() else False,
+        visible_base=bool(row["visible_base"]) if "visible_base" in row.keys() else True,
+        visible_franchise=bool(row["visible_franchise"]) if "visible_franchise" in row.keys() else True,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
     )
@@ -956,6 +976,9 @@ def init_db() -> None:
                 name TEXT NOT NULL,
                 category TEXT,
                 category_emoji TEXT,
+                image_name TEXT,
+                image_key TEXT,
+                image_content_type TEXT,
                 unit_measure TEXT NOT NULL DEFAULT 'un',
                 description TEXT,
                 stock_quantity INTEGER NOT NULL DEFAULT 0,
@@ -967,6 +990,8 @@ def init_db() -> None:
                 max_stock INTEGER,
                 active INTEGER NOT NULL DEFAULT 1,
                 catalog_archived INTEGER NOT NULL DEFAULT 0,
+                visible_base INTEGER NOT NULL DEFAULT 1,
+                visible_franchise INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1123,6 +1148,12 @@ def init_db() -> None:
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "category_emoji" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN category_emoji TEXT")
+        if "image_name" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN image_name TEXT")
+        if "image_key" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN image_key TEXT")
+        if "image_content_type" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN image_content_type TEXT")
         if "unit_measure" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'")
         if "min_order_quantity" not in product_columns:
@@ -1133,6 +1164,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN max_stock INTEGER")
         if "catalog_archived" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN catalog_archived INTEGER NOT NULL DEFAULT 0")
+        if "visible_base" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN visible_base INTEGER NOT NULL DEFAULT 1")
+        if "visible_franchise" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1")
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
@@ -1325,7 +1360,7 @@ def permanently_delete_product(conn: Any, product_id: int) -> tuple[str, int, in
 
     Retorna: (nome do produto, itens de solicitação removidos, solicitações vazias removidas).
     """
-    product_row = conn.execute("SELECT id, name FROM products WHERE id = ?", (product_id,)).fetchone()
+    product_row = conn.execute("SELECT id, name, image_key FROM products WHERE id = ?", (product_id,)).fetchone()
     if product_row is None:
         raise LookupError("Produto não encontrado.")
 
@@ -1340,6 +1375,7 @@ def permanently_delete_product(conn: Any, product_id: int) -> tuple[str, int, in
     removed_empty_requests = permanently_delete_empty_supply_requests(conn, request_ids)
     conn.execute("UPDATE asset_items SET product_id = NULL WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    remove_local_product_image(product_row["image_key"] or "")
     return product_name, removed_items, removed_empty_requests
 
 
@@ -2075,6 +2111,10 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             return [], "Um dos insumos selecionados não está disponível."
         if not user.is_admin and product.stock_quantity <= 0:
             return [], f"{product.name} está sem estoque no momento."
+        if user.role == "base" and not product.visible_base:
+            return [], f"{product.name} não está disponível para bases."
+        if user.role == "franchise" and not product.visible_franchise:
+            return [], f"{product.name} não está disponível para franquias."
 
         if not user.is_admin:
             limit = product_limit_for(product, user)
@@ -2111,19 +2151,27 @@ def fill_product_from_form(product: Product) -> Product:
     product.min_stock = parse_optional_int(request.form.get("min_stock"))
     product.max_stock = parse_optional_int(request.form.get("max_stock"))
     product.active = request.form.get("active") == "on"
+    product.visible_base = request.form.get("visible_base") == "on"
+    product.visible_franchise = request.form.get("visible_franchise") == "on"
     return product
 
 
-def list_product_categories() -> list[dict[str, str]]:
+def list_product_categories(user: User | None = None) -> list[dict[str, str]]:
+    visibility_clause = ""
+    if user is not None and user.role == "base":
+        visibility_clause = " AND visible_base = 1 AND active = 1 AND stock_quantity > 0"
+    elif user is not None and user.role == "franchise":
+        visibility_clause = " AND visible_franchise = 1 AND active = 1 AND stock_quantity > 0"
     with db_connect() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT TRIM(category) AS category,
                    MAX(NULLIF(TRIM(category_emoji), '')) AS category_emoji
              FROM products
              WHERE category IS NOT NULL
                AND TRIM(category) <> ''
                AND catalog_archived = 0
+               {visibility_clause}
              GROUP BY LOWER(TRIM(category))
              ORDER BY category COLLATE NOCASE ASC
             """
@@ -2147,6 +2195,7 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "name": product.name,
         "category": product.category or "Sem categoria",
         "category_emoji": product.category_emoji or default_category_emoji(product.category),
+        "image_url": url_for("product_image", product_id=product.id) if product.image_key else "",
         "unit_measure": product.unit_measure or "un",
         "description": product.description or "",
         "price": format_brl(product.price_cents),
@@ -2155,6 +2204,8 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "min_order_quantity": product.min_order_quantity,
         "show_stock": show_stock,
         "show_price": show_price,
+        "visible_base": product.visible_base,
+        "visible_franchise": product.visible_franchise,
     }
 
 
@@ -2184,6 +2235,47 @@ def store_generated_file(key: str, buffer: BytesIO, content_type: str, metadata:
 def storage_key(*parts: Any) -> str:
     clean_parts = [safe_filename(str(part)).strip("_") for part in parts if str(part or "").strip()]
     return "/".join(clean_parts)
+
+
+def local_product_image_path(key: str) -> Path:
+    filename = safe_filename(Path(key or "").stem)
+    extension = Path(key or "").suffix.lower()
+    if extension not in PRODUCT_IMAGE_TYPES:
+        extension = ".img"
+    return PRODUCT_IMAGE_DIR / f"{filename}{extension}"
+
+
+def save_product_image_upload(uploaded: Any) -> tuple[str, str, str]:
+    original_name = str(getattr(uploaded, "filename", "") or "").strip()
+    extension = Path(original_name).suffix.lower()
+    if extension not in PRODUCT_IMAGE_TYPES:
+        raise ValueError("Use uma imagem PNG, JPG, JPEG, WEBP ou GIF.")
+    data = uploaded.read()
+    if not data:
+        raise ValueError("A imagem selecionada está vazia.")
+    if len(data) > PRODUCT_IMAGE_MAX_BYTES:
+        raise ValueError("A imagem deve ter no máximo 3 MB.")
+    content_type = PRODUCT_IMAGE_TYPES[extension]
+    token = "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(12))
+    key = storage_key("product_images", datetime.now().strftime("%Y%m%d_%H%M%S"), token) + extension
+    local_path = local_product_image_path(key)
+    local_path.write_bytes(data)
+    try:
+        upload_bytes_to_r2(key, data, content_type, {"type": "product_image"})
+    except Exception as exc:
+        print(f"[R2] Não foi possível salvar imagem do produto: {exc}")
+    return original_name[:180], key[:500], content_type
+
+
+def remove_local_product_image(key: str) -> None:
+    if not key:
+        return
+    path = local_product_image_path(key)
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass
 
 
 def pdf_clean_text(value: Any, default: str = "-") -> str:
@@ -3536,11 +3628,16 @@ def ensure_product_import_columns(conn: Any) -> None:
         return
     migrations = [
         ("category_emoji", "ALTER TABLE products ADD COLUMN category_emoji TEXT"),
+        ("image_name", "ALTER TABLE products ADD COLUMN image_name TEXT"),
+        ("image_key", "ALTER TABLE products ADD COLUMN image_key TEXT"),
+        ("image_content_type", "ALTER TABLE products ADD COLUMN image_content_type TEXT"),
         ("unit_measure", "ALTER TABLE products ADD COLUMN unit_measure TEXT NOT NULL DEFAULT 'un'"),
         ("min_order_quantity", "ALTER TABLE products ADD COLUMN min_order_quantity INTEGER"),
         ("min_stock", "ALTER TABLE products ADD COLUMN min_stock INTEGER"),
         ("max_stock", "ALTER TABLE products ADD COLUMN max_stock INTEGER"),
         ("catalog_archived", "ALTER TABLE products ADD COLUMN catalog_archived INTEGER NOT NULL DEFAULT 0"),
+        ("visible_base", "ALTER TABLE products ADD COLUMN visible_base INTEGER NOT NULL DEFAULT 1"),
+        ("visible_franchise", "ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -4277,7 +4374,7 @@ def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: da
 @login_required
 @page_access_required("home")
 def home():
-    return render_template("index.html", product_categories=list_product_categories())
+    return render_template("index.html", product_categories=list_product_categories(require_current_user()))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -4442,6 +4539,10 @@ def api_products():
     params: list[Any] = []
     if not user.is_admin:
         sql += " AND stock_quantity > 0"
+    if user.role == "base":
+        sql += " AND visible_base = 1"
+    elif user.role == "franchise":
+        sql += " AND visible_franchise = 1"
     if q:
         like = f"%{q}%"
         sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
@@ -4460,6 +4561,38 @@ def api_products():
         rows = conn.execute(sql, params).fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
     return jsonify([product_to_api(product, user) for product in products])
+
+
+@app.get("/products/<int:product_id>/image")
+@login_required
+def product_image(product_id: int):
+    product = get_product(product_id)
+    if product is None or not product.image_key:
+        abort(404)
+    user = require_current_user()
+    if user.role == "base" and not product.visible_base:
+        abort(404)
+    if user.role == "franchise" and not product.visible_franchise:
+        abort(404)
+    local_path = local_product_image_path(product.image_key)
+    if local_path.exists():
+        return send_file(
+            local_path,
+            mimetype=product.image_content_type or PRODUCT_IMAGE_TYPES.get(local_path.suffix.lower(), "application/octet-stream"),
+            max_age=3600,
+        )
+    try:
+        downloaded = download_bytes_from_r2(product.image_key)
+    except Exception:
+        downloaded = None
+    if not downloaded:
+        abort(404)
+    data, content_type = downloaded
+    return send_file(
+        BytesIO(data),
+        mimetype=product.image_content_type or content_type,
+        max_age=3600,
+    )
 
 
 @app.post("/api/requests")
@@ -5205,20 +5338,31 @@ def admin_product_new():
         if not product.name:
             flash("Informe o nome do produto.", "warning")
             return redirect(url_for("admin_product_new"))
+        uploaded_image = request.files.get("product_image")
+        if uploaded_image is not None and uploaded_image.filename:
+            try:
+                product.image_name, product.image_key, product.image_content_type = save_product_image_upload(uploaded_image)
+            except ValueError as exc:
+                flash(str(exc), "warning")
+                return redirect(url_for("admin_product_new"))
         with db_connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO products (
-                    name, category, category_emoji, unit_measure, description, stock_quantity,
+                    name, category, category_emoji, image_name, image_key, image_content_type,
+                    unit_measure, description, stock_quantity,
                     price_cents, limit_base, limit_franchise, min_order_quantity,
-                    min_stock, max_stock, active, created_at
+                    min_stock, max_stock, active, visible_base, visible_franchise, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
                     product.category,
                     product.category_emoji,
+                    product.image_name,
+                    product.image_key,
+                    product.image_content_type,
                     product.unit_measure,
                     product.description,
                     product.stock_quantity,
@@ -5229,6 +5373,8 @@ def admin_product_new():
                     product.min_stock,
                     product.max_stock,
                     1 if product.active else 0,
+                    1 if product.visible_base else 0,
+                    1 if product.visible_franchise else 0,
                     now_iso(),
                 ),
             )
@@ -5255,23 +5401,41 @@ def admin_product_edit(product_id: int):
         abort(404)
     if request.method == "POST":
         old_stock_quantity = product.stock_quantity
+        old_image_key = product.image_key
         fill_product_from_form(product)
         if not product.name:
             flash("Informe o nome do produto.", "warning")
             return redirect(url_for("admin_product_edit", product_id=product_id))
+        uploaded_image = request.files.get("product_image")
+        remove_image = request.form.get("remove_image") == "on"
+        if uploaded_image is not None and uploaded_image.filename:
+            try:
+                product.image_name, product.image_key, product.image_content_type = save_product_image_upload(uploaded_image)
+            except ValueError as exc:
+                flash(str(exc), "warning")
+                return redirect(url_for("admin_product_edit", product_id=product_id))
+        elif remove_image:
+            product.image_name = ""
+            product.image_key = ""
+            product.image_content_type = ""
         with db_connect() as conn:
             conn.execute(
                 """
                 UPDATE products
-                SET name = ?, category = ?, category_emoji = ?, unit_measure = ?, description = ?,
+                SET name = ?, category = ?, category_emoji = ?, image_name = ?, image_key = ?,
+                    image_content_type = ?, unit_measure = ?, description = ?,
                     stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
-                    min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?, updated_at = ?
+                    min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
+                    visible_base = ?, visible_franchise = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
                     product.name,
                     product.category,
                     product.category_emoji,
+                    product.image_name,
+                    product.image_key,
+                    product.image_content_type,
                     product.unit_measure,
                     product.description,
                     product.stock_quantity,
@@ -5282,6 +5446,8 @@ def admin_product_edit(product_id: int):
                     product.min_stock,
                     product.max_stock,
                     1 if product.active else 0,
+                    1 if product.visible_base else 0,
+                    1 if product.visible_franchise else 0,
                     now_iso(),
                     product_id,
                 ),
@@ -5294,6 +5460,8 @@ def admin_product_edit(product_id: int):
             if old_stock_quantity != product.stock_quantity:
                 record_stock_movement(conn, product_id, product.stock_quantity - old_stock_quantity, old_stock_quantity, product.stock_quantity, "manual_adjustment", "Estoque alterado na edição do produto.", created_by_id=require_current_user().id)
             conn.commit()
+        if old_image_key and old_image_key != product.image_key:
+            remove_local_product_image(old_image_key)
         flash("Produto atualizado.", "success")
         return redirect(url_for("admin_products"))
     return render_template("admin/product_form.html", product=product, product_categories=list_product_categories())

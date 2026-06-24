@@ -277,6 +277,19 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 
 - PDFs de solicitações e ativos agora usam fonte CJK compatível com chinês simplificado.
 - Corrigido problema de caracteres chineses aparecendo como quadradinhos/caixas pretas no PDF.
+# Atualização v79
+
+- O crédito de desenvolvimento foi movido para um card retangular compacto junto ao menu superior.
+- Produtos podem receber imagem no cadastro ou edição, com miniatura e visualização ampliada em modal com fundo desfocado.
+- Cada produto pode ser disponibilizado separadamente para bases e franquias.
+- As regras de público são aplicadas tanto na listagem quanto na validação do envio da solicitação.
+
+# Atualização v78
+
+- O modo Lista da página Solicitar insumos agora usa uma tabela real, separada do layout em cards.
+- A tabela reúne produto, categoria, preço por unidade, estoque, limites, pedido mínimo, quantidade e ação.
+- Em telas pequenas, cada linha se reorganiza verticalmente sem provocar rolagem horizontal.
+
 # Atualização v77
 
 - Tradução chinesa ampliada para relatórios, entradas de materiais, ativos, usuários, produtos e mensagens administrativas.

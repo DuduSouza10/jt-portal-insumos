@@ -122,6 +122,20 @@
   "Adicionar": "新增",
   "Quantidade": "数量",
   "Estoque": "库存",
+  "Preço / unidade": "单价 / 单位",
+  "Regras do pedido": "申请规则",
+  "Oculto": "隐藏",
+  "Imagem do produto": "产品图片",
+  "Ampliar imagem": "放大图片",
+  "PNG, JPG, WEBP ou GIF. Tamanho máximo: 3 MB.": "支持 PNG、JPG、WEBP 或 GIF，最大 3 MB。",
+  "Remover imagem atual": "移除当前图片",
+  "Exibir produto para": "产品显示对象",
+  "O produto aparecerá apenas para os tipos de usuário selecionados.": "产品仅向所选用户类型显示。",
+  "Público": "显示对象",
+  "Somente admin": "仅管理员",
+  "Use uma imagem PNG, JPG, JPEG, WEBP ou GIF.": "请使用 PNG、JPG、JPEG、WEBP 或 GIF 图片。",
+  "A imagem selecionada está vazia.": "所选图片为空。",
+  "A imagem deve ter no máximo 3 MB.": "图片大小不能超过 3 MB。",
   "Limite": "限制",
   "Sem limite definido": "未设定限制",
   "Pedido mínimo": "最低订购量",
@@ -891,6 +905,8 @@
     if ((match = core.match(/^Solicitação #(\d+) enviada para aprovação\. PDF disponível para download\.$/))) return `申请 #${match[1]} 已送交批准。PDF 可供下载。`;
     if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${match[1]} 超出耗材限制。允许限制：${match[2]}。`;
     if ((match = core.match(/^A quantidade mínima para (.+) é (.+)\.$/))) return `${match[1]} 的最低申请数量为 ${match[2]}。`;
+    if ((match = core.match(/^(.+) não está disponível para bases\.$/))) return `${match[1]} 不对基地开放。`;
+    if ((match = core.match(/^(.+) não está disponível para franquias\.$/))) return `${match[1]} 不对加盟店开放。`;
     if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${match[1]} 已加入申请。`;
     if ((match = core.match(/^Estoque:\s*(.+)$/))) return `库存：${match[1]}`;
     if ((match = core.match(/^Limite:\s*(.+)$/))) return `限制：${match[1]}`;

@@ -51,3 +51,17 @@ def upload_bytes_to_r2(key: str, data: bytes, content_type: str, metadata: dict[
 def upload_fileobj_to_r2(key: str, fileobj: BinaryIO, content_type: str, metadata: dict[str, str] | None = None) -> str | None:
     data = fileobj.read()
     return upload_bytes_to_r2(key, data, content_type, metadata)
+
+
+def download_bytes_from_r2(key: str) -> tuple[bytes, str] | None:
+    """Download an object when R2 is configured."""
+    if not r2_is_configured() or not key:
+        return None
+    client = r2_client()
+    response = client.get_object(
+        Bucket=os.getenv("R2_BUCKET", "").strip(),
+        Key=key.lstrip("/"),
+    )
+    body = response.get("Body")
+    data = body.read() if body is not None else b""
+    return data, str(response.get("ContentType") or "application/octet-stream")

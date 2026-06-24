@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     category TEXT,
     category_emoji TEXT,
+    image_name TEXT,
+    image_key TEXT,
+    image_content_type TEXT,
     unit_measure TEXT NOT NULL DEFAULT 'un',
     description TEXT,
     stock_quantity INTEGER NOT NULL DEFAULT 0,
@@ -35,6 +38,8 @@ CREATE TABLE IF NOT EXISTS products (
     max_stock INTEGER,
     active INTEGER NOT NULL DEFAULT 1,
     catalog_archived INTEGER NOT NULL DEFAULT 0,
+    visible_base INTEGER NOT NULL DEFAULT 1,
+    visible_franchise INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT
 );

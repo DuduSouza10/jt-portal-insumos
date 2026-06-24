@@ -84,15 +84,36 @@ function applyProductView() {
   });
 }
 
-function renderProducts() {
-  productGrid.innerHTML = '';
-  if (productResultCount) productResultCount.textContent = String(products.length);
-  applyProductView();
-  if (!products.length) {
-    emptyState.classList.remove('hidden');
-    return;
-  }
-  emptyState.classList.add('hidden');
+function bindAddProduct(container, product) {
+  const qtyInput = container.querySelector('[data-product-quantity]');
+  const button = container.querySelector('[data-add-product]');
+  if (!qtyInput || !button) return;
+
+  const productName = jtText(product.name || '');
+  const minimum = Number(product.min_order_quantity || 1);
+  button.addEventListener('click', () => {
+    const quantity = parseInt(qtyInput.value, 10);
+    if (!quantity || quantity <= 0) {
+      setMessage(jtText('Informe uma quantidade válida.'), 'err');
+      return;
+    }
+    const current = cart.get(product.id)?.quantity || 0;
+    const requestedQuantity = current + quantity;
+    if (requestedQuantity < minimum) {
+      setMessage(jtText(`A quantidade mínima para ${productName} é ${minimum}.`), 'err');
+      return;
+    }
+    if (product.limit !== null && product.limit !== undefined && requestedQuantity > product.limit) {
+      setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
+      return;
+    }
+    cart.set(product.id, { product, quantity: requestedQuantity });
+    renderCart();
+    setMessage(jtText(`${productName} adicionado à solicitação.`), 'ok');
+  });
+}
+
+function renderProductCards() {
   products.forEach((product, index) => {
     const card = document.createElement('article');
     card.className = 'product-card card';
@@ -110,11 +131,25 @@ function renderProducts() {
     const minimum = Number(product.min_order_quantity || 1);
     const minimumBadge = minimum > 1 ? `<span class="badge minimum-badge">${jtText('Pedido mínimo')}: ${minimum} ${escapeHtml(unitLabel)}</span>` : '';
     const categoryEmoji = escapeHtml(product.category_emoji || '📦');
+    const imageButton = product.image_url ? `
+      <button
+        class="product-thumb-button"
+        type="button"
+        data-image-preview="${escapeHtml(product.image_url)}"
+        data-image-title="${escapeHtml(productName)}"
+        title="${escapeHtml(jtText('Ampliar imagem'))}"
+      >
+        <img src="${escapeHtml(product.image_url)}" alt="${escapeHtml(productName)}">
+      </button>
+    ` : '';
 
     card.innerHTML = `
       <div class="product-card-content">
         <div class="product-head">
-          <span class="product-icon" aria-hidden="true">${categoryEmoji}</span>
+          <span class="product-head-assets">
+            <span class="product-icon" aria-hidden="true">${categoryEmoji}</span>
+            ${imageButton}
+          </span>
           <span class="product-category">${escapeHtml(productCategory)}</span>
         </div>
         <div class="product-copy">
@@ -130,34 +165,119 @@ function renderProducts() {
         </div>
       </div>
       <div class="add-row">
-        <input type="number" min="${minimum}" value="${minimum}" aria-label="${jtText('Quantidade')}">
-        <button class="btn primary" type="button">${jtText('Adicionar')}</button>
+        <input data-product-quantity type="number" min="${minimum}" value="${minimum}" aria-label="${jtText('Quantidade')}">
+        <button data-add-product class="btn primary" type="button">${jtText('Adicionar')}</button>
       </div>
     `;
-    const qtyInput = card.querySelector('.add-row input');
-    const button = card.querySelector('.add-row button');
-    button.addEventListener('click', () => {
-      const quantity = parseInt(qtyInput.value, 10);
-      if (!quantity || quantity <= 0) {
-        setMessage(jtText('Informe uma quantidade válida.'), 'err');
-        return;
-      }
-      const current = cart.get(product.id)?.quantity || 0;
-      const requestedQuantity = current + quantity;
-      if (requestedQuantity < minimum) {
-        setMessage(jtText(`A quantidade mínima para ${productName} é ${minimum}.`), 'err');
-        return;
-      }
-      if (product.limit !== null && product.limit !== undefined && requestedQuantity > product.limit) {
-        setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
-        return;
-      }
-      cart.set(product.id, { product, quantity: requestedQuantity });
-      renderCart();
-      setMessage(jtText(`${productName} adicionado à solicitação.`), 'ok');
-    });
+    bindAddProduct(card, product);
     productGrid.appendChild(card);
   });
+}
+
+function renderProductTable() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'request-products-table-wrap card';
+  const rows = products.map((product) => {
+    const unit = product.unit_measure || 'un';
+    const unitLabel = jtText(unit);
+    const productName = jtText(product.name || '');
+    const productCategory = jtText(product.category || 'Sem categoria');
+    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
+    const minimum = Number(product.min_order_quantity || 1);
+    const price = product.show_price
+      ? `<strong>${escapeHtml(product.price)}</strong><small>/ ${escapeHtml(unitLabel)}</small>`
+      : `<span class="muted">${jtText('Oculto')}</span>`;
+    const stock = product.show_stock
+      ? `<strong>${product.stock_quantity}</strong><small>${escapeHtml(unitLabel)}</small>`
+      : `<span class="muted">${jtText('Oculto')}</span>`;
+    const limit = product.limit !== null && product.limit !== undefined
+      ? `${product.limit} ${escapeHtml(unitLabel)}`
+      : jtText('Sem limite');
+    const minimumOrder = minimum > 1 ? `${minimum} ${escapeHtml(unitLabel)}` : '-';
+    const imageButton = product.image_url ? `
+      <button
+        class="product-thumb-button"
+        type="button"
+        data-image-preview="${escapeHtml(product.image_url)}"
+        data-image-title="${escapeHtml(productName)}"
+        title="${escapeHtml(jtText('Ampliar imagem'))}"
+      >
+        <img src="${escapeHtml(product.image_url)}" alt="${escapeHtml(productName)}">
+      </button>
+    ` : '';
+
+    return `
+      <tr data-request-product-row data-product-id="${product.id}">
+        <td data-label="${escapeHtml(jtText('Produto'))}">
+          <div class="request-product-main ${product.image_url ? 'has-image' : ''}">
+            <span class="request-product-icon" aria-hidden="true">${escapeHtml(product.category_emoji || '📦')}</span>
+            ${imageButton}
+            <div>
+              <strong>${escapeHtml(productName)}</strong>
+              <small>${escapeHtml(productDescription)}</small>
+            </div>
+          </div>
+        </td>
+        <td data-label="${escapeHtml(jtText('Categoria'))}">
+          <strong>${escapeHtml(productCategory)}</strong>
+        </td>
+        <td class="request-product-value" data-label="${escapeHtml(jtText('Preço / unidade'))}">${price}</td>
+        <td class="request-product-value" data-label="${escapeHtml(jtText('Estoque'))}">${stock}</td>
+        <td data-label="${escapeHtml(jtText('Regras do pedido'))}">
+          <div class="request-product-rules">
+            <span><b>${jtText('Limite')}:</b> ${limit}</span>
+            <span><b>${jtText('Pedido mínimo')}:</b> ${minimumOrder}</span>
+          </div>
+        </td>
+        <td class="request-product-quantity" data-label="${escapeHtml(jtText('Quantidade'))}">
+          <input data-product-quantity type="number" min="${minimum}" value="${minimum}" aria-label="${escapeHtml(jtText('Quantidade'))}">
+        </td>
+        <td class="request-product-action" data-label="${escapeHtml(jtText('Ação'))}">
+          <button data-add-product class="btn primary" type="button">${jtText('Adicionar')}</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  wrapper.innerHTML = `
+    <table class="request-products-table">
+      <thead>
+        <tr>
+          <th>${jtText('Produto')}</th>
+          <th>${jtText('Categoria')}</th>
+          <th>${jtText('Preço / unidade')}</th>
+          <th>${jtText('Estoque')}</th>
+          <th>${jtText('Regras do pedido')}</th>
+          <th>${jtText('Quantidade')}</th>
+          <th>${jtText('Ação')}</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+
+  wrapper.querySelectorAll('[data-request-product-row]').forEach((row) => {
+    const productId = Number(row.dataset.productId);
+    const product = products.find((item) => Number(item.id) === productId);
+    if (product) bindAddProduct(row, product);
+  });
+  productGrid.appendChild(wrapper);
+}
+
+function renderProducts() {
+  productGrid.innerHTML = '';
+  if (productResultCount) productResultCount.textContent = String(products.length);
+  applyProductView();
+  if (!products.length) {
+    emptyState.classList.remove('hidden');
+    return;
+  }
+  emptyState.classList.add('hidden');
+  if (productView === 'list') {
+    renderProductTable();
+  } else {
+    renderProductCards();
+  }
 }
 
 function renderCart() {
@@ -275,7 +395,7 @@ productViewButtons.forEach((button) => {
     } catch (error) {
       // A visualização continua funcionando mesmo se o navegador bloquear o armazenamento local.
     }
-    applyProductView();
+    renderProducts();
   });
 });
 refreshProducts.addEventListener('click', loadProducts);

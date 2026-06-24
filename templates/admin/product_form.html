@@ -4,7 +4,7 @@
 {% block page_subtitle %}Defina estoque, valor, limites, quantidade mínima por pedido e parâmetros de estoque.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form id="productForm" method="post" class="form-grid two-cols">
+  <form id="productForm" method="post" class="form-grid two-cols" enctype="multipart/form-data">
     <label>
       Nome do produto
       <input name="name" value="{{ product.name if product else '' }}" required>
@@ -40,6 +40,34 @@
         <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
       </div>
       <small class="hint">O ícone escolhido será usado em todos os produtos dessa categoria.</small>
+    </div>
+    <div class="product-image-field full">
+      <label for="productImage">Imagem do produto</label>
+      <div class="product-image-editor">
+        {% if product and product.image_key %}
+        <button
+          class="product-image-current"
+          type="button"
+          data-image-preview="{{ url_for('product_image', product_id=product.id) }}"
+          data-image-title="{{ product.name }}"
+          title="Ampliar imagem"
+        >
+          <img src="{{ url_for('product_image', product_id=product.id) }}" alt="{{ product.name }}">
+        </button>
+        {% else %}
+        <span class="product-image-placeholder" aria-hidden="true">🖼️</span>
+        {% endif %}
+        <div class="product-image-input">
+          <input id="productImage" name="product_image" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
+          <small class="hint">PNG, JPG, WEBP ou GIF. Tamanho máximo: 3 MB.</small>
+          {% if product and product.image_key %}
+          <label class="checkbox-line remove-product-image">
+            <input type="checkbox" name="remove_image">
+            Remover imagem atual
+          </label>
+          {% endif %}
+        </div>
+      </div>
     </div>
     <label>
       Unidade de medida
@@ -81,6 +109,18 @@
       <input type="checkbox" name="active" {% if not product or product.active %}checked{% endif %}>
       Produto ativo para solicitação
     </label>
+    <fieldset class="product-audience full">
+      <legend>Exibir produto para</legend>
+      <label class="checkbox-line">
+        <input type="checkbox" name="visible_base" {% if not product or product.visible_base %}checked{% endif %}>
+        Base
+      </label>
+      <label class="checkbox-line">
+        <input type="checkbox" name="visible_franchise" {% if not product or product.visible_franchise %}checked{% endif %}>
+        Franquia
+      </label>
+      <small class="hint">O produto aparecerá apenas para os tipos de usuário selecionados.</small>
+    </fieldset>
     <div class="full form-actions">
       <button class="btn primary" type="submit">Salvar produto</button>
       <a class="btn ghost" href="{{ url_for('admin_products') }}">Cancelar</a>
