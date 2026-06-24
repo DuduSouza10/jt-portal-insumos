@@ -6264,3 +6264,280 @@ body.product-image-modal-open {
 .products-admin-table td:last-child {
   padding-right: 10px !important;
 }
+
+
+/* v84 - cápsula da navegação acompanha somente os botões */
+.site-header.compact-header > .nav-header.premium-topbar {
+  grid-template-columns: minmax(185px, 240px) minmax(0, 1fr) auto !important;
+}
+
+.nav-center-group {
+  width: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: visible !important;
+}
+
+.nav-header .top-nav {
+  width: fit-content !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 auto !important;
+  flex: 0 1 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  padding: 4px !important;
+  border-radius: 999px !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+.nav-header .top-nav > a,
+.nav-header .nav-dropdown > .nav-drop-toggle {
+  flex: 0 0 auto !important;
+}
+
+@media (max-width: 1180px) {
+  .nav-center-group {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+  .nav-header .top-nav {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    justify-content: flex-start !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    scrollbar-width: none !important;
+  }
+  .nav-header .top-nav::-webkit-scrollbar { display: none !important; }
+}
+
+
+/* v85 - correção definitiva da tabela de Produtos: ocupa o card e fica responsiva */
+.table-card:has(.products-table-wrap) {
+  overflow: hidden !important;
+  max-width: 100% !important;
+  padding: 18px !important;
+  box-sizing: border-box !important;
+}
+
+.products-table-wrap {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 18px !important;
+  margin-top: 14px !important;
+  background: rgba(255,255,255,.015) !important;
+  box-sizing: border-box !important;
+}
+
+.products-admin-table {
+  width: 100% !important;
+  min-width: 1460px !important;
+  max-width: none !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  margin: 0 !important;
+}
+
+.products-admin-table th,
+.products-admin-table td {
+  box-sizing: border-box !important;
+  padding: 13px 10px !important;
+  vertical-align: middle !important;
+  border-bottom: 1px solid var(--line) !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+}
+
+.products-admin-table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+.products-admin-table th:nth-child(1),
+.products-admin-table td:nth-child(1) { width: 12% !important; }
+.products-admin-table th:nth-child(2),
+.products-admin-table td:nth-child(2) { width: 10% !important; }
+.products-admin-table th:nth-child(3),
+.products-admin-table td:nth-child(3) { width: 6% !important; }
+.products-admin-table th:nth-child(4),
+.products-admin-table td:nth-child(4) { width: 6% !important; }
+.products-admin-table th:nth-child(5),
+.products-admin-table td:nth-child(5) { width: 6% !important; }
+.products-admin-table th:nth-child(6),
+.products-admin-table td:nth-child(6) { width: 6% !important; }
+.products-admin-table th:nth-child(7),
+.products-admin-table td:nth-child(7) { width: 4% !important; }
+.products-admin-table th:nth-child(8),
+.products-admin-table td:nth-child(8) { width: 4% !important; }
+.products-admin-table th:nth-child(9),
+.products-admin-table td:nth-child(9) { width: 6% !important; }
+.products-admin-table th:nth-child(10),
+.products-admin-table td:nth-child(10) { width: 7% !important; }
+.products-admin-table th:nth-child(11),
+.products-admin-table td:nth-child(11) { width: 7% !important; }
+.products-admin-table th:nth-child(12),
+.products-admin-table td:nth-child(12) { width: 6% !important; }
+.products-admin-table th:nth-child(13),
+.products-admin-table td:nth-child(13) { width: 5% !important; }
+.products-admin-table th:nth-child(14),
+.products-admin-table td:nth-child(14) { width: 15% !important; }
+
+.products-admin-table .admin-product-main {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.products-admin-table .admin-product-main:not(:has(.admin-product-thumb)) {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.products-admin-table .admin-product-main > div {
+  min-width: 0 !important;
+}
+
+.products-admin-table .admin-product-main strong {
+  display: block !important;
+  color: var(--text-strong) !important;
+  font-size: 13.2px !important;
+  line-height: 1.22 !important;
+  letter-spacing: -.01em !important;
+}
+
+.products-admin-table .admin-product-main small {
+  display: block !important;
+  margin-top: 4px !important;
+  line-height: 1.28 !important;
+  max-width: 100% !important;
+}
+
+.products-admin-table .audience-pill {
+  display: inline-flex !important;
+  margin: 2px 2px 2px 0 !important;
+  max-width: 100% !important;
+}
+
+.products-admin-table .actions-cell {
+  display: table-cell !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-align: left !important;
+}
+
+.products-admin-table .actions-cell > a,
+.products-admin-table .actions-cell > form {
+  display: inline-flex !important;
+  vertical-align: middle !important;
+  margin: 0 6px 0 0 !important;
+  flex: 0 0 auto !important;
+}
+
+.products-admin-table .actions-cell > *:last-child {
+  margin-right: 0 !important;
+}
+
+.products-admin-table .actions-cell .btn {
+  min-height: 32px !important;
+  padding: 7px 9px !important;
+  font-size: 10.5px !important;
+  border-radius: 12px !important;
+}
+
+.products-table-wrap::-webkit-scrollbar { height: 10px; }
+.products-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(230,0,18,.42);
+  border-radius: 999px;
+}
+.products-table-wrap::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.04);
+  border-radius: 999px;
+}
+
+@media (max-width: 760px) {
+  .products-table-wrap {
+    overflow-x: visible !important;
+    border: 0 !important;
+    background: transparent !important;
+    margin-top: 14px !important;
+  }
+
+  .products-admin-table,
+  .products-admin-table tbody,
+  .products-admin-table tr,
+  .products-admin-table td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .products-admin-table {
+    border-collapse: separate !important;
+    border-spacing: 0 12px !important;
+  }
+
+  .products-admin-table thead {
+    display: none !important;
+  }
+
+  .products-admin-table tr {
+    padding: 14px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 18px !important;
+    background: var(--surface-soft) !important;
+  }
+
+  .products-admin-table td {
+    display: grid !important;
+    grid-template-columns: 116px minmax(0, 1fr) !important;
+    gap: 12px !important;
+    padding: 9px 0 !important;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent) !important;
+  }
+
+  .products-admin-table td:last-child {
+    border-bottom: 0 !important;
+  }
+
+  .products-admin-table td::before {
+    content: attr(data-label) !important;
+    color: var(--muted) !important;
+    font-size: 10px !important;
+    font-weight: 950 !important;
+    letter-spacing: .08em !important;
+    text-transform: uppercase !important;
+  }
+
+  .products-admin-table .actions-cell {
+    white-space: normal !important;
+  }
+
+  .products-admin-table .actions-cell > a,
+  .products-admin-table .actions-cell > form,
+  .products-admin-table .actions-cell .btn {
+    width: 100% !important;
+  }
+
+  .products-admin-table .actions-cell > a,
+  .products-admin-table .actions-cell > form {
+    margin: 0 0 8px 0 !important;
+  }
+}
