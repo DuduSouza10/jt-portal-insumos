@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=69">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=69">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=79">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=81">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -71,18 +71,6 @@
         </nav>
         {% endif %}
 
-        <div class="dev-credit" aria-label="Informações de segurança e desenvolvimento">
-          <span class="security-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M12 2.75 20 6.1v5.95c0 5.05-3.4 8.95-8 10.2-4.6-1.25-8-5.15-8-10.2V6.1l8-3.35Z"/>
-              <path d="m9.35 12.15 1.75 1.75 3.7-4.05"/>
-            </svg>
-          </span>
-          <span class="dev-copy">
-            <strong>Developed by: Eduardo Rodrigues &amp; Aleffi Silva</strong>
-            <small>J&amp;T Express Brazil • CNPJ: 42.584.754/0092-13</small>
-          </span>
-        </div>
         </div>
 
         {% if current_user %}
@@ -103,6 +91,18 @@
         </div>
         {% endif %}
       </div>
+        <div class="dev-credit" aria-label="Informações de segurança e desenvolvimento">
+          <span class="security-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 2.75 20 6.1v5.95c0 5.05-3.4 8.95-8 10.2-4.6-1.25-8-5.15-8-10.2V6.1l8-3.35Z"/>
+              <path d="m9.35 12.15 1.75 1.75 3.7-4.05"/>
+            </svg>
+          </span>
+          <span class="dev-copy">
+            <strong>Developed by: Eduardo Rodrigues &amp; Aleffi Silva</strong>
+            <small>J&amp;T Express Brazil • CNPJ: 42.584.754/0092-13</small>
+          </span>
+        </div>
     </header>
 
     <main class="main-content">
