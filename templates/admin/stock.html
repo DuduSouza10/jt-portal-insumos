@@ -160,7 +160,7 @@
   <table>
     <thead>
       <tr>
-        <th>Data</th><th>Produto</th><th>Tipo</th><th>Mov.</th><th>Antes</th><th>Depois</th><th>Solicitação</th><th>Responsável</th><th>Observação</th>
+        <th>Data</th><th>Produto</th><th>Tipo</th><th>Mov.</th><th>Antes</th><th>Depois</th><th>Solicitação</th><th>Movimentado por</th><th>Observação</th>
       </tr>
     </thead>
     <tbody>
@@ -173,7 +173,16 @@
         <td data-label="Antes">{{ mov.stock_before }}</td>
         <td data-label="Depois">{{ mov.stock_after }}</td>
         <td data-label="Solicitacao">{% if mov.request_id %}<a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>{% else %}-{% endif %}</td>
-        <td data-label="Responsavel">{{ mov.created_by_name or '-' }}</td>
+        <td data-label="Movimentado por">
+          {% if mov.created_by_name %}
+            <strong>{{ mov.created_by_name }}</strong>
+            {% if mov.created_by_username %}<br><small>@{{ mov.created_by_username }}</small>{% endif %}
+          {% elif mov.movement_type == 'product_created' %}
+            <strong>Sistema</strong><br><small>Registro automático</small>
+          {% else %}
+            <span class="muted">Não registrado</span>
+          {% endif %}
+        </td>
         <td data-label="Observacao">{{ mov.note or '-' }}</td>
       </tr>
       {% else %}

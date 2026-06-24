@@ -5577,10 +5577,16 @@ def admin_stock():
         product_rows = conn.execute("SELECT * FROM products ORDER BY active DESC, category ASC, name ASC").fetchall()
         movement_rows = conn.execute(
             """
-            SELECT sm.*, p.name AS product_name, p.category AS product_category, u.responsible_name AS created_by_name
+            SELECT sm.*,
+                   p.name AS product_name,
+                   p.category AS product_category,
+                   COALESCE(u.responsible_name, reviewer.responsible_name) AS created_by_name,
+                   COALESCE(u.username, reviewer.username) AS created_by_username
               FROM stock_movements sm
               LEFT JOIN products p ON p.id = sm.product_id
               LEFT JOIN users u ON u.id = sm.created_by_id
+              LEFT JOIN supply_requests sr ON sr.id = sm.request_id
+              LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
              ORDER BY sm.created_at DESC, sm.id DESC
              LIMIT 200
             """

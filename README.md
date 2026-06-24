@@ -237,6 +237,13 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - O cabeçalho, dados da solicitação e tabela de itens receberam um layout mais limpo.
 - O número de pessoas na base é solicitado e exibido somente para usuários do tipo Base.
 
+## v71 - Responsável pelas movimentações
+
+- O histórico de estoque mostra quem adicionou, retirou ou ajustou cada produto.
+- São exibidos nome e usuário do responsável.
+- Retiradas antigas por solicitação recuperam o administrador que aprovou o pedido quando possível.
+- Registros iniciais automáticos são identificados como Sistema.
+
 
 ## v51.2 - Ativos integrados ao estoque
 
