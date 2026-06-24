@@ -6571,3 +6571,95 @@ body.product-image-modal-open {
     max-width: 100% !important;
   }
 }
+
+
+/* v89 - usuário no topo em retângulo compacto com bordas arredondadas, sem formato circular. */
+.nav-header .account-area {
+  max-width: 250px !important;
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+
+.nav-header .user-pill.compact.user-pill-simple,
+.user-pill-simple {
+  width: 154px !important;
+  min-width: 154px !important;
+  max-width: 154px !important;
+  height: auto !important;
+  min-height: 42px !important;
+  padding: 7px 11px !important;
+  border-radius: 15px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+html[data-theme="light"] .nav-header .user-pill.compact.user-pill-simple,
+html[data-theme="light"] .user-pill-simple {
+  background: rgba(0,0,0,.035) !important;
+}
+
+.nav-header .user-pill-simple span {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: grid !important;
+  gap: 2px !important;
+}
+
+.nav-header .user-pill-simple strong,
+.nav-header .user-pill-simple small {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  line-height: 1.18 !important;
+}
+
+.nav-header .user-pill-simple strong {
+  font-size: 12px !important;
+  font-weight: 950 !important;
+}
+
+.nav-header .user-pill-simple small {
+  font-size: 9.8px !important;
+  font-weight: 800 !important;
+  color: var(--muted) !important;
+}
+
+.nav-header .logout {
+  height: 38px !important;
+  min-height: 38px !important;
+  border-radius: 14px !important;
+  padding: 0 13px !important;
+}
+
+@media (max-width: 1120px) {
+  .nav-header .account-area {
+    max-width: none !important;
+  }
+  .nav-header .user-pill.compact.user-pill-simple,
+  .user-pill-simple {
+    width: 142px !important;
+    min-width: 142px !important;
+    max-width: 142px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .nav-header .user-pill.compact.user-pill-simple,
+  .user-pill-simple {
+    width: min(100%, 210px) !important;
+    min-width: 0 !important;
+    max-width: 210px !important;
+  }
+}
