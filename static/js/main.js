@@ -89,7 +89,7 @@ function bindAddProduct(container, product) {
   const button = container.querySelector('[data-add-product]');
   if (!qtyInput || !button) return;
 
-  const productName = jtText(product.name || '');
+  const productName = product.name || '';
   const minimum = Number(product.min_order_quantity || 1);
   button.addEventListener('click', () => {
     const quantity = parseInt(qtyInput.value, 10);
@@ -121,9 +121,9 @@ function renderProductCards() {
 
     const unit = product.unit_measure || 'un';
     const unitLabel = jtText(unit);
-    const productName = jtText(product.name || '');
-    const productCategory = jtText(product.category || '');
-    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
+    const productName = product.name || '';
+    const productCategory = product.category || '';
+    const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
     const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unitLabel)}</span>` : '';
     const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
     const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
@@ -150,11 +150,11 @@ function renderProductCards() {
             <span class="product-icon" aria-hidden="true">${categoryEmoji}</span>
             ${imageButton}
           </span>
-          <span class="product-category">${escapeHtml(productCategory)}</span>
+          <span class="product-category" data-no-i18n>${escapeHtml(productCategory)}</span>
         </div>
         <div class="product-copy">
-          <h3>${escapeHtml(productName)}</h3>
-          <p>${escapeHtml(productDescription)}</p>
+          <h3 data-no-i18n>${escapeHtml(productName)}</h3>
+          <p data-no-i18n>${escapeHtml(productDescription)}</p>
         </div>
         <div class="meta-row">
           ${priceBadge}
@@ -180,9 +180,9 @@ function renderProductTable() {
   const rows = products.map((product) => {
     const unit = product.unit_measure || 'un';
     const unitLabel = jtText(unit);
-    const productName = jtText(product.name || '');
-    const productCategory = jtText(product.category || 'Sem categoria');
-    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
+    const productName = product.name || '';
+    const productCategory = product.category || 'Sem categoria';
+    const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
     const minimum = Number(product.min_order_quantity || 1);
     const price = product.show_price
       ? `<strong>${escapeHtml(product.price)}</strong><small>/ ${escapeHtml(unitLabel)}</small>`
@@ -212,14 +212,14 @@ function renderProductTable() {
           <div class="request-product-main ${product.image_url ? 'has-image' : ''}">
             <span class="request-product-icon" aria-hidden="true">${escapeHtml(product.category_emoji || '📦')}</span>
             ${imageButton}
-            <div>
+            <div data-no-i18n>
               <strong>${escapeHtml(productName)}</strong>
               <small>${escapeHtml(productDescription)}</small>
             </div>
           </div>
         </td>
         <td data-label="${escapeHtml(jtText('Categoria'))}">
-          <strong>${escapeHtml(productCategory)}</strong>
+          <strong data-no-i18n>${escapeHtml(productCategory)}</strong>
         </td>
         <td class="request-product-value" data-label="${escapeHtml(jtText('Preço / unidade'))}">${price}</td>
         <td class="request-product-value" data-label="${escapeHtml(jtText('Estoque'))}">${stock}</td>
@@ -299,7 +299,7 @@ function renderCart() {
     const minimumText = minimum > 1 ? ` • ${jtText('Mínimo')}: ${minimum}` : '';
     div.innerHTML = `
       <div>
-        <strong>${escapeHtml(jtText(item.product.name))}</strong>
+        <strong data-no-i18n>${escapeHtml(item.product.name || '')}</strong>
         <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(jtText(item.product.unit_measure || 'un'))}${minimumText}</span>
       </div>
       <input type="number" min="${minimum}" value="${item.quantity}">
@@ -315,12 +315,12 @@ function renderCart() {
       }
       if (quantity < minimum) {
         input.value = item.quantity;
-        setMessage(jtText(`A quantidade mínima para ${jtText(item.product.name)} é ${minimum}.`), 'err');
+        setMessage(jtText(`A quantidade mínima para ${item.product.name} é ${minimum}.`), 'err');
         return;
       }
       if (item.product.limit !== null && item.product.limit !== undefined && quantity > item.product.limit) {
         input.value = item.quantity;
-        setMessage(jtText(`Limite de insumos excedido para ${jtText(item.product.name)}. Limite permitido: ${item.product.limit}.`), 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`), 'err');
         return;
       }
       cart.set(item.product.id, { product: item.product, quantity });

@@ -6541,3 +6541,33 @@ body.product-image-modal-open {
     margin: 0 0 8px 0 !important;
   }
 }
+
+
+/* v88 - bloco do usuário simplificado no topo, sem avatar/foto de perfil. */
+.user-pill-simple {
+  gap: 0 !important;
+  padding: 10px 14px !important;
+  min-width: 0 !important;
+  max-width: 260px !important;
+}
+.user-pill-simple span {
+  min-width: 0 !important;
+  display: block !important;
+}
+.user-pill-simple strong,
+.user-pill-simple small {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.nav-header .user-pill-simple strong {
+  font-size: 12.5px !important;
+}
+.nav-header .user-pill-simple small {
+  font-size: 10.5px !important;
+}
+@media (max-width: 920px) {
+  .user-pill-simple {
+    max-width: 100% !important;
+  }
+}

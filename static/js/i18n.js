@@ -101,9 +101,6 @@
   "Modo de visualização": "显示方式",
   "Visualizar em cards": "以卡片显示",
   "Visualizar em lista": "以列表显示",
-  "Perfil base: valores e estoque não são exibidos.": "基地账号：不显示价格与库存。",
-  "Perfil franquia: valores aparecem; estoque permanece oculto.": "加盟店账号：显示价格，但库存维持隐藏。",
-  "Perfil admin: você visualiza preço, estoque e limites.": "管理员账号：可查看价格、库存与限制。",
   "Nenhum insumo encontrado.": "找不到任何耗材。",
   "Lista de solicitação": "申请清单",
   "Número de pessoas na base": "基地人数",
@@ -737,6 +734,50 @@
     "Selecione uma base ou uma franquia para cadastrar o ativo.": "请选择一个基地或加盟店以登记资产。"
   });
 
+
+  Object.assign(zh, {
+    "Rolo": "卷",
+    "ROLO": "卷",
+    "Rolos": "卷",
+    "ROLOS": "卷",
+    "Caixa": "箱",
+    "CAIXA": "箱",
+    "Caixas": "箱",
+    "Pacote": "包",
+    "PACOTE": "包",
+    "Pacotes": "包",
+    "Un": "个",
+    "UN": "个",
+    "Unidade": "单位",
+    "Unidades": "单位"
+  });
+
+
+  Object.assign(zh, {
+    "Menor quantidade em estoque": "库存数量从低到高",
+    "Nome Z-A": "名称 Z-A",
+    "Nome A-Z": "名称 A-Z",
+    "Filtro de categoria": "类别筛选",
+    "Filtro por categoria": "按类别筛选",
+    "Selecione uma categoria": "请选择类别",
+    "Todos os produtos": "所有产品",
+    "Caixas de texto": "文本框",
+    "Pesquisar por insumo, categoria ou descrição...": "搜索耗材、类别或描述...",
+    "Nome, categoria, descrição ou unidade...": "名称、类别、描述或单位...",
+    "Filtrar status": "筛选状态",
+    "Classificar por": "排序方式",
+    "Aplicar filtros": "应用筛选",
+    "Limpar filtros": "清除筛选",
+    "Visualizar em cards": "以卡片显示",
+    "Visualizar em lista": "以列表显示",
+    "Gestão": "管理",
+    "Gestão de Ativos": "资产管理",
+    "Gestão de Insumos": "耗材管理",
+    "Entrada de Materiais": "材料入库",
+    "Pendentes": "待处理",
+    "Atendidas": "已处理"
+  });
+
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-label'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);
@@ -918,13 +959,15 @@
     if ((match = core.match(/^Atual\s*(.+)$/))) return `当前 ${match[1]}`;
     if ((match = core.match(/^(\d+)\s+item$/))) return `${match[1]} 项`;
     if ((match = core.match(/^(\d+)\s+itens$/))) return `${match[1]} 项`;
-    if ((match = core.match(/^(\d+)\s+un$/))) return `${match[1]} 个`;
-    if ((match = core.match(/^(\d+)\s+rolo$/))) return `${match[1]} 卷`;
-    if ((match = core.match(/^(\d+)\s+rolos$/))) return `${match[1]} 卷`;
-    if ((match = core.match(/^(\d+)\s+caixa$/))) return `${match[1]} 箱`;
-    if ((match = core.match(/^(\d+)\s+caixas$/))) return `${match[1]} 箱`;
-    if ((match = core.match(/^(\d+)\s+pacote$/))) return `${match[1]} 包`;
-    if ((match = core.match(/^(\d+)\s+pacotes$/))) return `${match[1]} 包`;
+    if ((match = core.match(/^(\d+)\s+un$/i))) return `${match[1]} 个`;
+    if ((match = core.match(/^(\d+)\s+unidade$/i))) return `${match[1]} 单位`;
+    if ((match = core.match(/^(\d+)\s+unidades$/i))) return `${match[1]} 单位`;
+    if ((match = core.match(/^(\d+)\s+rolo$/i))) return `${match[1]} 卷`;
+    if ((match = core.match(/^(\d+)\s+rolos$/i))) return `${match[1]} 卷`;
+    if ((match = core.match(/^(\d+)\s+caixa$/i))) return `${match[1]} 箱`;
+    if ((match = core.match(/^(\d+)\s+caixas$/i))) return `${match[1]} 箱`;
+    if ((match = core.match(/^(\d+)\s+pacote$/i))) return `${match[1]} 包`;
+    if ((match = core.match(/^(\d+)\s+pacotes$/i))) return `${match[1]} 包`;
     if ((match = core.match(/^(\d+)\s+produto\(s\)$/))) return `${match[1]} 个产品`;
     if ((match = core.match(/^(\d+)\s+item\(ns\)$/))) return `${match[1]} 项`;
     if ((match = core.match(/^Admin\s*•\s*(.+)$/))) return `管理员 • ${match[1]}`;
@@ -1096,6 +1139,100 @@
   // Esse evento recria cards/listas em outras telas e reinicia animações.
   // Ele fica reservado apenas para a troca real do idioma no botão.
 
+
+  function processTextNodeForced(node) {
+    if (shouldSkipTextNode(node)) return;
+    const original = getOriginalText(node);
+    const next = currentLanguage() === 'zh-CN' ? t(original) : original;
+    if (node.nodeValue !== next) node.nodeValue = next;
+  }
+
+  function processAttributesForced(el) {
+    if (!el || !el.getAttribute || shouldSkipElement(el)) return;
+    ATTRS.forEach(function (attr) {
+      if (!el.hasAttribute(attr)) return;
+      const key = STORAGE_ATTR_PREFIX + attr;
+      if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr) || '');
+      const original = el.getAttribute(key) || '';
+      const next = currentLanguage() === 'zh-CN' ? t(original) : original;
+      if (el.getAttribute(attr) !== next) el.setAttribute(attr, next);
+    });
+    const tag = elementTag(el);
+    const type = String(el.getAttribute('type') || '').toLowerCase();
+    if (tag === 'input' && ['button', 'submit', 'reset'].indexOf(type) !== -1 && el.hasAttribute('value')) {
+      const key = STORAGE_ATTR_PREFIX + 'value';
+      if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute('value') || '');
+      const original = el.getAttribute(key) || '';
+      const next = currentLanguage() === 'zh-CN' ? t(original) : original;
+      if (el.getAttribute('value') !== next) el.setAttribute('value', next);
+    }
+  }
+
+  function forceTranslateElementDeep(rootElement) {
+    if (!rootElement || shouldSkipElement(rootElement)) return;
+    if (rootElement.nodeType === Node.TEXT_NODE) {
+      processTextNodeForced(rootElement);
+      return;
+    }
+    if (rootElement.nodeType === Node.ELEMENT_NODE) processAttributesForced(rootElement);
+    const walker = document.createTreeWalker(
+      rootElement,
+      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: function (candidate) {
+          if (candidate.nodeType === Node.ELEMENT_NODE) {
+            return shouldSkipElement(candidate) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+          }
+          return shouldSkipTextNode(candidate) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+        }
+      }
+    );
+    let current = walker.currentNode;
+    while (current) {
+      if (current.nodeType === Node.ELEMENT_NODE) processAttributesForced(current);
+      if (current.nodeType === Node.TEXT_NODE) processTextNodeForced(current);
+      current = walker.nextNode();
+    }
+  }
+
+  function forceTranslateMenusFiltersAndInputs() {
+    const selectors = [
+      '.top-nav',
+      '.nav-dropdown',
+      '.nav-drop-toggle',
+      '.nav-drop-menu',
+      '.nav-drop-menu a',
+      '.public-actions',
+      '.account-area',
+      '.search-card',
+      '.catalog-filter-row',
+      '.catalog-view-control',
+      '.catalog-result-line',
+      '.product-filter-card',
+      '.product-filter-main',
+      '.product-filter-summary',
+      '.product-tools',
+      '.import-form',
+      '.cart-panel',
+      '.monthly-report-card',
+      '.material-report-card',
+      '.asset-report-card',
+      '.report-form-card',
+      '.filters-card',
+      '.asset-toolbar',
+      '.material-entry-form',
+      '.export-language-modal',
+      'select option:not([data-no-i18n])',
+      'input[placeholder]',
+      'textarea[placeholder]',
+      'button[title]',
+      '[data-label]'
+    ];
+    document.querySelectorAll(selectors.join(',')).forEach(function (el) {
+      forceTranslateElementDeep(el);
+    });
+  }
+
   function forceTranslateStockAndCards() {
     if (currentLanguage() !== 'zh-CN') return;
     const selectors = [
@@ -1104,9 +1241,6 @@
       '.stock-product-card strong',
       '.stock-product-card small',
       '.stock-product-card span',
-      '.product-card h3',
-      '.product-card p',
-      '.product-card .product-category',
       '.badge',
       '.stock-pill',
       '.stock-chart-tooltip *',
@@ -1157,6 +1291,7 @@
         updateDocumentTitle();
         processVisible(rootNode || document.body || document.documentElement);
         forceTranslateStockAndCards();
+        forceTranslateMenusFiltersAndInputs();
       } finally {
         isApplying = false;
       }

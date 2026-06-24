@@ -117,10 +117,10 @@
               <img src="{{ url_for('product_image', product_id=product.id) }}" alt="{{ product.name }}">
             </button>
             {% endif %}
-            <div><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></div>
+            <div data-no-i18n><strong>{{ product.name }}</strong>{% if product.description %}<br><small>{{ product.description }}</small>{% endif %}</div>
           </div>
         </td>
-        <td data-label="Categoria">{{ product.category_emoji }} {{ product.category or '-' }}</td>
+        <td data-label="Categoria"><span data-no-i18n>{{ product.category_emoji }} {{ product.category or '-' }}</span></td>
         <td data-label="Público">
           {% if product.visible_base %}<span class="audience-pill">Base</span>{% endif %}
           {% if product.visible_franchise %}<span class="audience-pill">Franquia</span>{% endif %}

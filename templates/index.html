@@ -18,7 +18,7 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
           <select id="categoryFilter">
             <option value="">Todas as categorias</option>
             {% for category in product_categories %}
-            <option value="{{ category.name }}">{{ category.emoji }} {{ category.name }}</option>
+            <option value="{{ category.name }}" data-no-i18n>{{ category.emoji }} {{ category.name }}</option>
             {% endfor %}
           </select>
         </label>
@@ -47,13 +47,6 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
         <strong id="productResultCount">0</strong>
         <span>produto(s) encontrado(s)</span>
       </div>
-      {% if current_user.role == 'base' %}
-        <p class="hint">Perfil base: valores e estoque não são exibidos.</p>
-      {% elif current_user.role == 'franchise' %}
-        <p class="hint">Perfil franquia: valores aparecem; estoque permanece oculto.</p>
-      {% else %}
-        <p class="hint">Perfil admin: você visualiza preço, estoque e limites.</p>
-      {% endif %}
     </div>
 
     <div id="productGrid" class="product-grid"></div>
@@ -88,5 +81,5 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}?v=79"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=87"></script>
 {% endblock %}
