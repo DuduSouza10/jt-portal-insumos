@@ -231,6 +231,12 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - O favicon usa diretamente o SVG oficial branco da J&T enviado pelo usuário.
 - Foram removidas do HTML as referências aos favicons PNG e ICO gerados anteriormente.
 
+## v70 - PDF e pessoas na base
+
+- O PDF de solicitação usa Helvetica nos textos em português e fonte CJK apenas nos trechos chineses, sem espaçamento artificial entre letras.
+- O cabeçalho, dados da solicitação e tabela de itens receberam um layout mais limpo.
+- O número de pessoas na base é solicitado e exibido somente para usuários do tipo Base.
+
 
 ## v51.2 - Ativos integrados ao estoque
 

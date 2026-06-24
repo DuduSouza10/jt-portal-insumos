@@ -110,6 +110,7 @@ INSTANCE_DIR.mkdir(exist_ok=True)
 # ReportLab/Adobe para chinês simplificado e também segura para textos mistos.
 PDF_TEXT_FONT = "Helvetica"
 PDF_TEXT_FONT_BOLD = "Helvetica-Bold"
+PDF_CJK_FONT = "Helvetica"
 try:
     pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
     registerFontFamily(
@@ -121,8 +122,12 @@ try:
     )
     PDF_TEXT_FONT = "STSong-Light"
     PDF_TEXT_FONT_BOLD = "STSong-Light"
+    PDF_CJK_FONT = "STSong-Light"
 except Exception as exc:
     print(f"[PDF] Aviso: não foi possível registrar fonte chinesa STSong-Light: {exc}")
+
+REQUEST_PDF_FONT = "Helvetica"
+REQUEST_PDF_FONT_BOLD = "Helvetica-Bold"
 
 app = Flask(__name__)
 
@@ -2122,6 +2127,22 @@ def pdf_clean_plain_text(value: Any, default: str = "-") -> str:
     return text_value or default
 
 
+def pdf_mixed_text(value: Any, default: str = "-") -> str:
+    """Mantém tipografia latina compacta e usa fonte CJK só nos ideogramas."""
+    text_value = pdf_clean_plain_text(value, default)
+    cjk_pattern = re.compile(r"([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f]+)")
+    parts: list[str] = []
+    for part in cjk_pattern.split(text_value):
+        if not part:
+            continue
+        escaped = html_escape(part)
+        if cjk_pattern.fullmatch(part):
+            parts.append(f'<font name="{PDF_CJK_FONT}">{escaped}</font>')
+        else:
+            parts.append(escaped)
+    return "".join(parts) or html_escape(default)
+
+
 def people_count_label(value: int | None) -> str:
     if value is None or int(value or 0) <= 0:
         return "-"
@@ -2134,20 +2155,24 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
-        topMargin=15 * mm,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        topMargin=14 * mm,
         bottomMargin=17 * mm,
     )
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="JTTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=18, leading=22, textColor=colors.HexColor("#151515"), spaceAfter=3))
-    styles.add(ParagraphStyle(name="JTSubtitle", fontName=PDF_TEXT_FONT, fontSize=8.8, leading=12, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="JTSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=11.5, leading=14, textColor=colors.HexColor("#151515"), spaceBefore=4, spaceAfter=6))
-    styles.add(ParagraphStyle(name="JTMeta", fontName=PDF_TEXT_FONT, fontSize=8.7, leading=11, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="JTMetaLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.4, leading=9, textColor=colors.HexColor("#e60012")))
-    styles.add(ParagraphStyle(name="JTCell", fontName=PDF_TEXT_FONT, fontSize=8.4, leading=10.8, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="JTCellBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=8.4, leading=10.8, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="JTSmall", fontName=PDF_TEXT_FONT, fontSize=7.8, leading=10.3, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="JTEyebrow", fontName=REQUEST_PDF_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
+    styles.add(ParagraphStyle(name="JTTitle", fontName=REQUEST_PDF_FONT_BOLD, fontSize=17, leading=20, textColor=colors.HexColor("#171717"), spaceAfter=2))
+    styles.add(ParagraphStyle(name="JTSubtitle", fontName=REQUEST_PDF_FONT, fontSize=8.3, leading=11.2, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="JTSection", fontName=REQUEST_PDF_FONT_BOLD, fontSize=11.2, leading=14, textColor=colors.HexColor("#171717"), spaceBefore=3, spaceAfter=6))
+    styles.add(ParagraphStyle(name="JTMeta", fontName=REQUEST_PDF_FONT, fontSize=8.4, leading=10.6, textColor=colors.HexColor("#252525")))
+    styles.add(ParagraphStyle(name="JTMetaLabel", fontName=REQUEST_PDF_FONT_BOLD, fontSize=7.0, leading=8.5, textColor=colors.HexColor("#e60012")))
+    styles.add(ParagraphStyle(name="JTCell", fontName=REQUEST_PDF_FONT, fontSize=8.2, leading=10.6, textColor=colors.HexColor("#252525")))
+    styles.add(ParagraphStyle(name="JTCellBold", fontName=REQUEST_PDF_FONT_BOLD, fontSize=8.2, leading=10.6, textColor=colors.HexColor("#151515")))
+    styles.add(ParagraphStyle(name="JTSmall", fontName=REQUEST_PDF_FONT, fontSize=7.7, leading=10.2, textColor=colors.HexColor("#666666")))
+
+    def p(value: Any, style_name: str = "JTCell") -> Paragraph:
+        return Paragraph(pdf_mixed_text(value), styles[style_name])
 
     story: list[Any] = []
 
@@ -2156,7 +2181,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     try:
         drawing = svg2rlg(str(logo_path))
         if drawing is not None and drawing.width:
-            scale = (38 * mm) / drawing.width
+            scale = (31 * mm) / drawing.width
             drawing.width *= scale
             drawing.height *= scale
             drawing.scale(scale, scale)
@@ -2164,7 +2189,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
         else:
             raise ValueError("Logo SVG inválida")
     except Exception:
-        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="FallbackLogoPDF", fontName=PDF_TEXT_FONT_BOLD, fontSize=14, textColor=colors.HexColor("#e60012")))
+        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="FallbackLogoPDF", fontName=REQUEST_PDF_FONT_BOLD, fontSize=14, textColor=colors.HexColor("#e60012")))
 
     requester = supply_request.user
     requester_name = requester.responsible_name if requester else "-"
@@ -2174,41 +2199,48 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     show_prices = viewer.is_admin or viewer.role == "franchise"
     role_label = "Administrador" if requester_role == "admin" else ("Base" if requester_role == "base" else "Franquia")
 
+    title_block = [
+        Paragraph("PORTAL DE INSUMOS", styles["JTEyebrow"]),
+        Paragraph(f"Solicitação #{supply_request.id}", styles["JTTitle"]),
+        Paragraph("J&amp;T Express Brazil", styles["JTSubtitle"]),
+    ]
+    status_block = Paragraph(
+        f"<font color='#e60012'><b>{pdf_mixed_text(status_label(supply_request.status))}</b></font>"
+        f"<br/><font color='#777777'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        styles["JTMeta"],
+    )
     header_table = Table(
         [[
             logo_cell,
-            Paragraph(f"Solicitação de Insumos #{supply_request.id}", styles["JTTitle"]),
-            Paragraph(f"<b>Status</b><br/>{pdf_clean_text(status_label(supply_request.status))}<br/><font color='#777777'>Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>", styles["JTMeta"]),
+            title_block,
+            status_block,
         ]],
-        colWidths=[43 * mm, 78 * mm, 53 * mm],
+        colWidths=[39 * mm, 86 * mm, 55 * mm],
     )
     header_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#ffffff")),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff7f8")),
-        ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#f0d6d9")),
-        ("LINEBELOW", (0, 0), (-1, -1), 2.0, colors.HexColor("#e60012")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        ("TOPPADDING", (0, 0), (-1, -1), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#edcfd3")),
+        ("LINEBELOW", (0, 0), (-1, -1), 2.2, colors.HexColor("#e60012")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 9),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
     ]))
     story.append(header_table)
     story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph("Documento gerado automaticamente pelo Portal de Solicitação de Insumos J&amp;T Express Brazil.", styles["JTSubtitle"]))
-    story.append(Spacer(1, 7 * mm))
 
-    meta_data = [
-        [Paragraph("SOLICITANTE", styles["JTMetaLabel"]), Paragraph("BASE / FRANQUIA", styles["JTMetaLabel"]), Paragraph("TIPO", styles["JTMetaLabel"])],
-        [Paragraph(pdf_clean_text(requester_name), styles["JTMeta"]), Paragraph(pdf_clean_text(requester_org), styles["JTMeta"]), Paragraph(pdf_clean_text(role_label), styles["JTMeta"])],
-        [Paragraph("USUÁRIO", styles["JTMetaLabel"]), Paragraph("PESSOAS NA BASE", styles["JTMetaLabel"]), Paragraph("DATA DA SOLICITAÇÃO", styles["JTMetaLabel"])],
-        [Paragraph(pdf_clean_text(requester_username), styles["JTMeta"]), Paragraph(pdf_clean_text(people_count_label(supply_request.people_count)), styles["JTMeta"]), Paragraph(supply_request.created_at.strftime("%d/%m/%Y %H:%M"), styles["JTMeta"])],
-    ]
-    meta_table = Table(meta_data, colWidths=[58 * mm, 58 * mm, 58 * mm])
-    meta_table.setStyle(TableStyle([
+    primary_meta = Table(
+        [
+            [Paragraph("SOLICITANTE", styles["JTMetaLabel"]), Paragraph("BASE / FRANQUIA", styles["JTMetaLabel"]), Paragraph("TIPO", styles["JTMetaLabel"])],
+            [p(requester_name, "JTMeta"), p(requester_org, "JTMeta"), p(role_label, "JTMeta")],
+        ],
+        colWidths=[60 * mm, 60 * mm, 60 * mm],
+    )
+    primary_meta.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fcfcfc")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#fff3f4")),
         ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
         ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
@@ -2217,43 +2249,71 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]))
-    story.append(meta_table)
-    story.append(Spacer(1, 8 * mm))
+    story.append(primary_meta)
+    story.append(Spacer(1, 2 * mm))
 
-    headers = [Paragraph("Produto solicitado", styles["JTCellBold"]), Paragraph("Qtd.", styles["JTCellBold"])]
+    secondary_fields = [
+        ("USUÁRIO", requester_username),
+        ("DATA DA SOLICITAÇÃO", supply_request.created_at.strftime("%d/%m/%Y %H:%M")),
+    ]
+    if requester_role == "base":
+        secondary_fields.insert(1, ("PESSOAS NA BASE", people_count_label(supply_request.people_count)))
+    secondary_width = 180 * mm / len(secondary_fields)
+    secondary_meta = Table(
+        [
+            [Paragraph(label, styles["JTMetaLabel"]) for label, _value in secondary_fields],
+            [p(value, "JTMeta") for _label, value in secondary_fields],
+        ],
+        colWidths=[secondary_width] * len(secondary_fields),
+    )
+    secondary_meta.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fcfcfc")),
+        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
+        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    story.append(secondary_meta)
+    story.append(Spacer(1, 7 * mm))
+
+    headers = [p("Produto solicitado", "JTCellBold"), p("Qtd.", "JTCellBold")]
     col_widths = [126 * mm, 28 * mm]
     if show_prices:
-        headers.extend([Paragraph("Valor unit.", styles["JTCellBold"]), Paragraph("Subtotal", styles["JTCellBold"])])
+        headers.extend([p("Valor unit.", "JTCellBold"), p("Subtotal", "JTCellBold")])
         col_widths = [86 * mm, 23 * mm, 30 * mm, 35 * mm]
 
     item_rows: list[list[Any]] = [headers]
     for item in supply_request.items:
         unit_label = item.product.unit_measure if item.product and item.product.unit_measure else "un"
         row: list[Any] = [
-            Paragraph(pdf_clean_text(item.product_name_snapshot), styles["JTCell"]),
-            Paragraph(pdf_clean_text(f"{item.quantity} {unit_label}"), styles["JTCellBold"]),
+            p(item.product_name_snapshot),
+            p(f"{item.quantity} {unit_label}", "JTCellBold"),
         ]
         if show_prices:
             row.extend([
-                Paragraph(format_brl(item.price_cents_snapshot), styles["JTCell"]),
-                Paragraph(format_brl(item.price_cents_snapshot * item.quantity), styles["JTCellBold"]),
+                p(format_brl(item.price_cents_snapshot)),
+                p(format_brl(item.price_cents_snapshot * item.quantity), "JTCellBold"),
             ])
         item_rows.append(row)
 
     if show_prices:
-        item_rows.append(["", "", Paragraph("TOTAL", styles["JTCellBold"]), Paragraph(format_brl(supply_request.total_cents), styles["JTCellBold"])])
+        item_rows.append(["", "", p("TOTAL", "JTCellBold"), p(format_brl(supply_request.total_cents), "JTCellBold")])
 
     story.append(Paragraph("Itens solicitados", styles["JTSection"]))
     items_table = Table(item_rows, colWidths=col_widths, repeatRows=1)
     style_commands = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e60012")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d90012")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
         ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e8e8e8")),
         ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6.5),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("ALIGN", (1, 1), (1, -1), "CENTER"),
     ]
@@ -2263,19 +2323,18 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
             ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#fff3f4")),
             ("SPAN", (0, -1), (1, -1)),
         ])
-    for row_index in range(1, len(item_rows), 2):
-        style_commands.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#fbfbfb")))
+    style_commands.append(("ROWBACKGROUNDS", (0, 1), (-1, -2 if show_prices else -1), [colors.white, colors.HexColor("#fafafa")]))
     items_table.setStyle(TableStyle(style_commands))
     story.append(items_table)
     story.append(Spacer(1, 8 * mm))
 
     info_blocks: list[list[Any]] = []
     if supply_request.user_note:
-        info_blocks.append([Paragraph("Observação do solicitante", styles["JTCellBold"]), Paragraph(pdf_clean_text(supply_request.user_note), styles["JTSmall"])])
+        info_blocks.append([p("Observação do solicitante", "JTCellBold"), p(supply_request.user_note, "JTSmall")])
     if supply_request.admin_note:
-        info_blocks.append([Paragraph("Observação administrativa", styles["JTCellBold"]), Paragraph(pdf_clean_text(supply_request.admin_note), styles["JTSmall"])])
+        info_blocks.append([p("Observação administrativa", "JTCellBold"), p(supply_request.admin_note, "JTSmall")])
     if supply_request.reviewed_at:
-        info_blocks.append([Paragraph("Revisão", styles["JTCellBold"]), Paragraph(f"Revisado em {supply_request.reviewed_at.strftime('%d/%m/%Y %H:%M')}", styles["JTSmall"])])
+        info_blocks.append([p("Revisão", "JTCellBold"), p(f"Revisado em {supply_request.reviewed_at.strftime('%d/%m/%Y %H:%M')}", "JTSmall")])
     if info_blocks:
         story.append(Paragraph("Informações complementares", styles["JTSection"]))
         info_table = Table(info_blocks, colWidths=[52 * mm, 122 * mm])
@@ -2297,7 +2356,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
         canvas.setStrokeColor(colors.HexColor("#e60012"))
         canvas.setLineWidth(0.7)
         canvas.line(16 * mm, 14 * mm, width - 16 * mm, 14 * mm)
-        canvas.setFont(PDF_TEXT_FONT, 7.5)
+        canvas.setFont(REQUEST_PDF_FONT, 7.5)
         canvas.setFillColor(colors.HexColor("#777777"))
         canvas.drawString(16 * mm, 9 * mm, "J&T Express Brazil • CNPJ: 42.584.754/0092-13")
         canvas.drawRightString(width - 16 * mm, 9 * mm, f"Página {document.page}")
@@ -2440,7 +2499,7 @@ def build_supply_requests_period_report_pdf(
     ]))
     story.append(header)
     story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph(f"Relatório consolidado das solicitações registradas no intervalo selecionado para {pdf_clean_text(unit_label)}, incluindo solicitante, status, número de pessoas, itens, quantidades, valores e observações.", styles["ReportSubtitle"]))
+    story.append(Paragraph(f"Relatório consolidado das solicitações registradas no intervalo selecionado para {pdf_clean_text(unit_label)}, incluindo solicitante, status, pessoas das bases, itens, quantidades, valores e observações.", styles["ReportSubtitle"]))
     story.append(Spacer(1, 6 * mm))
 
     status_counts: dict[str, int] = {}
@@ -2452,7 +2511,8 @@ def build_supply_requests_period_report_pdf(
     product_totals: dict[str, dict[str, Any]] = {}
     for req in requests_list:
         status_counts[req.status] = status_counts.get(req.status, 0) + 1
-        total_people += int(req.people_count or 0)
+        if req.user and req.user.role == "base":
+            total_people += int(req.people_count or 0)
         if req.user and req.user.organization_name:
             requester_units.add(pdf_clean_plain_text(req.user.organization_name))
         for item in req.items:
@@ -2469,7 +2529,7 @@ def build_supply_requests_period_report_pdf(
     summary_data = [
         [Paragraph("SOLICITAÇÕES", styles["ReportLabel"]), Paragraph("BASES/FRANQUIAS", styles["ReportLabel"]), Paragraph("ITENS", styles["ReportLabel"]), Paragraph("VALOR TOTAL", styles["ReportLabel"])],
         [p(len(requests_list), "ReportMeta"), p(len(requester_units), "ReportMeta"), p(f"{total_items} linhas / {total_units} un.", "ReportMeta"), p(format_brl(total_value), "ReportMeta")],
-        [Paragraph("PENDENTES", styles["ReportLabel"]), Paragraph("APROVADAS", styles["ReportLabel"]), Paragraph("REJEITADAS", styles["ReportLabel"]), Paragraph("PESSOAS INFORMADAS", styles["ReportLabel"])],
+        [Paragraph("PENDENTES", styles["ReportLabel"]), Paragraph("APROVADAS", styles["ReportLabel"]), Paragraph("REJEITADAS", styles["ReportLabel"]), Paragraph("PESSOAS NAS BASES", styles["ReportLabel"])],
         [p(status_counts.get("pending", 0), "ReportMeta"), p(status_counts.get("approved", 0), "ReportMeta"), p(status_counts.get("rejected", 0), "ReportMeta"), p(total_people if total_people else "-", "ReportMeta")],
     ]
     summary_table = Table(summary_data, colWidths=[44.5 * mm, 44.5 * mm, 44.5 * mm, 44.5 * mm])
@@ -2533,6 +2593,11 @@ def build_supply_requests_period_report_pdf(
             requester_org = requester.organization_name if requester else "-"
             requester_username = requester.username if requester else "-"
             requester_role = user_role_label(requester.role if requester else "")
+            requester_role_value = requester_role
+            requester_role_label = "Tipo"
+            if requester and requester.role == "base":
+                requester_role_label = "Tipo / Pessoas"
+                requester_role_value = f"{requester_role} • {people_count_label(req.people_count)}"
             item_text_parts = []
             for item in req.items:
                 unit = item.product.unit_measure if item.product and item.product.unit_measure else "un"
@@ -2550,8 +2615,8 @@ def build_supply_requests_period_report_pdf(
 
             detail_rows = [
                 [Paragraph(f"Solicitação #{req.id}", styles["ReportCellBold"]), Paragraph(pdf_clean_text(status_name(req.status)), styles["ReportCellBold"]), Paragraph(req.created_at.strftime("%d/%m/%Y %H:%M"), styles["ReportCellBold"])],
-                [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Base/Franquia", styles["ReportLabel"]), Paragraph("Tipo / Pessoas", styles["ReportLabel"])],
-                [p(f"{requester_name} ({requester_username})"), p(requester_org), p(f"{requester_role} • {people_count_label(req.people_count)}")],
+                [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Base/Franquia", styles["ReportLabel"]), Paragraph(requester_role_label, styles["ReportLabel"])],
+                [p(f"{requester_name} ({requester_username})"), p(requester_org), p(requester_role_value)],
                 [Paragraph("Itens", styles["ReportLabel"]), Paragraph("Observações", styles["ReportLabel"]), Paragraph("Total", styles["ReportLabel"])],
                 [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_text_parts), styles["ReportSmall"]), Paragraph(notes_html, styles["ReportSmall"]), p(format_brl(req.total_cents), "ReportCellBold")],
             ]
@@ -4209,13 +4274,15 @@ def api_create_request():
         return jsonify({"ok": False, "message": error}), 400
 
     user_note = str(payload.get("user_note") or "").strip()
-    people_count_raw = str(payload.get("people_count") or "").strip()
-    try:
-        people_count = int(people_count_raw)
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "message": "Informe o número de pessoas na base."}), 400
-    if people_count <= 0 or people_count > 99999:
-        return jsonify({"ok": False, "message": "Informe um número de pessoas válido."}), 400
+    people_count: int | None = None
+    if user.role == "base":
+        people_count_raw = str(payload.get("people_count") or "").strip()
+        try:
+            people_count = int(people_count_raw)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "message": "Informe o número de pessoas na base."}), 400
+        if people_count <= 0 or people_count > 99999:
+            return jsonify({"ok": False, "message": "Informe um número de pessoas válido."}), 400
 
     with db_connect() as conn:
         cursor = conn.execute(

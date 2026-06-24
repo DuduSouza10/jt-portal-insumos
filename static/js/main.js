@@ -172,11 +172,14 @@ async function sendRequest() {
     setMessage(jtText('Adicione pelo menos um insumo antes de enviar.'), 'err');
     return;
   }
-  const peopleCount = parseInt(requestPeopleCount ? requestPeopleCount.value : '', 10);
-  if (!peopleCount || peopleCount <= 0 || peopleCount > 99999) {
-    setMessage(jtText('Informe o número de pessoas na base.'), 'err');
-    if (requestPeopleCount) requestPeopleCount.focus();
-    return;
+  let peopleCount = null;
+  if (requestPeopleCount) {
+    peopleCount = parseInt(requestPeopleCount.value, 10);
+    if (!peopleCount || peopleCount <= 0 || peopleCount > 99999) {
+      setMessage(jtText('Informe o número de pessoas na base.'), 'err');
+      requestPeopleCount.focus();
+      return;
+    }
   }
   submitRequest.disabled = true;
   setMessage(jtText('Enviando solicitação...'), '');

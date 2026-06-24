@@ -11,7 +11,7 @@
         <th>Data</th>
         <th>Status</th>
         <th>Itens</th>
-        <th>Pessoas</th>
+        {% if current_user.role == 'base' %}<th>Pessoas</th>{% endif %}
         {% if current_user.role == 'franchise' or current_user.is_admin %}<th>Total</th>{% endif %}
         <th>Observação admin</th>
         <th>PDF</th>
@@ -28,7 +28,7 @@
             <div>{{ item.quantity }}x {{ item.product_name_snapshot }}</div>
           {% endfor %}
         </td>
-        <td data-label="Pessoas">{{ req.people_count or '-' }}</td>
+        {% if current_user.role == 'base' %}<td data-label="Pessoas">{{ req.people_count or '-' }}</td>{% endif %}
         {% if current_user.role == 'franchise' or current_user.is_admin %}<td data-label="Total">{{ format_brl(req.total_cents) }}</td>{% endif %}
         <td data-label="Observacao admin">{{ req.admin_note or '-' }}</td>
         <td class="actions-cell" data-label="PDF"><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>

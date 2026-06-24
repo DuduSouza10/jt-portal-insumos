@@ -34,10 +34,12 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
       <button id="clearCart" class="btn danger ghost" type="button">Limpar</button>
     </div>
     <div id="cartItems" class="cart-items"></div>
+    {% if current_user.role == 'base' %}
     <label class="cart-note">
       Número de pessoas na base
       <input id="requestPeopleCount" type="number" min="1" max="99999" step="1" placeholder="Ex.: 25" inputmode="numeric" required>
     </label>
+    {% endif %}
     <label class="cart-note">
       Observação opcional
       <textarea id="requestNote" rows="3" placeholder="Ex.: urgência, rota, responsável pela retirada..."></textarea>
@@ -51,5 +53,5 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}?v=69"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=70"></script>
 {% endblock %}
