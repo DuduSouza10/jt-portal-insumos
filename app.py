@@ -2056,6 +2056,20 @@ def fill_product_from_form(product: Product) -> Product:
     return product
 
 
+def list_product_categories() -> list[str]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT TRIM(category) AS category
+              FROM products
+             WHERE category IS NOT NULL
+               AND TRIM(category) <> ''
+             ORDER BY category COLLATE NOCASE ASC
+            """
+        ).fetchall()
+    return [str(row["category"]).strip() for row in rows if row["category"]]
+
+
 def product_to_api(product: Product, user: User) -> dict[str, Any]:
     show_stock = user.is_admin
     show_price = user.is_admin or user.role == "franchise"
@@ -5019,7 +5033,7 @@ def admin_product_new():
             conn.commit()
         flash("Produto cadastrado.", "success")
         return redirect(url_for("admin_products"))
-    return render_template("admin/product_form.html", product=None)
+    return render_template("admin/product_form.html", product=None, product_categories=list_product_categories())
 
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
@@ -5064,7 +5078,7 @@ def admin_product_edit(product_id: int):
             conn.commit()
         flash("Produto atualizado.", "success")
         return redirect(url_for("admin_products"))
-    return render_template("admin/product_form.html", product=product)
+    return render_template("admin/product_form.html", product=product, product_categories=list_product_categories())
 
 
 @app.post("/admin/products/<int:product_id>/toggle-active")

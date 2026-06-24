@@ -244,6 +244,12 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Retiradas antigas por solicitação recuperam o administrador que aprovou o pedido quando possível.
 - Registros iniciais automáticos são identificados como Sistema.
 
+## v72 - Categorias e pesquisa dinâmica
+
+- O cadastro e a edição de produtos permitem pesquisar categorias já existentes.
+- Uma nova categoria pode ser criada pelo botão Nova categoria.
+- A listagem de produtos é filtrada imediatamente enquanto o administrador digita.
+
 
 ## v51.2 - Ativos integrados ao estoque
 

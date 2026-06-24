@@ -17,7 +17,7 @@
     <div class="product-filter-main">
       <label class="product-filter-search">
         Pesquisar produto
-        <input type="search" name="q" value="{{ product_filters.q if product_filters else '' }}" placeholder="Nome, categoria, descrição ou unidade..." autocomplete="off">
+        <input id="productLiveSearch" type="search" name="q" value="{{ product_filters.q if product_filters else '' }}" placeholder="Nome, categoria, descrição ou unidade..." autocomplete="off">
       </label>
       <label>
         Filtrar status
@@ -45,7 +45,7 @@
       </div>
     </div>
     <div class="product-filter-summary">
-      <span><strong>{{ product_counts.shown }}</strong> exibido(s)</span>
+      <span><strong id="productShownCount">{{ product_counts.shown }}</strong> exibido(s)</span>
       <span><strong>{{ product_counts.total }}</strong> total</span>
       <span><strong>{{ product_counts.active }}</strong> ativo(s)</span>
       <span><strong>{{ product_counts.inactive }}</strong> inativo(s)</span>
@@ -89,9 +89,9 @@
         <th>Produto</th><th>Categoria</th><th>Unidade</th><th>Estoque</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="productTableBody">
       {% for product in products %}
-      <tr>
+      <tr data-product-row>
         <td data-label="Produto"><strong>{{ product.name }}</strong><br><small>{{ product.description or '' }}</small></td>
         <td data-label="Categoria">{{ product.category or '-' }}</td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
@@ -114,6 +114,9 @@
       {% else %}
       <tr><td colspan="12" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
+      {% if products %}
+      <tr id="productLiveEmpty" class="hidden"><td colspan="12" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      {% endif %}
     </tbody>
   </table>
 </div>
@@ -152,6 +155,39 @@
   window.addEventListener('jt-language-change', function () {
     if (modal.classList.contains('open')) refreshModalLanguage();
   });
+})();
+
+(function () {
+  const input = document.getElementById('productLiveSearch');
+  const rows = Array.from(document.querySelectorAll('[data-product-row]'));
+  const counter = document.getElementById('productShownCount');
+  const emptyRow = document.getElementById('productLiveEmpty');
+  if (!input || !rows.length) return;
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function filterProducts() {
+    const terms = normalize(input.value).split(' ').filter(Boolean);
+    let visible = 0;
+    rows.forEach(function (row) {
+      const searchable = normalize(row.textContent);
+      const matches = terms.every((term) => searchable.includes(term));
+      row.classList.toggle('product-live-hidden', !matches);
+      if (matches) visible += 1;
+    });
+    if (counter) counter.textContent = String(visible);
+    if (emptyRow) emptyRow.classList.toggle('hidden', visible > 0);
+  }
+
+  input.addEventListener('input', filterProducts);
+  filterProducts();
 })();
 </script>
 {% endblock %}

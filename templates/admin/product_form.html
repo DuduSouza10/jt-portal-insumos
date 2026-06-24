@@ -4,15 +4,37 @@
 {% block page_subtitle %}Defina estoque, valor, limites de solicitação e estoque mínimo/máximo.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form method="post" class="form-grid two-cols">
+  <form id="productForm" method="post" class="form-grid two-cols">
     <label>
       Nome do produto
       <input name="name" value="{{ product.name if product else '' }}" required>
     </label>
-    <label>
-      Categoria
-      <input name="category" value="{{ product.category if product else '' }}" placeholder="Ex.: Embalagens">
-    </label>
+    <div class="category-field">
+      <label for="categorySearch">Categoria</label>
+      <input type="hidden" name="category" id="categoryValue" value="{{ product.category if product else '' }}">
+      <div class="category-picker">
+        <div class="category-search-wrap">
+          <input
+            id="categorySearch"
+            type="search"
+            value="{{ product.category if product else '' }}"
+            placeholder="Pesquisar categoria..."
+            autocomplete="off"
+            aria-autocomplete="list"
+            aria-controls="categorySuggestions"
+            aria-expanded="false"
+          >
+          <div id="categorySuggestions" class="category-suggestions hidden" role="listbox"></div>
+        </div>
+        <button id="openNewCategory" class="btn ghost category-new-button" type="button">+ Nova categoria</button>
+      </div>
+      <div id="newCategoryPanel" class="new-category-panel hidden">
+        <input id="newCategoryInput" type="text" placeholder="Nome da nova categoria" maxlength="120">
+        <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
+        <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
+      </div>
+      <small id="categoryHelp" class="hint">Escolha uma categoria existente ou use o botão para criar uma nova.</small>
+    </div>
     <label>
       Unidade de medida
       <input name="unit_measure" value="{{ product.unit_measure if product else 'un' }}" placeholder="Ex.: un, caixa, rolo, pacote">
@@ -55,4 +77,138 @@
     </div>
   </form>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById('productForm');
+  const search = document.getElementById('categorySearch');
+  const valueInput = document.getElementById('categoryValue');
+  const suggestions = document.getElementById('categorySuggestions');
+  const openButton = document.getElementById('openNewCategory');
+  const panel = document.getElementById('newCategoryPanel');
+  const newInput = document.getElementById('newCategoryInput');
+  const confirmButton = document.getElementById('confirmNewCategory');
+  const cancelButton = document.getElementById('cancelNewCategory');
+  const categories = {{ product_categories|default([])|tojson }};
+  const currentCategory = valueInput ? valueInput.value.trim() : '';
+
+  if (currentCategory && !categories.some((item) => item.toLocaleLowerCase('pt-BR') === currentCategory.toLocaleLowerCase('pt-BR'))) {
+    categories.push(currentCategory);
+  }
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function closeSuggestions() {
+    suggestions.classList.add('hidden');
+    search.setAttribute('aria-expanded', 'false');
+  }
+
+  function selectCategory(category) {
+    search.value = category;
+    valueInput.value = category;
+    search.setCustomValidity('');
+    panel.classList.add('hidden');
+    closeSuggestions();
+  }
+
+  function matchingCategories(query) {
+    const normalizedQuery = normalize(query);
+    return categories
+      .filter((category) => !normalizedQuery || normalize(category).includes(normalizedQuery))
+      .sort((left, right) => left.localeCompare(right, 'pt-BR'))
+      .slice(0, 12);
+  }
+
+  function renderSuggestions() {
+    const matches = matchingCategories(search.value);
+    if (!matches.length) {
+      suggestions.innerHTML = '<div class="category-suggestion-empty">Nenhuma categoria encontrada. Use “Nova categoria”.</div>';
+    } else {
+      suggestions.innerHTML = matches.map((category) => (
+        `<button type="button" class="category-suggestion" role="option" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
+      )).join('');
+    }
+    suggestions.classList.remove('hidden');
+    search.setAttribute('aria-expanded', 'true');
+  }
+
+  search.addEventListener('focus', renderSuggestions);
+  search.addEventListener('input', function () {
+    const exact = categories.find((category) => normalize(category) === normalize(search.value));
+    valueInput.value = exact || '';
+    search.setCustomValidity('');
+    renderSuggestions();
+  });
+  search.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeSuggestions();
+    if (event.key === 'Enter' && !suggestions.classList.contains('hidden')) {
+      const first = suggestions.querySelector('[data-category]');
+      if (first) {
+        event.preventDefault();
+        selectCategory(first.dataset.category || '');
+      }
+    }
+  });
+
+  suggestions.addEventListener('click', function (event) {
+    const button = event.target.closest('[data-category]');
+    if (button) selectCategory(button.dataset.category || '');
+  });
+
+  openButton.addEventListener('click', function () {
+    panel.classList.remove('hidden');
+    newInput.value = search.value.trim();
+    closeSuggestions();
+    newInput.focus();
+  });
+
+  confirmButton.addEventListener('click', function () {
+    const category = newInput.value.trim();
+    if (!category) {
+      newInput.focus();
+      return;
+    }
+    const existing = categories.find((item) => normalize(item) === normalize(category));
+    if (!existing) categories.push(category);
+    selectCategory(existing || category);
+  });
+
+  cancelButton.addEventListener('click', function () {
+    panel.classList.add('hidden');
+    newInput.value = '';
+    search.focus();
+  });
+
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest('.category-field')) closeSuggestions();
+  });
+
+  form.addEventListener('submit', function (event) {
+    const typed = search.value.trim();
+    if (typed && !valueInput.value) {
+      event.preventDefault();
+      search.setCustomValidity('Selecione uma categoria existente ou confirme a nova categoria.');
+      search.reportValidity();
+      return;
+    }
+    search.setCustomValidity('');
+  });
+})();
+</script>
 {% endblock %}
