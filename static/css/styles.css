@@ -6895,3 +6895,111 @@ html[data-theme="light"] .settings-toggle.bunny-settings-toggle:hover {
   border-color: rgba(230,0,18,.24);
   box-shadow: 0 12px 28px rgba(0,0,0,.10);
 }
+
+
+/* v93 - coelho vermelho no fundo preto; ao abrir fica branco no fundo vermelho com facho de luz frontal */
+.settings-toggle.bunny-settings-toggle {
+  position: relative !important;
+  overflow: hidden !important;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px !important;
+  background: linear-gradient(145deg, #050505, #161616) !important;
+  border: 1px solid rgba(230, 0, 18, .34) !important;
+  box-shadow: 0 12px 28px rgba(0,0,0,.30) !important;
+  backdrop-filter: none !important;
+}
+
+.settings-toggle.bunny-settings-toggle::before {
+  display: none !important;
+}
+
+.settings-toggle.bunny-settings-toggle::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: -35%;
+  bottom: -35%;
+  width: 18px;
+  left: -60%;
+  transform: rotate(18deg) translateX(-120%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.88), rgba(255,255,255,.28), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-bunny-icon {
+  position: relative !important;
+  z-index: 2 !important;
+  width: 34px !important;
+  height: 34px !important;
+  object-fit: contain !important;
+  opacity: 1 !important;
+  filter:
+    brightness(0) saturate(100%)
+    invert(14%) sepia(96%) saturate(5881%) hue-rotate(348deg) brightness(92%) contrast(113%)
+    drop-shadow(0 0 4px rgba(230,0,18,.28)) !important;
+  transform: scale(1) !important;
+  transition: filter .18s ease, transform .18s ease, opacity .18s ease !important;
+}
+
+.settings-toggle.bunny-settings-toggle:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  box-shadow: 0 16px 34px rgba(0,0,0,.34), 0 0 0 1px rgba(230,0,18,.10) inset !important;
+}
+
+.settings-toggle.bunny-settings-toggle:hover .settings-bunny-icon {
+  filter:
+    brightness(0) saturate(100%)
+    invert(19%) sepia(100%) saturate(6825%) hue-rotate(348deg) brightness(102%) contrast(113%)
+    drop-shadow(0 0 6px rgba(230,0,18,.35)) !important;
+}
+
+.settings-toggle.bunny-settings-toggle:active,
+.settings-dock.open .settings-toggle.bunny-settings-toggle {
+  background: linear-gradient(145deg, #e60012, #9f0010) !important;
+  border-color: rgba(255,255,255,.22) !important;
+  box-shadow: 0 16px 34px rgba(230,0,18,.28), 0 0 0 1px rgba(255,255,255,.10) inset !important;
+}
+
+.settings-toggle.bunny-settings-toggle:active .settings-bunny-icon,
+.settings-dock.open .settings-bunny-icon {
+  filter: brightness(0) invert(1) drop-shadow(0 1px 0 rgba(0,0,0,.20)) !important;
+  transform: scale(1.04) !important;
+}
+
+.settings-toggle.bunny-settings-toggle:active::after,
+.settings-dock.open .settings-toggle.bunny-settings-toggle::after {
+  animation: bunnyLightSweep .72s cubic-bezier(.22, 1, .36, 1) 1;
+}
+
+@keyframes bunnyLightSweep {
+  0% { left: -55%; opacity: 0; transform: rotate(18deg) translateX(-100%); }
+  20% { opacity: .68; }
+  55% { opacity: .92; }
+  100% { left: 150%; opacity: 0; transform: rotate(18deg) translateX(100%); }
+}
+
+html[data-theme="light"] .settings-toggle.bunny-settings-toggle {
+  background: linear-gradient(145deg, #050505, #171717) !important;
+  border-color: rgba(230, 0, 18, .38) !important;
+}
+
+html[data-theme="light"] .settings-toggle.bunny-settings-toggle:active,
+html[data-theme="light"] .settings-dock.open .settings-toggle.bunny-settings-toggle {
+  background: linear-gradient(145deg, #e60012, #a90012) !important;
+  border-color: rgba(255,255,255,.28) !important;
+}
+
+@media (max-width: 760px) {
+  .settings-toggle.bunny-settings-toggle {
+    width: 50px !important;
+    height: 50px !important;
+    border-radius: 17px !important;
+  }
+  .settings-bunny-icon {
+    width: 31px !important;
+    height: 31px !important;
+  }
+}
