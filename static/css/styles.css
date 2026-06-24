@@ -1060,6 +1060,36 @@ html[data-theme="light"] .top-nav a:hover {
   flex-wrap: wrap;
 }
 
+.user-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.users-table-card {
+  overflow: hidden !important;
+}
+
+.users-table-card table {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.users-table-card th,
+.users-table-card td {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.users-table-card th:last-child,
+.users-table-card td:last-child {
+  width: 24%;
+}
+
 .import-form {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) auto;
@@ -1094,6 +1124,7 @@ html[data-theme="light"] .import-form small {
 
 @media (max-width: 760px) {
   .product-tools,
+  .user-tools,
   .product-tools-head {
     display: grid;
     grid-template-columns: 1fr;

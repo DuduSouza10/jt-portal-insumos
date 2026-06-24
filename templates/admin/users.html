@@ -1,33 +1,54 @@
 {% extends 'base.html' %}
 {% block title %}Usuários • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Cadastro de usuários{% endblock %}
-{% block page_subtitle %}Adicione usuários, aprove cadastros, edite acessos ou exclua contas.{% endblock %}
+{% block page_subtitle %}Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.{% endblock %}
 {% block content %}
-<div class="card table-card">
-  <div class="section-head">
+<div class="card table-card users-table-card">
+  <div class="section-head user-tools-head">
     <div class="tabs">
       <a class="tab {{ 'active' if selected_status == '' else '' }}" href="{{ url_for('admin_users') }}">Todos</a>
       <a class="tab {{ 'active' if selected_status == 'pending' else '' }}" href="{{ url_for('admin_users', status='pending') }}">Pendentes</a>
       <a class="tab {{ 'active' if selected_status == 'approved' else '' }}" href="{{ url_for('admin_users', status='approved') }}">Aprovados</a>
       <a class="tab {{ 'active' if selected_status == 'rejected' else '' }}" href="{{ url_for('admin_users', status='rejected') }}">Recusados</a>
     </div>
-    <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
+    <div class="user-tools">
+      <a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>
+      <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
+    </div>
   </div>
+
+  <form class="import-form user-import-form" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data">
+    <label>
+      Cadastro em massa de usuários (.xlsx)
+      <input type="file" name="spreadsheet" accept=".xlsx" required>
+    </label>
+    <button class="btn primary" type="submit">Importar usuários</button>
+    <small>Use o modelo acima. Usuários repetidos ou linhas inválidas são ignorados e informados após a importação.</small>
+  </form>
+
   <table>
     <thead>
       <tr>
-        <th>Responsável</th><th>Unidade</th><th>Tipo</th><th>Usuário</th><th>Status</th><th>Ações</th>
+        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Base/Franquia</th><th>Número</th><th>CNPJ</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody>
       {% for user in users %}
       <tr>
-        <td data-label="Responsavel">{{ user.responsible_name }}</td>
-        <td data-label="Unidade">{{ user.organization_name }}</td>
+        <td data-label="Responsável">{{ user.responsible_name }}</td>
+        <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
-        <td data-label="Usuario">{{ user.username }}</td>
+        <td data-label="Base/Franquia">
+          {% if user.role == 'franchise' %}
+            <strong>{{ user.franchise_name or user.organization_name }}</strong>
+          {% else %}
+            {{ user.organization_name }}
+          {% endif %}
+        </td>
+        <td data-label="Número">{{ (user.franchise_number or user.organization_name) if user.role == 'franchise' else '-' }}</td>
+        <td data-label="CNPJ">{{ user.formatted_cnpj or '-' }}</td>
         <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
-        <td class="actions-cell" data-label="Acoes">
+        <td class="actions-cell" data-label="Ações">
           {% if user.status == 'pending' and not user.is_admin %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
@@ -63,7 +84,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="muted center">Nenhum usuário encontrado.</td></tr>
+      <tr><td colspan="8" class="muted center">Nenhum usuário encontrado.</td></tr>
       {% endfor %}
     </tbody>
   </table>

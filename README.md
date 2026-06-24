@@ -219,6 +219,18 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Lista de bases agora acompanha o filtro regional: MG mostra bases `-MG`, SPN mostra bases `-SP`.
 - Quando a regional não possui bases correspondentes, a lista exibe **Sem Dados**.
 
+## v68 - Cadastro em massa de usuários
+
+- Administradores podem baixar um modelo XLSX e importar vários usuários pela página de Usuários.
+- Cadastros de franquia possuem nome, número e CNPJ opcional; o CNPJ só aparece para esse tipo de acesso.
+- Bases e franquias usam as páginas Solicitar insumos e Minhas solicitações por padrão; administradores recebem todas as páginas.
+- Produtos com estoque zerado ficam ocultos para bases e franquias até uma nova entrada de estoque.
+
+## v69 - Favicon oficial J&T
+
+- O favicon usa diretamente o SVG oficial branco da J&T enviado pelo usuário.
+- Foram removidas do HTML as referências aos favicons PNG e ICO gerados anteriormente.
+
 
 ## v51.2 - Ativos integrados ao estoque
 

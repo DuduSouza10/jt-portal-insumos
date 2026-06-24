@@ -5,11 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#e60012">
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
-  <link rel="icon" href="{{ url_for('favicon_ico') }}?v=67" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32x32.png') }}?v=67">
-  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/favicon-192x192.png') }}?v=67">
-  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=67">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=69">
+  <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=69">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=69">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -191,9 +189,9 @@
       });
     });
   </script>
-  <script src="{{ url_for('static', filename='js/i18n.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=67"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=69"></script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}?v=69"></script>
+  <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=69"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

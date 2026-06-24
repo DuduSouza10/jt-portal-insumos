@@ -10,29 +10,43 @@
       <input name="responsible_name" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     <label>
-      Tipo de unidade
+      Tipo de acesso
       <select name="role" id="roleSelect" required>
         <option value="base">Base</option>
         <option value="franchise">Franquia</option>
       </select>
     </label>
-    <label>
-      <span id="organizationSelectLabel">Nome da base</span>
+    <label id="baseNameWrap">
+      Nome da base
       <select name="organization_name" id="organizationSelect" required>
-        <option value="" selected disabled data-placeholder>Selecione a base</option>
+        <option value="" selected disabled>Selecione a base</option>
         {% for unit in base_unit_options %}
-          <option value="{{ unit }}" data-unit-role="base">{{ unit }}</option>
-        {% endfor %}
-        {% for unit in franchise_unit_options %}
-          <option value="{{ unit }}" data-unit-role="franchise">{{ unit }}</option>
+          <option value="{{ unit }}">{{ unit }}</option>
         {% endfor %}
       </select>
+    </label>
+    <label id="franchiseNameWrap" class="hidden">
+      Nome da franquia
+      <input name="franchise_name" id="franchiseNameInput" placeholder="Ex.: Franquia Centro">
+    </label>
+    <label id="franchiseNumberWrap" class="hidden">
+      Número da franquia
+      <select name="franchise_number" id="franchiseNumberSelect">
+        <option value="" selected disabled>Selecione o número da franquia</option>
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}">{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label id="cnpjWrap" class="hidden">
+      CNPJ <small class="muted">opcional</small>
+      <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00">
     </label>
     <label>
       Nome de usuário
       <input name="username" type="text" placeholder="Ex.: mg_bhz" autocomplete="username" required>
     </label>
-    <label class="full">
+    <label>
       Senha
       <input name="password" type="password" placeholder="Crie uma senha segura" required>
     </label>
@@ -47,36 +61,38 @@
 <script>
 (function () {
   const roleSelect = document.getElementById('roleSelect');
-  const organizationSelect = document.getElementById('organizationSelect');
-  const organizationLabel = document.getElementById('organizationSelectLabel');
-  if (!roleSelect || !organizationSelect) return;
+  const baseWrap = document.getElementById('baseNameWrap');
+  const baseSelect = document.getElementById('organizationSelect');
+  const franchiseNameWrap = document.getElementById('franchiseNameWrap');
+  const franchiseNameInput = document.getElementById('franchiseNameInput');
+  const franchiseNumberWrap = document.getElementById('franchiseNumberWrap');
+  const franchiseNumberSelect = document.getElementById('franchiseNumberSelect');
+  const cnpjWrap = document.getElementById('cnpjWrap');
+  const cnpjInput = document.getElementById('cnpjInput');
+  if (!roleSelect) return;
 
-  function syncUnitOptions() {
-    const role = roleSelect.value === 'franchise' ? 'franchise' : 'base';
-    const placeholder = organizationSelect.querySelector('[data-placeholder]');
-    if (organizationLabel) organizationLabel.textContent = role === 'franchise' ? 'Nome da franquia' : 'Nome da base';
-    if (placeholder) placeholder.textContent = role === 'franchise' ? 'Selecione a franquia' : 'Selecione a base';
+  function syncFields() {
+    const isFranchise = roleSelect.value === 'franchise';
+    baseWrap.classList.toggle('hidden', isFranchise);
+    franchiseNameWrap.classList.toggle('hidden', !isFranchise);
+    franchiseNumberWrap.classList.toggle('hidden', !isFranchise);
+    cnpjWrap.classList.toggle('hidden', !isFranchise);
 
-    Array.from(organizationSelect.options).forEach(function (option) {
-      const optionRole = option.dataset.unitRole;
-      if (!optionRole) return;
-      const visible = optionRole === role;
-      option.hidden = !visible;
-      option.disabled = !visible;
-    });
-
-    const selected = organizationSelect.selectedOptions[0];
-    if (selected && selected.dataset.unitRole && selected.dataset.unitRole !== role) {
-      organizationSelect.value = '';
-    }
+    baseSelect.disabled = isFranchise;
+    baseSelect.required = !isFranchise;
+    franchiseNameInput.disabled = !isFranchise;
+    franchiseNameInput.required = isFranchise;
+    franchiseNumberSelect.disabled = !isFranchise;
+    franchiseNumberSelect.required = isFranchise;
+    cnpjInput.disabled = !isFranchise;
 
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.JT_I18N.refresh(document.querySelector('[data-unit-filter-form]') || document.body);
     }
   }
 
-  roleSelect.addEventListener('change', syncUnitOptions);
-  syncUnitOptions();
+  roleSelect.addEventListener('change', syncFields);
+  syncFields();
 })();
 </script>
 {% endblock %}

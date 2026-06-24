@@ -83,6 +83,7 @@ import requests
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from reportlab.graphics import renderPDF
@@ -127,10 +128,8 @@ app = Flask(__name__)
 
 @app.route("/favicon.ico")
 def favicon_ico():
-    """Serve o favicon também no caminho raiz, porque alguns navegadores
-    ignoram o link do template em cache e buscam diretamente /favicon.ico.
-    """
-    return send_file(BASE_DIR / "static" / "img" / "favicon.ico", mimetype="image/vnd.microsoft.icon")
+    """Serve diretamente o SVG oficial da J&T também no caminho padrão."""
+    return send_file(BASE_DIR / "static" / "img" / "browser-favicon.svg", mimetype="image/svg+xml")
 
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-change-me")
 
@@ -333,6 +332,9 @@ class User:
     id: int
     responsible_name: str
     organization_name: str
+    franchise_name: str
+    franchise_number: str
+    cnpj: str
     username: str
     email: str
     password_hash: str
@@ -349,6 +351,10 @@ class User:
     @property
     def is_approved(self) -> bool:
         return self.status == "approved"
+
+    @property
+    def formatted_cnpj(self) -> str:
+        return format_cnpj(self.cnpj)
 
 
 @dataclass
@@ -564,6 +570,86 @@ def valid_organization_for_role(organization_name: str, role: str) -> bool:
         return bool(organization_name) and len(organization_name) <= 120
     return False
 
+
+def normalize_cnpj(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))[:14]
+
+
+def format_cnpj(value: Any) -> str:
+    digits = normalize_cnpj(value)
+    if len(digits) != 14:
+        return digits
+    return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+
+
+def normalize_user_role(value: Any, allow_admin: bool = True) -> str | None:
+    normalized = normalize_header(value)
+    aliases = {
+        "base": "base",
+        "franquia": "franchise",
+        "franchise": "franchise",
+        "admin": "admin",
+        "administrador": "admin",
+        "administradora": "admin",
+    }
+    role = aliases.get(normalized)
+    if role == "admin" and not allow_admin:
+        return None
+    return role
+
+
+def normalize_user_status(value: Any, default: str = "approved") -> str | None:
+    normalized = normalize_header(value)
+    if not normalized:
+        return default
+    aliases = {
+        "pendente": "pending",
+        "pending": "pending",
+        "aprovado": "approved",
+        "aprovada": "approved",
+        "approved": "approved",
+        "ativo": "approved",
+        "ativa": "approved",
+        "recusado": "rejected",
+        "recusada": "rejected",
+        "rejeitado": "rejected",
+        "rejeitada": "rejected",
+        "rejected": "rejected",
+    }
+    return aliases.get(normalized)
+
+
+def validate_user_profile_fields(
+    role: str,
+    organization_name: Any = "",
+    franchise_name: Any = "",
+    franchise_number: Any = "",
+    cnpj: Any = "",
+) -> tuple[str, str, str, str]:
+    organization = str(organization_name or "").strip()
+    franchise = str(franchise_name or "").strip()
+    franchise_code = str(franchise_number or "").strip()
+    cnpj_digits = normalize_cnpj(cnpj)
+
+    if role == "base":
+        if organization not in BASE_UNIT_OPTION_SET:
+            raise ValueError("Selecione uma base válida.")
+        return organization, "", "", ""
+
+    if role == "franchise":
+        if not franchise:
+            raise ValueError("Informe o nome da franquia.")
+        if franchise_code not in FRANCHISE_UNIT_OPTION_SET:
+            raise ValueError("Selecione um número de franquia válido.")
+        if cnpj_digits and len(cnpj_digits) != 14:
+            raise ValueError("O CNPJ deve possuir 14 números.")
+        return franchise_code, franchise[:160], franchise_code, cnpj_digits
+
+    if role == "admin":
+        return ADMIN_ORGANIZATION_NAME, "", "", ""
+
+    raise ValueError("Tipo de acesso inválido.")
+
 def is_real_email(value: str | None) -> bool:
     value = (value or "").strip().lower()
     return "@" in value and not value.endswith("@usuario.local")
@@ -576,6 +662,9 @@ def row_to_user(row: Any | None) -> User | None:
         id=int(row["id"]),
         responsible_name=row["responsible_name"] or "",
         organization_name=row["organization_name"] or "",
+        franchise_name=(row["franchise_name"] if "franchise_name" in row.keys() else "") or "",
+        franchise_number=(row["franchise_number"] if "franchise_number" in row.keys() else "") or "",
+        cnpj=(row["cnpj"] if "cnpj" in row.keys() else "") or "",
         username=(row["username"] if "username" in row.keys() else "") or normalize_username((row["email"] if "email" in row.keys() else "") or row["responsible_name"] or "usuario"),
         email=(row["email"] if "email" in row.keys() else "") or "",
         password_hash=row["password_hash"] or "",
@@ -806,6 +895,9 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 responsible_name TEXT NOT NULL,
                 organization_name TEXT NOT NULL,
+                franchise_name TEXT NOT NULL DEFAULT '',
+                franchise_number TEXT NOT NULL DEFAULT '',
+                cnpj TEXT NOT NULL DEFAULT '',
                 username TEXT NOT NULL UNIQUE,
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
@@ -941,6 +1033,24 @@ def init_db() -> None:
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "page_permissions_configured" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN page_permissions_configured INTEGER NOT NULL DEFAULT 0")
+
+        user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        user_migrations = [
+            ("franchise_name", "ALTER TABLE users ADD COLUMN franchise_name TEXT NOT NULL DEFAULT ''"),
+            ("franchise_number", "ALTER TABLE users ADD COLUMN franchise_number TEXT NOT NULL DEFAULT ''"),
+            ("cnpj", "ALTER TABLE users ADD COLUMN cnpj TEXT NOT NULL DEFAULT ''"),
+        ]
+        for column_name, migration_sql in user_migrations:
+            if column_name not in user_columns:
+                conn.execute(migration_sql)
+        conn.execute(
+            """
+            UPDATE users
+               SET franchise_name = CASE WHEN franchise_name = '' THEN organization_name ELSE franchise_name END,
+                   franchise_number = CASE WHEN franchise_number = '' THEN organization_name ELSE franchise_number END
+             WHERE role = 'franchise'
+            """
+        )
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "username" not in user_columns:
@@ -1343,6 +1453,8 @@ def permission_options_for_role(role: str) -> list[dict[str, Any]]:
 def get_user_page_permissions(user: User | None) -> set[str]:
     if user is None:
         return set()
+    if user.role == "admin":
+        return default_page_keys_for_role("admin")
     if not user.page_permissions_configured:
         return default_page_keys_for_role(user.role)
     with db_connect() as conn:
@@ -1370,7 +1482,7 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
 
 def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
     allowed_for_role = default_page_keys_for_role(role)
-    normalized = {key for key in selected_keys if key in allowed_for_role}
+    normalized = allowed_for_role if role == "admin" else {key for key in selected_keys if key in allowed_for_role}
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     for key in sorted(normalized):
         conn.execute(
@@ -1906,6 +2018,8 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         product = get_product(product_id)
         if product is None or not product.active:
             return [], "Um dos insumos selecionados não está disponível."
+        if not user.is_admin and product.stock_quantity <= 0:
+            return [], f"{product.name} está sem estoque no momento."
 
         if not user.is_admin:
             limit = product_limit_for(product, user)
@@ -3330,6 +3444,231 @@ def import_products_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int
     return created, updated, skipped, row_errors
 
 
+USER_IMPORT_HEADER_ALIASES = {
+    "responsible_name": ["Nome do responsável", "Nome do responsavel", "Responsável", "Responsavel"],
+    "username": ["Nome de usuário", "Nome de usuario", "Usuário", "Usuario", "Login"],
+    "password": ["Senha", "Senha inicial", "Password"],
+    "role": ["Tipo de acesso", "Perfil", "Tipo", "Acesso"],
+    "status": ["Status do cadastro", "Status", "Situação", "Situacao"],
+    "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia"],
+    "franchise_name": ["Nome da franquia", "Franquia"],
+    "franchise_number": ["Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
+    "cnpj": ["CNPJ", "CNPJ da franquia"],
+}
+
+
+@dataclass
+class UserImportRecord:
+    source_row: int
+    responsible_name: str
+    username: str
+    password_hash: str
+    role: str
+    status: str
+    organization_name: str
+    franchise_name: str
+    franchise_number: str
+    cnpj: str
+
+
+def get_user_import_value(row_values: list[Any], header_map: dict[str, int], field_key: str) -> Any:
+    return get_header_value(row_values, header_map, USER_IMPORT_HEADER_ALIASES.get(field_key, []))
+
+
+def user_header_map_score(header_map: dict[str, int]) -> int:
+    score = 0
+    for key in ["responsible_name", "username", "password", "role", "status"]:
+        if header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key]):
+            score += 3
+    for key in ["base_name", "franchise_name", "franchise_number", "cnpj"]:
+        if header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key]):
+            score += 1
+    return score
+
+
+def detect_user_header_row(worksheet: Any, max_scan_rows: int = 30) -> tuple[int, dict[str, int]]:
+    best_row_number = 1
+    best_map: dict[str, int] = {}
+    best_score = -1
+    max_row = min(int(getattr(worksheet, "max_row", 1) or 1), max_scan_rows)
+    for row_number, row_values_tuple in enumerate(
+        worksheet.iter_rows(min_row=1, max_row=max_row, values_only=True),
+        start=1,
+    ):
+        row_values = worksheet_values(row_values_tuple)
+        header_map = {
+            normalize_header(value): index
+            for index, value in enumerate(row_values)
+            if value is not None and str(value).strip()
+        }
+        score = user_header_map_score(header_map)
+        if score > best_score:
+            best_row_number = row_number
+            best_map = header_map
+            best_score = score
+        if score >= 15:
+            return row_number, header_map
+    return best_row_number, best_map
+
+
+def parse_user_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> UserImportRecord:
+    responsible_name = clean_import_text(get_user_import_value(row_values, header_map, "responsible_name"))
+    username = normalize_username(clean_import_text(get_user_import_value(row_values, header_map, "username")))
+    password = clean_import_text(get_user_import_value(row_values, header_map, "password"))
+    role = normalize_user_role(get_user_import_value(row_values, header_map, "role"), allow_admin=True)
+    status = normalize_user_status(get_user_import_value(row_values, header_map, "status"), default="approved")
+
+    if not responsible_name:
+        raise ValueError("nome do responsável não informado")
+    if not valid_username(username):
+        raise ValueError("nome de usuário inválido")
+    if not password:
+        raise ValueError("senha não informada")
+    if role is None:
+        raise ValueError("tipo de acesso inválido")
+    if status is None:
+        raise ValueError("status do cadastro inválido")
+
+    organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
+        role,
+        organization_name=get_user_import_value(row_values, header_map, "base_name"),
+        franchise_name=get_user_import_value(row_values, header_map, "franchise_name"),
+        franchise_number=get_user_import_value(row_values, header_map, "franchise_number"),
+        cnpj=get_user_import_value(row_values, header_map, "cnpj"),
+    )
+    return UserImportRecord(
+        source_row=row_number,
+        responsible_name=responsible_name[:160],
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=role,
+        status=status,
+        organization_name=organization_name,
+        franchise_name=franchise_name,
+        franchise_number=franchise_number,
+        cnpj=cnpj,
+    )
+
+
+def user_insert_sql_rows(records: list[UserImportRecord]) -> str:
+    created_at = now_iso()
+    values_sql: list[str] = []
+    for record in records:
+        values = [
+            record.responsible_name,
+            record.organization_name,
+            record.franchise_name,
+            record.franchise_number,
+            record.cnpj,
+            record.username,
+            synthetic_email_for_username(record.username),
+            record.password_hash,
+            record.role,
+            record.status,
+            created_at,
+            0,
+        ]
+        values_sql.append("(" + ", ".join(sql_literal(value) for value in values) + ")")
+    return ",\n".join(values_sql)
+
+
+def execute_user_import_chunk(conn: Any, records: list[UserImportRecord], row_errors: list[str]) -> tuple[int, int]:
+    if not records:
+        return 0, 0
+    fields = (
+        "responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
+        "username, email, password_hash, role, status, created_at, page_permissions_configured"
+    )
+    imported = 0
+    skipped = 0
+    for chunk in chunk_list(records, 30):
+        try:
+            conn.execute(f"INSERT INTO users ({fields}) VALUES {user_insert_sql_rows(chunk)}")
+            imported += len(chunk)
+        except Exception as chunk_exc:
+            print(f"[IMPORTAÇÃO USUÁRIOS] Inserção em bloco falhou; tentando linha a linha: {chunk_exc}")
+            for record in chunk:
+                try:
+                    conn.execute(f"INSERT INTO users ({fields}) VALUES {user_insert_sql_rows([record])}")
+                    imported += 1
+                except Exception as exc:
+                    skipped += 1
+                    row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:140]}")
+                    print(f"[IMPORTAÇÃO USUÁRIOS] Erro na linha {record.source_row}: {exc}")
+    return imported, skipped
+
+
+def import_users_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, list[str]]:
+    workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
+    worksheet = workbook.active
+    if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
+        return 0, 0, ["planilha vazia"]
+
+    header_row_number, header_map = detect_user_header_row(worksheet)
+    required_keys = ["responsible_name", "username", "password", "role", "status"]
+    missing_headers = [
+        USER_IMPORT_HEADER_ALIASES[key][0]
+        for key in required_keys
+        if not header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key])
+    ]
+    if missing_headers:
+        try:
+            workbook.close()
+        except Exception:
+            pass
+        return 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(missing_headers)]
+
+    records: list[UserImportRecord] = []
+    skipped = 0
+    errors: list[str] = []
+    seen_usernames: set[str] = set()
+
+    for row_number, row_values_tuple in enumerate(
+        worksheet.iter_rows(min_row=header_row_number + 1, values_only=True),
+        start=header_row_number + 1,
+    ):
+        row_values = worksheet_values(row_values_tuple)
+        if excel_row_is_empty(row_values):
+            continue
+        try:
+            record = parse_user_import_record(row_number, row_values, header_map)
+            if record.username in seen_usernames:
+                raise ValueError("nome de usuário duplicado na planilha")
+            seen_usernames.add(record.username)
+            records.append(record)
+        except Exception as exc:
+            skipped += 1
+            errors.append(f"linha {row_number}: {str(exc)[:160]}")
+
+    try:
+        workbook.close()
+    except Exception:
+        pass
+    if not records:
+        return 0, skipped, errors
+
+    with db_connect() as conn:
+        existing_rows = conn.execute("SELECT username FROM users").fetchall()
+        existing_usernames = {
+            normalize_username(row["username"])
+            for row in existing_rows
+            if row["username"]
+        }
+        new_records: list[UserImportRecord] = []
+        for record in records:
+            if record.username in existing_usernames:
+                skipped += 1
+                errors.append(f"linha {record.source_row}: nome de usuário já cadastrado")
+                continue
+            existing_usernames.add(record.username)
+            new_records.append(record)
+
+        imported, insert_skipped = execute_user_import_chunk(conn, new_records, errors)
+        skipped += insert_skipped
+        conn.commit()
+    return imported, skipped, errors
+
+
 
 # ---------- Entrada de Materiais ----------
 
@@ -3770,18 +4109,23 @@ def verify_admin():
 def register():
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
-        organization_name = request.form.get("organization_name", "").strip()
-        role = request.form.get("role", "base").strip()
+        role = normalize_user_role(request.form.get("role", "base"), allow_admin=False) or "base"
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
 
-        if role not in ["base", "franchise"]:
-            role = "base"
-        if not valid_organization_for_role(organization_name, role):
-            flash("Selecione uma unidade válida conforme o tipo escolhido.", "warning")
+        try:
+            organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
+                role,
+                organization_name=request.form.get("organization_name", ""),
+                franchise_name=request.form.get("franchise_name", ""),
+                franchise_number=request.form.get("franchise_number", ""),
+                cnpj=request.form.get("cnpj", ""),
+            )
+        except ValueError as exc:
+            flash(str(exc), "warning")
             return redirect(url_for("register"))
-        if not responsible_name or not organization_name or not username or not password:
+        if not responsible_name or not username or not password:
             flash("Preencha todos os campos obrigatórios.", "warning")
             return redirect(url_for("register"))
         if not valid_username(username):
@@ -3795,10 +4139,24 @@ def register():
             with db_connect() as conn:
                 conn.execute(
                     """
-                    INSERT INTO users (responsible_name, organization_name, username, email, password_hash, role, status, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+                    INSERT INTO users (
+                        responsible_name, organization_name, franchise_name, franchise_number, cnpj,
+                        username, email, password_hash, role, status, created_at, page_permissions_configured
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)
                     """,
-                    (responsible_name, organization_name, username, email, generate_password_hash(password), role, now_iso()),
+                    (
+                        responsible_name,
+                        organization_name,
+                        franchise_name,
+                        franchise_number,
+                        cnpj,
+                        username,
+                        email,
+                        generate_password_hash(password),
+                        role,
+                        now_iso(),
+                    ),
                 )
                 conn.commit()
             flash("Cadastro enviado. Aguarde aprovação de um administrador.", "success")
@@ -3827,6 +4185,8 @@ def api_products():
     q = request.args.get("q", "").strip()
     sql = "SELECT * FROM products WHERE active = 1"
     params: list[Any] = []
+    if not user.is_admin:
+        sql += " AND stock_quantity > 0"
     if q:
         like = f"%{q}%"
         sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
@@ -3984,6 +4344,151 @@ def admin_users():
     return render_template("admin/users.html", users=users, selected_status=selected_status)
 
 
+@app.get("/admin/users/model")
+@admin_required
+@page_access_required("admin_users")
+def admin_users_template():
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Usuários"
+    headers = [
+        "Nome do responsável",
+        "Nome de usuário",
+        "Senha",
+        "Tipo de acesso",
+        "Status do cadastro",
+        "Nome da base",
+        "Nome da franquia",
+        "Número da franquia",
+        "CNPJ",
+    ]
+    worksheet.append(headers)
+
+    header_fill = PatternFill("solid", fgColor="E60012")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="DDDDDD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    widths = [32, 24, 24, 20, 22, 24, 34, 26, 22]
+    for index, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = width
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = "A1:I1"
+
+    lists = workbook.create_sheet("Listas")
+    lists.append(["Tipos de acesso", "Status", "Bases", "Números de franquia"])
+    for row_index, role_label in enumerate(["Base", "Franquia", "Administrador"], start=2):
+        lists.cell(row=row_index, column=1, value=role_label)
+    for row_index, status_label in enumerate(["Aprovado", "Pendente", "Recusado"], start=2):
+        lists.cell(row=row_index, column=2, value=status_label)
+    for row_index, base_name in enumerate(BASE_UNIT_OPTIONS, start=2):
+        lists.cell(row=row_index, column=3, value=base_name)
+    for row_index, franchise_number in enumerate(FRANCHISE_UNIT_OPTIONS, start=2):
+        lists.cell(row=row_index, column=4, value=franchise_number)
+    lists.sheet_state = "hidden"
+
+    role_validation = DataValidation(type="list", formula1="'Listas'!$A$2:$A$4", allow_blank=False)
+    status_validation = DataValidation(type="list", formula1="'Listas'!$B$2:$B$4", allow_blank=False)
+    base_validation = DataValidation(
+        type="list",
+        formula1=f"'Listas'!$C$2:$C${max(2, len(BASE_UNIT_OPTIONS) + 1)}",
+        allow_blank=True,
+    )
+    franchise_validation = DataValidation(
+        type="list",
+        formula1=f"'Listas'!$D$2:$D${max(2, len(FRANCHISE_UNIT_OPTIONS) + 1)}",
+        allow_blank=True,
+    )
+    for validation in [role_validation, status_validation, base_validation, franchise_validation]:
+        worksheet.add_data_validation(validation)
+    role_validation.add("D2:D1000")
+    status_validation.add("E2:E1000")
+    base_validation.add("F2:F1000")
+    franchise_validation.add("H2:H1000")
+
+    instructions = workbook.create_sheet("Instruções")
+    instructions.column_dimensions["A"].width = 30
+    instructions.column_dimensions["B"].width = 95
+    instructions.append(["Campo", "Como preencher"])
+    instruction_rows = [
+        ("Base", "Preencha Nome da base. Deixe Nome da franquia, Número da franquia e CNPJ vazios."),
+        ("Franquia", "Preencha Nome da franquia e Número da franquia. CNPJ é opcional. Deixe Nome da base vazio."),
+        ("Administrador", "Deixe os campos de base, franquia e CNPJ vazios. O administrador recebe acesso a todas as páginas."),
+        ("Senha", "Obrigatória para todos os novos usuários. Formate a coluna como texto para preservar zeros à esquerda."),
+        ("Status", "Use Aprovado, Pendente ou Recusado."),
+    ]
+    for row in instruction_rows:
+        instructions.append(row)
+    for cell in instructions[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+    for row in instructions.iter_rows(min_row=2):
+        for cell in row:
+            cell.border = border
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="modelo_cadastro_usuarios.xlsx",
+    )
+
+
+@app.post("/admin/users/import")
+@admin_required
+@page_access_required("admin_users")
+def admin_users_import():
+    uploaded = request.files.get("spreadsheet")
+    if uploaded is None or not uploaded.filename:
+        flash("Selecione uma planilha .xlsx de usuários.", "warning")
+        return redirect(url_for("admin_users"))
+    if not uploaded.filename.lower().endswith(".xlsx"):
+        flash("Importe apenas arquivos .xlsx.", "warning")
+        return redirect(url_for("admin_users"))
+
+    try:
+        uploaded_bytes = uploaded.read()
+        if not uploaded_bytes:
+            flash("A planilha enviada está vazia.", "warning")
+            return redirect(url_for("admin_users"))
+        try:
+            upload_bytes_to_r2(
+                storage_key(
+                    "imports",
+                    "usuarios_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename),
+                ),
+                uploaded_bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                {"type": "users_import"},
+            )
+        except Exception as exc:
+            print(f"[R2] Não foi possível salvar a planilha de usuários: {exc}")
+
+        imported, skipped, errors = import_users_from_workbook_bytes(uploaded_bytes)
+        if errors:
+            preview = "; ".join(errors[:5])
+            suffix = "" if len(errors) <= 5 else f"; +{len(errors) - 5} outro(s) erro(s)."
+            flash(f"Algumas linhas foram ignoradas: {preview}{suffix}", "warning")
+        flash(
+            f"Importação concluída: {imported} usuário(s) criado(s), {skipped} linha(s) ignorada(s).",
+            "success" if imported else "warning",
+        )
+    except Exception as exc:
+        app.logger.exception("Falha ao importar usuários")
+        flash(f"Não consegui importar a planilha. Erro: {type(exc).__name__}.", "danger")
+    return redirect(url_for("admin_users"))
+
+
 @app.route("/admin/users/new", methods=["GET", "POST"])
 @admin_required
 @page_access_required("admin_users")
@@ -3993,24 +4498,26 @@ def admin_user_new():
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
-        role = request.form.get("role", "base").strip()
-        status = request.form.get("status", "approved").strip()
-
-        if role not in ["base", "franchise", "admin"]:
-            role = "base"
-        organization_name = request.form.get("admin_position" if role == "admin" else "organization_name", "").strip()
+        role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
 
-        if status not in ["pending", "approved", "rejected"]:
-            status = "approved"
-        if not valid_organization_for_role(organization_name, role):
-            flash("Selecione uma unidade válida conforme o tipo escolhido. Para administradores, informe o cargo.", "danger")
+        try:
+            organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
+                role,
+                organization_name=request.form.get("organization_name", ""),
+                franchise_name=request.form.get("franchise_name", ""),
+                franchise_number=request.form.get("franchise_number", ""),
+                cnpj=request.form.get("cnpj", ""),
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
-        if not responsible_name or not organization_name or not username or not password:
-            flash("Preencha responsável, unidade/cargo, nome de usuário e senha.", "danger")
+        if not responsible_name or not username or not password:
+            flash("Preencha responsável, nome de usuário e senha.", "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
@@ -4022,10 +4529,25 @@ def admin_user_new():
         with db_connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO users (responsible_name, organization_name, username, email, password_hash, role, status, created_at, page_permissions_configured)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO users (
+                    responsible_name, organization_name, franchise_name, franchise_number, cnpj,
+                    username, email, password_hash, role, status, created_at, page_permissions_configured
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
-                (responsible_name, organization_name, username, email, generate_password_hash(password), role, status, now_iso()),
+                (
+                    responsible_name,
+                    organization_name,
+                    franchise_name,
+                    franchise_number,
+                    cnpj,
+                    username,
+                    email,
+                    generate_password_hash(password),
+                    role,
+                    status,
+                    now_iso(),
+                ),
             )
             new_user_id = get_cursor_lastrowid(cursor)
             if new_user_id is None:
@@ -4055,19 +4577,10 @@ def admin_user_edit(user_id: int):
         responsible_name = request.form.get("responsible_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
-        role = request.form.get("role", "base").strip()
-        status = request.form.get("status", "approved").strip()
+        role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         password = request.form.get("password", "")
         selected_pages = request.form.getlist("page_permissions")
-
-        if role not in ["base", "franchise", "admin"]:
-            role = "base"
-        organization_name = request.form.get("admin_position" if role == "admin" else "organization_name", "").strip()
-        if status not in ["pending", "approved", "rejected"]:
-            status = "approved"
-        if not valid_organization_for_role(organization_name, role):
-            flash("Selecione uma unidade válida conforme o tipo escolhido. Para administradores, informe o cargo.", "danger")
-            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
 
         # Segurança: o admin logado não pode remover o próprio acesso administrativo
         # nem bloquear a própria conta sem querer.
@@ -4076,12 +4589,24 @@ def admin_user_edit(user_id: int):
             status = "approved"
             selected_pages = list(default_page_keys_for_role("admin"))
 
+        try:
+            organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
+                role,
+                organization_name=request.form.get("organization_name", ""),
+                franchise_name=request.form.get("franchise_name", ""),
+                franchise_number=request.form.get("franchise_number", ""),
+                cnpj=request.form.get("cnpj", ""),
+            )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
 
-        if not responsible_name or not organization_name or not username:
-            flash("Preencha responsável, unidade/cargo e nome de usuário.", "danger")
+        if not responsible_name or not username:
+            flash("Preencha responsável e nome de usuário.", "danger")
             return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
@@ -4100,19 +4625,46 @@ def admin_user_edit(user_id: int):
                 conn.execute(
                     """
                     UPDATE users
-                       SET responsible_name = ?, organization_name = ?, username = ?, email = ?, password_hash = ?, role = ?, status = ?, updated_at = ?
+                       SET responsible_name = ?, organization_name = ?, franchise_name = ?, franchise_number = ?, cnpj = ?,
+                           username = ?, email = ?, password_hash = ?, role = ?, status = ?, updated_at = ?
                      WHERE id = ?
                     """,
-                    (responsible_name, organization_name, username, email, generate_password_hash(password), role, status, now_iso(), user_id),
+                    (
+                        responsible_name,
+                        organization_name,
+                        franchise_name,
+                        franchise_number,
+                        cnpj,
+                        username,
+                        email,
+                        generate_password_hash(password),
+                        role,
+                        status,
+                        now_iso(),
+                        user_id,
+                    ),
                 )
             else:
                 conn.execute(
                     """
                     UPDATE users
-                       SET responsible_name = ?, organization_name = ?, username = ?, email = ?, role = ?, status = ?, updated_at = ?
+                       SET responsible_name = ?, organization_name = ?, franchise_name = ?, franchise_number = ?, cnpj = ?,
+                           username = ?, email = ?, role = ?, status = ?, updated_at = ?
                      WHERE id = ?
                     """,
-                    (responsible_name, organization_name, username, email, role, status, now_iso(), user_id),
+                    (
+                        responsible_name,
+                        organization_name,
+                        franchise_name,
+                        franchise_number,
+                        cnpj,
+                        username,
+                        email,
+                        role,
+                        status,
+                        now_iso(),
+                        user_id,
+                    ),
                 )
             save_user_page_permissions(conn, user_id, role, selected_pages)
             conn.commit()

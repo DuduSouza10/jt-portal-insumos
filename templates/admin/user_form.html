@@ -1,11 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}{{ 'Adicionar usuário' if is_new else 'Editar acesso' }} • Portal de Insumos J&T{% endblock %}
 {% block page_title %}{{ 'Adicionar usuário' if is_new else 'Editar acesso' }}{% endblock %}
-{% block page_subtitle %}Cadastre usuários manualmente, defina o nível de acesso e escolha quais páginas estarão liberadas.{% endblock %}
+{% block page_subtitle %}Cadastre usuários manualmente, defina o tipo de acesso e confira as páginas liberadas.{% endblock %}
 {% block content %}
 <div class="card wide-card">
   <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form>
-    {% set current_role = user.role if user else 'base' %}
     <label>
       Nome do responsável
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
@@ -18,24 +17,38 @@
         <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>
       </select>
     </label>
-    <label id="organizationSelectWrap">
-      <span id="organizationSelectLabel">Nome da base</span>
-      <select name="organization_name" id="organizationSelect" required>
-        <option value="" disabled {% if not user or not user.organization_name or user.role == 'admin' %}selected{% endif %} data-placeholder>Selecione a base</option>
-        {% if user and user.role in ['base', 'franchise'] and user.organization_name and user.organization_name not in base_franchise_options %}
-          <option value="{{ user.organization_name }}" data-unit-role="{{ user.role }}" selected>{{ user.organization_name }}</option>
+    <label id="baseNameWrap">
+      Nome da base
+      <select name="organization_name" id="organizationSelect">
+        <option value="" disabled {% if not user or user.role != 'base' %}selected{% endif %}>Selecione a base</option>
+        {% if user and user.role == 'base' and user.organization_name and user.organization_name not in base_unit_options %}
+          <option value="{{ user.organization_name }}" selected>{{ user.organization_name }}</option>
         {% endif %}
         {% for unit in base_unit_options %}
-          <option value="{{ unit }}" data-unit-role="base" {% if user and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
-        {% endfor %}
-        {% for unit in franchise_unit_options %}
-          <option value="{{ unit }}" data-unit-role="franchise" {% if user and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
+          <option value="{{ unit }}" {% if user and user.role == 'base' and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
         {% endfor %}
       </select>
     </label>
-    <label id="adminPositionWrap" class="{% if not user or user.role != 'admin' %}hidden{% endif %}">
-      Cargo
-      <input name="admin_position" id="adminPositionInput" type="text" value="{{ user.organization_name if user and user.role == 'admin' else '' }}" placeholder="Ex.: Supervisor de Qualidade">
+    <label id="franchiseNameWrap" class="hidden">
+      Nome da franquia
+      <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
+    </label>
+    <label id="franchiseNumberWrap" class="hidden">
+      Número da franquia
+      {% set current_franchise_number = (user.franchise_number or user.organization_name) if user and user.role == 'franchise' else '' %}
+      <select name="franchise_number" id="franchiseNumberSelect">
+        <option value="" disabled {% if not current_franchise_number %}selected{% endif %}>Selecione o número da franquia</option>
+        {% if current_franchise_number and current_franchise_number not in franchise_unit_options %}
+          <option value="{{ current_franchise_number }}" selected>{{ current_franchise_number }}</option>
+        {% endif %}
+        {% for unit in franchise_unit_options %}
+          <option value="{{ unit }}" {% if current_franchise_number == unit %}selected{% endif %}>{{ unit }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label id="cnpjWrap" class="hidden">
+      CNPJ <small class="muted">opcional</small>
+      <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" value="{{ user.formatted_cnpj if user else '' }}" placeholder="00.000.000/0000-00">
     </label>
     <label>
       Nome de usuário
@@ -57,9 +70,9 @@
     <div class="full access-permission-summary card">
       <div>
         <strong>Páginas liberadas</strong>
-        <span>Defina exatamente quais telas esse usuário poderá acessar.</span>
+        <span>Base e franquia usam Solicitar insumos e Minhas solicitações. Administradores recebem todas as páginas.</span>
       </div>
-      <button class="btn ghost" type="button" data-open-permission-modal>Editar páginas</button>
+      <button class="btn ghost" type="button" data-open-permission-modal>Ver páginas</button>
     </div>
 
     <div id="permissionModal" class="permission-modal" aria-hidden="true">
@@ -69,7 +82,7 @@
           <div>
             <span class="eyebrow">Controle de acesso</span>
             <h2 id="permissionTitle">Páginas do usuário</h2>
-            <p>Marque as páginas que ficarão disponíveis para este cadastro. As páginas administrativas só funcionam para usuários com tipo de acesso Administrador.</p>
+            <p>As páginas administrativas ficam disponíveis apenas para administradores.</p>
           </div>
           <button class="permission-close" type="button" data-close-permission-modal aria-label="Fechar">×</button>
         </div>
@@ -93,8 +106,6 @@
         </div>
 
         <div class="permission-actions">
-          <button class="btn ghost" type="button" data-select-basic-pages>Permissões básicas</button>
-          <button class="btn ghost" type="button" data-select-all-pages>Marcar tudo</button>
           <button class="btn primary" type="button" data-close-permission-modal>Concluir</button>
         </div>
       </section>
@@ -111,70 +122,69 @@
 <script>
 (function () {
   const modal = document.getElementById('permissionModal');
-  const roleSelect = document.querySelector('select[name="role"]');
+  const roleSelect = document.getElementById('roleSelect');
   const openButton = document.querySelector('[data-open-permission-modal]');
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
-  const allButton = document.querySelector('[data-select-all-pages]');
-  const basicButton = document.querySelector('[data-select-basic-pages]');
-  const organizationSelect = document.getElementById('organizationSelect');
-  const organizationSelectWrap = document.getElementById('organizationSelectWrap');
-  const organizationLabel = document.getElementById('organizationSelectLabel');
-  const adminPositionWrap = document.getElementById('adminPositionWrap');
-  const adminPositionInput = document.getElementById('adminPositionInput');
+  const baseWrap = document.getElementById('baseNameWrap');
+  const baseSelect = document.getElementById('organizationSelect');
+  const franchiseNameWrap = document.getElementById('franchiseNameWrap');
+  const franchiseNameInput = document.getElementById('franchiseNameInput');
+  const franchiseNumberWrap = document.getElementById('franchiseNumberWrap');
+  const franchiseNumberSelect = document.getElementById('franchiseNumberSelect');
+  const cnpjWrap = document.getElementById('cnpjWrap');
+  const cnpjInput = document.getElementById('cnpjInput');
 
-  function syncUnitFieldByRole() {
-    if (!roleSelect) return;
-    const role = roleSelect.value;
-    const isAdmin = role === 'admin';
+  function syncRole() {
+    const role = roleSelect ? roleSelect.value : 'base';
+    const isBase = role === 'base';
     const isFranchise = role === 'franchise';
-    const placeholder = organizationSelect ? organizationSelect.querySelector('[data-placeholder]') : null;
+    const isAdmin = role === 'admin';
 
-    if (organizationSelectWrap) organizationSelectWrap.classList.toggle('hidden', isAdmin);
-    if (adminPositionWrap) adminPositionWrap.classList.toggle('hidden', !isAdmin);
-    if (organizationSelect) {
-      organizationSelect.disabled = isAdmin;
-      organizationSelect.required = !isAdmin;
-    }
-    if (adminPositionInput) {
-      adminPositionInput.disabled = !isAdmin;
-      adminPositionInput.required = isAdmin;
-    }
+    baseWrap.classList.toggle('hidden', !isBase);
+    franchiseNameWrap.classList.toggle('hidden', !isFranchise);
+    franchiseNumberWrap.classList.toggle('hidden', !isFranchise);
+    cnpjWrap.classList.toggle('hidden', !isFranchise);
 
-    if (!isAdmin && organizationSelect) {
-      const expectedRole = isFranchise ? 'franchise' : 'base';
-      if (organizationLabel) organizationLabel.textContent = isFranchise ? 'Nome da franquia' : 'Nome da base';
-      if (placeholder) placeholder.textContent = isFranchise ? 'Selecione a franquia' : 'Selecione a base';
-      Array.from(organizationSelect.options).forEach(function (option) {
-        const optionRole = option.dataset.unitRole;
-        if (!optionRole) return;
-        const visible = optionRole === expectedRole;
-        option.hidden = !visible;
-        option.disabled = !visible;
-      });
-      const selected = organizationSelect.selectedOptions[0];
-      if (selected && selected.dataset.unitRole && selected.dataset.unitRole !== expectedRole) {
-        organizationSelect.value = '';
+    baseSelect.disabled = !isBase;
+    baseSelect.required = isBase;
+    franchiseNameInput.disabled = !isFranchise;
+    franchiseNameInput.required = isFranchise;
+    franchiseNumberSelect.disabled = !isFranchise;
+    franchiseNumberSelect.required = isFranchise;
+    cnpjInput.disabled = !isFranchise;
+
+    document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
+      const option = checkbox.closest('.permission-option');
+      const adminOnly = option && option.dataset.adminOnly === 'true';
+      if (isAdmin) {
+        checkbox.checked = true;
+        checkbox.disabled = false;
+        option.classList.remove('disabled');
+      } else if (adminOnly) {
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        option.classList.add('disabled');
+      } else {
+        checkbox.checked = true;
+        checkbox.disabled = false;
+        option.classList.remove('disabled');
       }
-    }
+    });
 
-    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+    if (isAdmin && window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.JT_I18N.refresh(document.querySelector('[data-admin-unit-filter-form]') || document.body);
     }
   }
 
-  // Move the permissions modal out of the page layout/form container.
-  // This makes it behave like a real floating window above the entire site.
   if (modal && modal.parentElement !== document.body) {
     document.body.appendChild(modal);
   }
-
   function openModal() {
     if (!modal) return;
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('permission-modal-open');
   }
-
   function closeModal() {
     if (!modal) return;
     modal.classList.remove('open');
@@ -182,55 +192,13 @@
     document.body.classList.remove('permission-modal-open');
   }
 
-  function syncRolePermissions() {
-    const isAdmin = roleSelect && roleSelect.value === 'admin';
-    document.querySelectorAll('.permission-option[data-admin-only="true"]').forEach(function (item) {
-      const checkbox = item.querySelector('input[type="checkbox"]');
-      item.classList.toggle('disabled', !isAdmin);
-      if (checkbox) {
-        checkbox.disabled = !isAdmin;
-        if (!isAdmin) checkbox.checked = false;
-      }
-    });
-  }
-
-  const permissionCard = modal ? modal.querySelector('.permission-card') : null;
-
-  if (permissionCard) {
-    permissionCard.addEventListener('click', function (event) {
-      event.stopPropagation();
-    });
-  }
-
-  if (openButton) openButton.addEventListener('click', function () {
-    openModal();
-    window.setTimeout(function () {
-      const firstCheckbox = modal ? modal.querySelector('input[type="checkbox"]') : null;
-      if (firstCheckbox) firstCheckbox.focus({ preventScroll: true });
-    }, 60);
-  });
+  if (openButton) openButton.addEventListener('click', openModal);
   closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
-  if (roleSelect) roleSelect.addEventListener('change', function () { syncRolePermissions(); syncUnitFieldByRole(); });
-  if (allButton) {
-    allButton.addEventListener('click', function () {
-      const isAdmin = roleSelect && roleSelect.value === 'admin';
-      document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
-        const isAdminOnly = checkbox.closest('.permission-option').dataset.adminOnly === 'true';
-        if (!isAdminOnly || isAdmin) checkbox.checked = true;
-      });
-    });
-  }
-  if (basicButton) {
-    basicButton.addEventListener('click', function () {
-      document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
-        const isAdminOnly = checkbox.closest('.permission-option').dataset.adminOnly === 'true';
-        checkbox.checked = !isAdminOnly;
-      });
-    });
-  }
-  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeModal(); });
-  syncRolePermissions();
-  syncUnitFieldByRole();
+  if (roleSelect) roleSelect.addEventListener('change', syncRole);
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeModal();
+  });
+  syncRole();
 })();
 </script>
 {% endblock %}
