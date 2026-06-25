@@ -1094,13 +1094,114 @@
     return (text.match(/^\s*/) || [''])[0] + translated + (text.match(/\s*$/) || [''])[0];
   }
 
+  function normalizeTranslationKey(value) {
+    return String(value == null ? '' : value)
+      .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\s]+/u, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[|•–—-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLocaleLowerCase('pt-BR');
+  }
+
+  const dynamicProductTranslations = {
+    'manga pallet plastica': '塑料托盘缠绕膜',
+    'manga pallet plastico': '塑料托盘缠绕膜',
+    'manga palete plastica': '塑料托盘缠绕膜',
+    'manga palete plastico': '塑料托盘缠绕膜',
+    'manga de pallet plastica': '塑料托盘缠绕膜',
+    'manga de pallet plastico': '塑料托盘缠绕膜',
+    'manga de palete plastica': '塑料托盘缠绕膜',
+    'manga de palete plastico': '塑料托盘缠绕膜',
+    'packtainer plastico': '塑料 Packtainer',
+    'packtainer plastica': '塑料 Packtainer',
+    'packtainer': 'Packtainer',
+    'lacre plastico': '塑料封条',
+    'lacres plasticos': '塑料封条',
+    'lacre plastica': '塑料封条',
+    'crachá com cordão': '工牌挂绳',
+    'cracha com cordao': '工牌挂绳',
+    'etiqueta termica': '热敏标签',
+    'envelope de seguranca p': '安全信封 P',
+    'envelope de seguranca m': '安全信封 M',
+    'insumos operacionais': '运营耗材',
+    'administrativo': '行政',
+    'operacional': '运营',
+    'uniforme': '制服',
+    'embalagens': '包装',
+    'etiquetas': '标签',
+    'unidade': '单位',
+    'unidades': '单位',
+    'rolo': '卷',
+    'rolos': '卷',
+    'caixa': '箱',
+    'caixas': '箱',
+    'pacote': '包',
+    'pacotes': '包'
+  };
+
+  function translateDynamicProductText(value) {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    const prefixMatch = raw.match(/^([\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F]+\s*)/u);
+    const prefix = prefixMatch ? prefixMatch[1] : '';
+    const clean = prefix ? raw.slice(prefix.length).trim() : raw;
+    const normalized = normalizeTranslationKey(clean);
+    if (dynamicProductTranslations[normalized]) return prefix + dynamicProductTranslations[normalized];
+
+    const replacements = [
+      [/manga\s+(?:de\s+)?pal(?:l)?et[e]?\s+pl[aá]stic[oa]/giu, '塑料托盘缠绕膜'],
+      [/packtainer\s+pl[aá]stic[oa]/giu, '塑料 Packtainer'],
+      [/lacre[s]?\s+pl[aá]stic[oa]s?/giu, '塑料封条'],
+      [/etiqueta[s]?\s+t[eé]rmica[s]?/giu, '热敏标签'],
+      [/envelope[s]?\s+de\s+seguran[cç]a/giu, '安全信封'],
+      [/insumo[s]?\s+operaciona(?:l|is)/giu, '运营耗材'],
+      [/administrativ[oa]/giu, '行政'],
+      [/operaciona(?:l|is)/giu, '运营'],
+      [/uniforme[s]?/giu, '制服'],
+      [/embalagem|embalagens/giu, '包装'],
+      [/etiqueta[s]?/giu, '标签'],
+      [/pl[aá]stic[oa]s?/giu, '塑料'],
+      [/pallet|palete/giu, '托盘'],
+      [/manga[s]?/giu, '缠绕膜'],
+      [/lacre[s]?/giu, '封条'],
+      [/rolo[s]?/giu, '卷'],
+      [/unidade[s]?/giu, '单位'],
+      [/caixa[s]?/giu, '箱'],
+      [/pacote[s]?/giu, '包']
+    ];
+    let out = clean;
+    let changed = false;
+    replacements.forEach(function (pair) {
+      out = out.replace(pair[0], function () {
+        changed = true;
+        return pair[1];
+      });
+    });
+    out = out.replace(/\s+/g, ' ').trim();
+    return changed ? prefix + out : null;
+  }
+
   function translateFallback(core) {
+    const dynamic = translateDynamicProductText(core);
+    if (dynamic) return dynamic;
     let out = core;
     let changed = false;
     fallbackTerms.forEach(function (pair) {
-      if (out.indexOf(pair[0]) === -1) return;
-      out = out.split(pair[0]).join(pair[1]);
-      changed = true;
+      if (out.indexOf(pair[0]) !== -1) {
+        out = out.split(pair[0]).join(pair[1]);
+        changed = true;
+        return;
+      }
+      try {
+        const escaped = pair[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const rx = new RegExp(escaped, 'giu');
+        out = out.replace(rx, function () {
+          changed = true;
+          return pair[1];
+        });
+      } catch (error) {}
     });
     return changed ? out : core;
   }
@@ -1108,7 +1209,8 @@
   function translatePiece(value) {
     const raw = String(value == null ? '' : value).trim();
     if (!raw) return raw;
-    return zh[raw] || translateUnitLabel(raw) || translateFallback(raw);
+    const dynamic = translateDynamicProductText(raw);
+    return zh[raw] || dynamic || translateUnitLabel(raw) || translateFallback(raw);
   }
 
   function translateUnitLabel(value) {
@@ -1395,6 +1497,8 @@
     if (!core) return core;
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     if (zh[core]) return zh[core];
+    const dynamicCore = translateDynamicProductText(core);
+    if (dynamicCore) return dynamicCore;
     const catalogLabel = translateCatalogLabel(core);
     if (catalogLabel) return catalogLabel;
     const roleOrOrg = translateOrgOrRole(core);

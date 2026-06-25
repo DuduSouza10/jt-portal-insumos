@@ -9421,3 +9421,114 @@ table td,
     grid-template-columns: 1fr !important;
   }
 }
+
+/* v119 - alinhamento de colunas de produto, cards contidos e usuário atual só com editar */
+.product-form-card,
+.product-form-card *,
+.product-form-card *::before,
+.product-form-card *::after {
+  box-sizing: border-box !important;
+}
+
+.product-form-card {
+  width: 100% !important;
+  max-width: 1180px !important;
+  overflow: hidden !important;
+}
+
+.product-form-card .form-panel,
+.product-form-card .field-card,
+.product-kit-fieldset.field-card,
+.product-status-panel,
+.product-audience.premium-audience-panel {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.product-form-card input,
+.product-form-card textarea,
+.product-form-card select {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.product-form-card .metrics-grid,
+.product-form-card .form-panel .metrics-grid.two-cols-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 14px !important;
+}
+
+.product-form-card .metrics-grid > .field-card {
+  padding: 14px !important;
+}
+
+.product-form-card .product-form-columns {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 18px !important;
+  min-width: 0 !important;
+}
+
+@media (max-width: 1180px) {
+  .product-form-card .product-form-columns,
+  .product-form-card .form-panel-grid.two-cols-grid,
+  .product-form-card .product-image-editor-premium {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .product-form-card .metrics-grid,
+  .product-form-card .form-panel .metrics-grid.two-cols-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Produto fica alinhado à esquerda; o restante das tabelas permanece centralizado */
+.products-admin-table th:nth-child(1),
+.products-admin-table td:nth-child(1),
+.request-products-table th:nth-child(1),
+.request-products-table td:nth-child(1) {
+  text-align: left !important;
+  padding-left: 22px !important;
+  padding-right: 12px !important;
+}
+
+.products-admin-table td:nth-child(1) .admin-product-main,
+.request-products-table td:nth-child(1) .request-product-main {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.products-admin-table td:nth-child(1) .admin-product-main > div,
+.request-products-table td:nth-child(1) .request-product-main > div {
+  text-align: left !important;
+}
+
+.products-admin-table td:nth-child(1) strong,
+.products-admin-table td:nth-child(1) small,
+.request-products-table td:nth-child(1) strong,
+.request-products-table td:nth-child(1) small {
+  text-align: left !important;
+}
+
+/* Remove pseudo-tooltip antigo. O balão válido segue o cursor via JS. */
+.icon-action-btn[data-tooltip]::before,
+.icon-action-btn[data-tooltip]::after {
+  display: none !important;
+  content: none !important;
+}
+
+.action-cursor-tooltip {
+  background: rgba(230,0,18,.82) !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.18) !important;
+  border-radius: 8px !important;
+  padding: 6px 9px !important;
+  font-size: 11.5px !important;
+  font-weight: 950 !important;
+  transform: none !important;
+  animation: none !important;
+}
