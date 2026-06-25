@@ -4,6 +4,50 @@
   const originalText = new WeakMap();
   let isApplying = false;
   const zh = {
+  "admin": "管理员",
+  "admins": "管理员",
+  "base": "基地",
+  "bases": "基地",
+  "franquia": "加盟店",
+  "franquias": "加盟店",
+  "6 admin": "6 名管理员",
+  "0 base": "0 个基地",
+  "1 franquia": "1 个加盟店",
+  "Base/Franquia": "基地/加盟店",
+  "Gerente Adm": "行政经理",
+  "Gerente ADM": "行政经理",
+  "Gerente Administrativo": "行政经理",
+  "Gerente Administrativa": "行政经理",
+  "Gerente Operacional": "运营经理",
+  "Assistente ADM": "行政助理",
+  "Assistente Adm": "行政助理",
+  "Assistente Administrativo": "行政助理",
+  "Assistente Administrativa": "行政助理",
+  "ANL ADM SR": "高级行政分析师",
+  "ANL ADM PL": "中级行政分析师",
+  "ANL ADM JR": "初级行政分析师",
+  "ANL ADM": "行政分析师",
+  "Analista ADM SR": "高级行政分析师",
+  "Analista ADM PL": "中级行政分析师",
+  "Analista ADM JR": "初级行政分析师",
+  "Analista Administrativo SR": "高级行政分析师",
+  "Analista Administrativo PL": "中级行政分析师",
+  "Analista Administrativo JR": "初级行政分析师",
+  "Analista Administrativo": "行政分析师",
+  "Dev": "开发人员",
+  "DEV": "开发人员",
+  "Developer": "开发人员",
+  "Desenvolvedor": "开发人员",
+  "Desenvolvedor JR": "初级开发人员",
+  "Desenvolvedor PL": "中级开发人员",
+  "Desenvolvedor SR": "高级开发人员",
+  "Administrativo": "行政",
+  "Administrativa": "行政",
+  "Operacional": "运营",
+  "Sênior": "高级",
+  "Senior": "高级",
+  "Pleno": "中级",
+  "Junior": "初级",
   "Pesquisar usuário": "搜索用户",
   "Responsável, usuário, base/franquia, número ou CNPJ...": "负责人、用户名、基地/加盟店、编号或 CNPJ...",
   "Filtrar tipo": "筛选类型",
@@ -816,6 +860,24 @@
   let scheduled = false;
 
   const fallbackTerms = [
+    ['Gerente Operacional', '运营经理'],
+    ['Gerente Administrativo', '行政经理'],
+    ['Gerente Administrativa', '行政经理'],
+    ['Gerente Adm', '行政经理'],
+    ['Assistente Administrativo', '行政助理'],
+    ['Assistente Administrativa', '行政助理'],
+    ['Assistente ADM', '行政助理'],
+    ['ANL ADM SR', '高级行政分析师'],
+    ['ANL ADM PL', '中级行政分析师'],
+    ['ANL ADM JR', '初级行政分析师'],
+    ['ANL ADM', '行政分析师'],
+    ['Developer', '开发人员'],
+    ['Desenvolvedor', '开发人员'],
+    ['Dev', '开发人员'],
+    ['ADM', '行政'],
+    ['SR', '高级'],
+    ['PL', '中级'],
+    ['JR', '初级'],
     ['Acesso ao Portal', '登录门户网站'],
     ['Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código para concluir o login.', '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。'],
     ['Ainda não tem cadastro?', '还没有账号？'],
@@ -1007,14 +1069,105 @@
     return null;
   }
 
+  function isOperationalCode(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+    const compact = raw.replace(/[–—]/g, '-');
+    if (/^(?:F\s+)?[A-Z]{2,5}(?:\s+\d{1,3})?-[A-Z]{2}$/u.test(compact)) return true;
+    if (/^[A-Z]{2,6}\s+\d{1,3}-[A-Z]{2}$/u.test(compact)) return true;
+    if (/^[A-Z]{2,6}-[A-Z]{2}$/u.test(compact)) return true;
+    return false;
+  }
+
+  function translateOrgOrRole(value) {
+    const raw = String(value || '').trim();
+    if (!raw || isOperationalCode(raw)) return null;
+    if (zh[raw]) return zh[raw];
+    const normalized = raw
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[.]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+    const exact = {
+      'ADM': '行政',
+      'ADMINISTRATIVO': '行政',
+      'ADMINISTRATIVA': '行政',
+      'ADMINISTRACAO': '管理部门',
+      'GERENTE ADM': '行政经理',
+      'GERENTE ADMINISTRATIVO': '行政经理',
+      'GERENTE ADMINISTRATIVA': '行政经理',
+      'GERENTE OPERACIONAL': '运营经理',
+      'ASSISTENTE ADM': '行政助理',
+      'ASSISTENTE ADMINISTRATIVO': '行政助理',
+      'ASSISTENTE ADMINISTRATIVA': '行政助理',
+      'ANL ADM': '行政分析师',
+      'ANL ADM JR': '初级行政分析师',
+      'ANL ADM PL': '中级行政分析师',
+      'ANL ADM SR': '高级行政分析师',
+      'ANALISTA ADM': '行政分析师',
+      'ANALISTA ADM JR': '初级行政分析师',
+      'ANALISTA ADM PL': '中级行政分析师',
+      'ANALISTA ADM SR': '高级行政分析师',
+      'ANALISTA ADMINISTRATIVO': '行政分析师',
+      'ANALISTA ADMINISTRATIVO JR': '初级行政分析师',
+      'ANALISTA ADMINISTRATIVO PL': '中级行政分析师',
+      'ANALISTA ADMINISTRATIVO SR': '高级行政分析师',
+      'ANALISTA ADMINISTRATIVA': '行政分析师',
+      'ANALISTA ADMINISTRATIVA JR': '初级行政分析师',
+      'ANALISTA ADMINISTRATIVA PL': '中级行政分析师',
+      'ANALISTA ADMINISTRATIVA SR': '高级行政分析师',
+      'DEV': '开发人员',
+      'DEVELOPER': '开发人员',
+      'DESENVOLVEDOR': '开发人员',
+      'DESENVOLVEDOR JR': '初级开发人员',
+      'DESENVOLVEDOR PL': '中级开发人员',
+      'DESENVOLVEDOR SR': '高级开发人员',
+      'OPERACIONAL': '运营',
+      'COORDENADOR OPERACIONAL': '运营协调员',
+      'SUPERVISOR OPERACIONAL': '运营主管'
+    };
+    if (exact[normalized]) return exact[normalized];
+
+    const parts = normalized.split(' ').filter(Boolean);
+    const hasAdmin = parts.some(function (p) { return ['ADM', 'ADMINISTRATIVO', 'ADMINISTRATIVA', 'ADMINISTRACAO'].indexOf(p) !== -1; });
+    const hasOps = parts.indexOf('OPERACIONAL') !== -1 || parts.indexOf('OPERACOES') !== -1;
+    const hasSr = parts.some(function (p) { return ['SR', 'SENIOR', 'SENIOR'].indexOf(p) !== -1; });
+    const hasPl = parts.some(function (p) { return ['PL', 'PLENO', 'PLENA'].indexOf(p) !== -1; });
+    const hasJr = parts.some(function (p) { return ['JR', 'JUNIOR'].indexOf(p) !== -1; });
+    const level = hasSr ? '高级' : (hasPl ? '中级' : (hasJr ? '初级' : ''));
+    const area = hasAdmin ? '行政' : (hasOps ? '运营' : '');
+    if (parts.indexOf('GERENTE') !== -1) return (area || '') + '经理';
+    if (parts.indexOf('ASSISTENTE') !== -1 || parts.indexOf('AUXILIAR') !== -1) return (area || '') + '助理';
+    if (parts.indexOf('ANL') !== -1 || parts.indexOf('ANALISTA') !== -1) return level + (area || '') + '分析师';
+    if (parts.indexOf('COORDENADOR') !== -1 || parts.indexOf('COORDENADORA') !== -1) return (area || '') + '协调员';
+    if (parts.indexOf('SUPERVISOR') !== -1 || parts.indexOf('SUPERVISORA') !== -1) return (area || '') + '主管';
+    if (parts.indexOf('DEV') !== -1 || parts.indexOf('DEVELOPER') !== -1 || parts.indexOf('DESENVOLVEDOR') !== -1) return level + '开发人员';
+    if (hasAdmin && parts.length <= 2) return '行政';
+    if (hasOps && parts.length <= 2) return '运营';
+    return null;
+  }
+
   function translateCore(core) {
     if (!core) return core;
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     if (zh[core]) return zh[core];
+    const roleOrOrg = translateOrgOrRole(core);
+    if (roleOrOrg) return roleOrOrg;
     let match;
     const unitOnly = translateUnitLabel(core);
     if (unitOnly) return unitOnly;
+    if ((match = core.match(/^(\d+)\s+admin(?:s)?$/i))) return `${match[1]} 名管理员`;
+    if ((match = core.match(/^(\d+)\s+base(?:s)?$/i))) return `${match[1]} 个基地`;
+    if ((match = core.match(/^(\d+)\s+franquia(?:s)?$/i))) return `${match[1]} 个加盟店`;
+    if ((match = core.match(/^(\d+)\s+exibido(?:\(s\)|s)?$/i))) return `${match[1]} 已显示`;
+    if ((match = core.match(/^(\d+)\s+pendente(?:\(s\)|s)?$/i))) return `${match[1]} 待处理`;
+    if ((match = core.match(/^(\d+)\s+aprovado(?:\(s\)|s)?$/i))) return `${match[1]} 已批准`;
+    if ((match = core.match(/^(\d+)\s+recusado(?:\(s\)|s)?$/i))) return `${match[1]} 已拒绝`;
     if ((match = core.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/))) {
+      const roleOrOrgValue = translateOrgOrRole(match[2]);
+      if (roleOrOrgValue) return `${match[1]} ${roleOrOrgValue}`;
       const unit = translateUnitLabel(match[2]);
       if (unit) return `${match[1]} ${unit}`;
     }
@@ -1290,6 +1443,11 @@
       '.product-filter-card',
       '.product-filter-main',
       '.product-filter-summary',
+      '.user-filter-card',
+      '.user-filter-summary',
+      '.users-table-card',
+      '.user-unit-cell',
+      '#userTableBody',
       '.product-tools',
       '.import-form',
       '.cart-panel',

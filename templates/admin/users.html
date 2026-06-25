@@ -61,14 +61,14 @@
       </div>
     </div>
     <div class="user-filter-summary">
-      <span><strong id="userShownCount">{{ user_counts.shown }}</strong> exibido(s)</span>
-      <span><strong id="userTotalCount">{{ user_counts.total }}</strong> total</span>
-      <span><strong id="userPendingCount">{{ user_counts.pending }}</strong> pendente(s)</span>
-      <span><strong id="userApprovedCount">{{ user_counts.approved }}</strong> aprovado(s)</span>
-      <span><strong id="userRejectedCount">{{ user_counts.rejected }}</strong> recusado(s)</span>
-      <span><strong id="userAdminCount">{{ user_counts.admin }}</strong> admin</span>
-      <span><strong id="userBaseCount">{{ user_counts.base }}</strong> base</span>
-      <span><strong id="userFranchiseCount">{{ user_counts.franchise }}</strong> franquia</span>
+      <span><strong id="userShownCount">{{ user_counts.shown }}</strong> <em data-no-i18n data-user-count-label="shown">exibidos</em></span>
+      <span><strong id="userTotalCount">{{ user_counts.total }}</strong> <em data-no-i18n data-user-count-label="total">total</em></span>
+      <span><strong id="userPendingCount">{{ user_counts.pending }}</strong> <em data-no-i18n data-user-count-label="pending">pendentes</em></span>
+      <span><strong id="userApprovedCount">{{ user_counts.approved }}</strong> <em data-no-i18n data-user-count-label="approved">aprovados</em></span>
+      <span><strong id="userRejectedCount">{{ user_counts.rejected }}</strong> <em data-no-i18n data-user-count-label="rejected">recusados</em></span>
+      <span><strong id="userAdminCount">{{ user_counts.admin }}</strong> <em data-no-i18n data-user-count-label="admin">admins</em></span>
+      <span><strong id="userBaseCount">{{ user_counts.base }}</strong> <em data-no-i18n data-user-count-label="base">bases</em></span>
+      <span><strong id="userFranchiseCount">{{ user_counts.franchise }}</strong> <em data-no-i18n data-user-count-label="franchise">franquias</em></span>
     </div>
   </form>
 
@@ -103,7 +103,7 @@
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
-        <td data-label="Base/Franquia">
+        <td class="user-unit-cell" data-label="Base/Franquia">
           {% if user.role == 'franchise' %}
             <strong>{{ user.franchise_name or user.organization_name }}</strong>
           {% else %}
@@ -183,6 +183,44 @@
     base: document.getElementById('userBaseCount'),
     franchise: document.getElementById('userFranchiseCount')
   };
+  const countLabels = Array.from(document.querySelectorAll('[data-user-count-label]'));
+
+  function currentUserLang() {
+    if (window.JT_I18N && typeof window.JT_I18N.getLanguage === 'function') return window.JT_I18N.getLanguage();
+    return document.documentElement.getAttribute('data-language') || 'pt-BR';
+  }
+
+  function userCounterLabel(kind, value) {
+    const numeric = Number(value || 0);
+    const zh = currentUserLang() === 'zh-CN';
+    if (zh) {
+      const zhLabels = {
+        shown: '已显示', total: '总数', pending: '待处理', approved: '已批准', rejected: '已拒绝', admin: '名管理员', base: '个基地', franchise: '个加盟店'
+      };
+      return zhLabels[kind] || '';
+    }
+    const singular = numeric === 1;
+    const ptLabels = {
+      shown: singular ? 'exibido' : 'exibidos',
+      total: 'total',
+      pending: singular ? 'pendente' : 'pendentes',
+      approved: singular ? 'aprovado' : 'aprovados',
+      rejected: singular ? 'recusado' : 'recusados',
+      admin: singular ? 'admin' : 'admins',
+      base: singular ? 'base' : 'bases',
+      franchise: singular ? 'franquia' : 'franquias'
+    };
+    return ptLabels[kind] || '';
+  }
+
+  function updateCounterLabels(values) {
+    countLabels.forEach(function (label) {
+      const kind = label.dataset.userCountLabel || '';
+      const value = values && Object.prototype.hasOwnProperty.call(values, kind) ? values[kind] : 0;
+      label.textContent = userCounterLabel(kind, value);
+    });
+  }
+
 
   function normalize(value) {
     return String(value || '')
@@ -282,6 +320,19 @@
     setCounter('admin', counts.admin);
     setCounter('base', counts.base);
     setCounter('franchise', counts.franchise);
+    updateCounterLabels({
+      shown: counts.shown,
+      total: rows.length,
+      pending: counts.pending,
+      approved: counts.approved,
+      rejected: counts.rejected,
+      admin: counts.admin,
+      base: counts.base,
+      franchise: counts.franchise
+    });
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.setTimeout(function () { window.JT_I18N.refresh(tbody); }, 20);
+    }
     syncTabs(status);
   }
 
@@ -315,6 +366,7 @@
     });
   }
 
+  window.addEventListener('jt-language-change', function () { applyFilters(); });
   applyFilters();
 })();
 </script>

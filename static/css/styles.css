@@ -7955,3 +7955,47 @@ html[data-theme="light"] .product-import-form .import-mode-option {
     grid-template-columns: 1fr !important;
   }
 }
+
+
+/* v110 - alinhamento da coluna de estoque na tabela de produtos */
+.products-admin-table th:nth-child(5),
+.products-admin-table td:nth-child(5),
+.products-admin-table .product-stock-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.products-admin-table .product-stock-cell {
+  padding-inline: 10px !important;
+}
+
+.products-admin-table .product-stock-cell strong {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 42px !important;
+  height: 40px !important;
+  padding: 0 12px !important;
+  margin: 0 auto !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03)) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06) !important;
+  color: var(--text-strong) !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 760px) {
+  .products-admin-table .product-stock-cell {
+    text-align: left !important;
+  }
+  .products-admin-table .product-stock-cell strong {
+    margin: 0 !important;
+  }
+}
+
+
+/* v111 - contadores de usuários sem itálico e traduzíveis */
+.user-filter-summary em { font-style: normal; }
