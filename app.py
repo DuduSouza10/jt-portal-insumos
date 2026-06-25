@@ -5444,7 +5444,8 @@ def admin_product_categories_update():
             if not new_clean:
                 conn.rollback()
                 flash("Nenhuma categoria pode ficar sem nome.", "warning")
-                return redirect(url_for("admin_products"))
+                next_url = (request.form.get("next") or request.referrer or "").strip()
+                return redirect(next_url or url_for("admin_products"))
             emoji_clean = clean_category_emoji(emoji_value, new_clean)
             conn.execute(
                 """
@@ -5458,7 +5459,8 @@ def admin_product_categories_update():
         conn.commit()
 
     flash(f"Categorias atualizadas: {updated}.", "success")
-    return redirect(url_for("admin_products"))
+    next_url = (request.form.get("next") or request.referrer or "").strip()
+    return redirect(next_url or url_for("admin_products"))
 
 @app.get("/admin/products/export")
 @admin_required
@@ -5661,7 +5663,7 @@ def admin_product_new():
             conn.commit()
         flash("Produto cadastrado.", "success")
         return redirect(url_for("admin_products"))
-    return render_template("admin/product_form.html", product=None, product_categories=list_product_categories())
+    return render_template("admin/product_form.html", product=None, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
 
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
@@ -5739,7 +5741,7 @@ def admin_product_edit(product_id: int):
             remove_local_product_image(old_image_key)
         flash("Produto atualizado.", "success")
         return redirect(url_for("admin_products"))
-    return render_template("admin/product_form.html", product=product, product_categories=list_product_categories())
+    return render_template("admin/product_form.html", product=product, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
 
 
 @app.post("/admin/products/<int:product_id>/toggle-active")

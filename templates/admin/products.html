@@ -199,16 +199,16 @@
         <td data-label="Situacao"><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
         <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
         <td class="actions-cell icon-actions-cell" data-label="Acoes">
-          <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_product_edit', product_id=product.id) }}" title="Editar" aria-label="Editar produto">
+          <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_product_edit', product_id=product.id) }}" data-tooltip="Editar" aria-label="Editar produto">
             <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
           </a>
           <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}') : '{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
-            <button class="btn tiny ghost icon-action-btn" type="submit" title="{{ 'Inativar' if product.active else 'Ativar' }}" aria-label="{{ 'Inativar produto' if product.active else 'Ativar produto' }}">
+            <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="{{ 'Inativar' if product.active else 'Ativar' }}" aria-label="{{ 'Inativar produto' if product.active else 'Ativar produto' }}">
               <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
             </button>
           </form>
           <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.') : 'Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')">
-            <button class="btn tiny danger icon-action-btn" type="submit" title="Excluir" aria-label="Excluir produto">
+            <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir produto">
               <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
             </button>
           </form>
