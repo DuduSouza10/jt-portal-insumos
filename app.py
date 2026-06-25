@@ -4074,6 +4074,17 @@ def detect_user_header_row(worksheet: Any, max_scan_rows: int = 30) -> tuple[int
     return best_row_number, best_map
 
 
+def generate_user_import_password_hash(password: str) -> str:
+    """Gera hash em modo mais leve para importação em massa.
+
+    O padrão atual do Werkzeug usa scrypt, que é ótimo para poucos cadastros,
+    mas pode consumir muita memória/tempo ao importar centenas de usuários e fazer
+    o servidor responder Internal Server Error por timeout. O PBKDF2 continua
+    compatível com check_password_hash e evita derrubar a rota de importação.
+    """
+    return generate_password_hash(str(password or ""), method="pbkdf2:sha256:260000", salt_length=16)
+
+
 def parse_user_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> UserImportRecord:
     responsible_name = clean_import_text(get_user_import_value(row_values, header_map, "responsible_name"))
     username = normalize_username(clean_import_text(get_user_import_value(row_values, header_map, "username")))
@@ -4103,7 +4114,7 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
         source_row=row_number,
         responsible_name=responsible_name[:160],
         username=username,
-        password_hash=generate_password_hash(password),
+        password_hash=generate_user_import_password_hash(password),
         role=role,
         status=status,
         organization_name=organization_name,
@@ -4113,11 +4124,11 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
     )
 
 
-def user_insert_sql_rows(records: list[UserImportRecord]) -> str:
-    created_at = now_iso()
+def user_upsert_sql_rows(rows: list[tuple[int | None, UserImportRecord]], created_at: str, updated_at: str) -> str:
     values_sql: list[str] = []
-    for record in records:
+    for target_id, record in rows:
         values = [
+            target_id,
             record.responsible_name,
             record.organization_name,
             record.franchise_name,
@@ -4129,71 +4140,115 @@ def user_insert_sql_rows(records: list[UserImportRecord]) -> str:
             record.role,
             record.status,
             created_at,
+            updated_at,
             0,
         ]
         values_sql.append("(" + ", ".join(sql_literal(value) for value in values) + ")")
     return ",\n".join(values_sql)
 
 
-def execute_user_import_chunk(conn: Any, records: list[UserImportRecord], row_errors: list[str]) -> tuple[int, int]:
-    if not records:
-        return 0, 0
+def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImportRecord]], row_errors: list[str]) -> tuple[int, int, int]:
+    """Cria/atualiza usuários em blocos para evitar timeout/Internal Server Error.
+
+    Antes, a atualização era feita linha a linha e cada senha usava hash pesado.
+    No D1/Render isso multiplicava chamadas HTTP e deixava a importação lenta.
+    """
+    if not rows:
+        return 0, 0, 0
+    created = sum(1 for target_id, _record in rows if target_id is None)
+    updated = len(rows) - created
+    skipped = 0
     fields = (
-        "responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
-        "username, email, password_hash, role, status, created_at, page_permissions_configured"
+        "id, responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
+        "username, email, password_hash, role, status, created_at, updated_at, page_permissions_configured"
     )
-    imported = 0
-    skipped = 0
-    for chunk in chunk_list(records, 30):
+    update_set = """
+        responsible_name = excluded.responsible_name,
+        organization_name = excluded.organization_name,
+        franchise_name = excluded.franchise_name,
+        franchise_number = excluded.franchise_number,
+        cnpj = excluded.cnpj,
+        username = excluded.username,
+        email = excluded.email,
+        password_hash = excluded.password_hash,
+        role = excluded.role,
+        status = excluded.status,
+        updated_at = excluded.updated_at,
+        page_permissions_configured = 0
+    """
+
+    for chunk in chunk_list(rows, 50):
+        if not chunk:
+            continue
+        sql = f"""
+        INSERT INTO users ({fields})
+        VALUES {user_upsert_sql_rows(chunk, now_iso(), now_iso())}
+        ON CONFLICT(id) DO UPDATE SET {update_set}
+        """
         try:
-            conn.execute(f"INSERT INTO users ({fields}) VALUES {user_insert_sql_rows(chunk)}")
-            imported += len(chunk)
+            conn.execute(sql)
         except Exception as chunk_exc:
-            print(f"[IMPORTAÇÃO USUÁRIOS] Inserção em bloco falhou; tentando linha a linha: {chunk_exc}")
-            for record in chunk:
+            print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em bloco falhou; tentando blocos menores: {chunk_exc}")
+            for small in chunk_list(chunk, 10):
                 try:
-                    conn.execute(f"INSERT INTO users ({fields}) VALUES {user_insert_sql_rows([record])}")
-                    imported += 1
-                except Exception as exc:
-                    skipped += 1
-                    row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:140]}")
-                    print(f"[IMPORTAÇÃO USUÁRIOS] Erro na linha {record.source_row}: {exc}")
-    return imported, skipped
+                    small_sql = f"""
+                    INSERT INTO users ({fields})
+                    VALUES {user_upsert_sql_rows(small, now_iso(), now_iso())}
+                    ON CONFLICT(id) DO UPDATE SET {update_set}
+                    """
+                    conn.execute(small_sql)
+                except Exception as small_exc:
+                    print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em sub-bloco falhou; tentando linha a linha: {small_exc}")
+                    for target_id, record in small:
+                        try:
+                            one_sql = f"""
+                            INSERT INTO users ({fields})
+                            VALUES {user_upsert_sql_rows([(target_id, record)], now_iso(), now_iso())}
+                            ON CONFLICT(id) DO UPDATE SET {update_set}
+                            """
+                            conn.execute(one_sql)
+                        except Exception as exc:
+                            skipped += 1
+                            if target_id is None:
+                                created -= 1
+                            else:
+                                updated -= 1
+                            row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:180]}")
+                            print(f"[IMPORTAÇÃO USUÁRIOS] Erro na linha {record.source_row}: {exc}")
+    return max(0, created), max(0, updated), skipped
 
 
-def update_user_import_records(conn: Any, records: list[UserImportRecord], row_errors: list[str]) -> tuple[int, int]:
-    updated = 0
-    skipped = 0
-    for record in records:
+def reject_users_outside_import(conn: Any, existing_rows: list[Any], imported_usernames: set[str], current_user_id: int | None) -> int:
+    """Recusa usuários que não estão na planilha sem usar NOT IN gigante.
+
+    O NOT IN com muitos parâmetros pode quebrar SQLite/D1 ou estourar payload.
+    Aqui calculamos os IDs localmente e fazemos UPDATE por blocos pequenos.
+    """
+    ids_to_reject: list[int] = []
+    for row in existing_rows:
         try:
-            conn.execute(
-                """
-                UPDATE users
-                   SET responsible_name = ?, organization_name = ?, franchise_name = ?,
-                       franchise_number = ?, cnpj = ?, email = ?, password_hash = ?,
-                       role = ?, status = ?, updated_at = ?, page_permissions_configured = 0
-                 WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
-                """,
-                (
-                    record.responsible_name,
-                    record.organization_name,
-                    record.franchise_name,
-                    record.franchise_number,
-                    record.cnpj,
-                    synthetic_email_for_username(record.username),
-                    record.password_hash,
-                    record.role,
-                    record.status,
-                    now_iso(),
-                    record.username,
-                ),
-            )
-            updated += 1
-        except Exception as exc:
-            skipped += 1
-            row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:140]}")
-            print(f"[IMPORTAÇÃO USUÁRIOS] Erro ao atualizar linha {record.source_row}: {exc}")
-    return updated, skipped
+            user_id = int(row["id"])
+            username_key = normalize_username(row["username"] or "")
+            status = (row["status"] or "").strip().lower() if "status" in row.keys() else ""
+        except Exception:
+            continue
+        if current_user_id is not None and user_id == int(current_user_id):
+            continue
+        if username_key in imported_usernames:
+            continue
+        if status == "rejected":
+            continue
+        ids_to_reject.append(user_id)
+
+    if not ids_to_reject:
+        return 0
+    updated_at = sql_literal(now_iso())
+    total = 0
+    for chunk in chunk_list(ids_to_reject, 400):
+        ids_sql = ",".join(str(int(value)) for value in chunk)
+        conn.execute(f"UPDATE users SET status = 'rejected', updated_at = {updated_at} WHERE id IN ({ids_sql})")
+        total += len(chunk)
+    return total
 
 
 def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None) -> tuple[int, int, int, int, list[str]]:
@@ -4201,97 +4256,86 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
     if import_mode not in {"merge", "replace"}:
         import_mode = "merge"
 
-    workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
-    worksheet = workbook.active
-    if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
-        return 0, 0, 0, 0, ["planilha vazia"]
+    try:
+        workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
+    except Exception as exc:
+        return 0, 0, 0, 0, [f"não foi possível abrir a planilha: {type(exc).__name__}"]
 
-    header_row_number, header_map = detect_user_header_row(worksheet)
-    required_keys = ["responsible_name", "username", "password", "role", "status"]
-    missing_headers = [
-        USER_IMPORT_HEADER_ALIASES[key][0]
-        for key in required_keys
-        if not header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key])
-    ]
-    if missing_headers:
+    try:
+        worksheet = workbook.active
+        if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
+            return 0, 0, 0, 0, ["planilha vazia"]
+
+        header_row_number, header_map = detect_user_header_row(worksheet)
+        required_keys = ["responsible_name", "username", "password", "role", "status"]
+        missing_headers = [
+            USER_IMPORT_HEADER_ALIASES[key][0]
+            for key in required_keys
+            if not header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key])
+        ]
+        if missing_headers:
+            return 0, 0, 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(missing_headers)]
+
+        records: list[UserImportRecord] = []
+        skipped = 0
+        errors: list[str] = []
+        seen_usernames: set[str] = set()
+        max_import_rows = int(os.getenv("USER_IMPORT_MAX_ROWS", "12000"))
+        processed_rows = 0
+
+        for row_number, row_values_tuple in enumerate(
+            worksheet.iter_rows(min_row=header_row_number + 1, values_only=True),
+            start=header_row_number + 1,
+        ):
+            row_values = worksheet_values(row_values_tuple)
+            if excel_row_is_empty(row_values):
+                continue
+            processed_rows += 1
+            if processed_rows > max_import_rows:
+                skipped += 1
+                errors.append(f"limite de {max_import_rows} linhas atingido; divida a planilha para importar o restante")
+                break
+            try:
+                record = parse_user_import_record(row_number, row_values, header_map)
+                if record.username in seen_usernames:
+                    raise ValueError("nome de usuário duplicado na planilha")
+                seen_usernames.add(record.username)
+                records.append(record)
+            except Exception as exc:
+                skipped += 1
+                errors.append(f"linha {row_number}: {str(exc)[:160]}")
+
+        if not records:
+            return 0, 0, skipped, 0, errors
+
+        with db_connect() as conn:
+            existing_rows = conn.execute("SELECT id, username, status FROM users").fetchall()
+            existing_by_username = {
+                normalize_username(row["username"]): int(row["id"])
+                for row in existing_rows
+                if row["username"]
+            }
+            upsert_rows: list[tuple[int | None, UserImportRecord]] = []
+            imported_usernames = {record.username for record in records}
+
+            for record in records:
+                target_id = existing_by_username.get(record.username)
+                upsert_rows.append((target_id, record))
+
+            created, updated, upsert_skipped = execute_user_upsert_chunked(conn, upsert_rows, errors)
+            skipped += upsert_skipped
+
+            replaced = 0
+            if import_mode == "replace":
+                replaced = reject_users_outside_import(conn, existing_rows, imported_usernames, current_user_id)
+
+            conn.commit()
+        return created, updated, skipped, replaced, errors
+    finally:
         try:
             workbook.close()
         except Exception:
             pass
-        return 0, 0, 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(missing_headers)]
-
-    records: list[UserImportRecord] = []
-    skipped = 0
-    errors: list[str] = []
-    seen_usernames: set[str] = set()
-
-    for row_number, row_values_tuple in enumerate(
-        worksheet.iter_rows(min_row=header_row_number + 1, values_only=True),
-        start=header_row_number + 1,
-    ):
-        row_values = worksheet_values(row_values_tuple)
-        if excel_row_is_empty(row_values):
-            continue
-        try:
-            record = parse_user_import_record(row_number, row_values, header_map)
-            if record.username in seen_usernames:
-                raise ValueError("nome de usuário duplicado na planilha")
-            seen_usernames.add(record.username)
-            records.append(record)
-        except Exception as exc:
-            skipped += 1
-            errors.append(f"linha {row_number}: {str(exc)[:160]}")
-
-    try:
-        workbook.close()
-    except Exception:
-        pass
-    if not records:
-        return 0, 0, skipped, 0, errors
-
-    with db_connect() as conn:
-        existing_rows = conn.execute("SELECT id, username FROM users").fetchall()
-        existing_by_username = {
-            normalize_username(row["username"]): int(row["id"])
-            for row in existing_rows
-            if row["username"]
-        }
-        new_records: list[UserImportRecord] = []
-        update_records: list[UserImportRecord] = []
-        imported_usernames = {record.username for record in records}
-
-        for record in records:
-            if record.username in existing_by_username:
-                update_records.append(record)
-            else:
-                existing_by_username[record.username] = 0
-                new_records.append(record)
-
-        created, insert_skipped = execute_user_import_chunk(conn, new_records, errors)
-        skipped += insert_skipped
-        updated, update_skipped = update_user_import_records(conn, update_records, errors)
-        skipped += update_skipped
-
-        replaced = 0
-        if import_mode == "replace":
-            params: list[Any] = []
-            where_parts = []
-            if imported_usernames:
-                placeholders = ",".join("?" for _ in imported_usernames)
-                where_parts.append(f"LOWER(TRIM(username)) NOT IN ({placeholders})")
-                params.extend(sorted(imported_usernames))
-            if current_user_id is not None:
-                where_parts.append("id <> ?")
-                params.append(current_user_id)
-            where_sql = " AND ".join(where_parts) if where_parts else "1 = 1"
-            cursor = conn.execute(
-                f"UPDATE users SET status = 'rejected', updated_at = ? WHERE {where_sql}",
-                [now_iso(), *params],
-            )
-            replaced = int(getattr(cursor, "rowcount", 0) or 0)
-
-        conn.commit()
-    return created, updated, skipped, replaced, errors
 
 
 
@@ -5184,18 +5228,20 @@ def admin_users_import():
         import_mode = (request.form.get("import_mode") or "merge").strip().lower()
         if import_mode not in {"merge", "replace"}:
             import_mode = "merge"
-        try:
-            upload_bytes_to_r2(
-                storage_key(
-                    "imports",
-                    "usuarios_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename),
-                ),
-                uploaded_bytes,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                {"type": "users_import", "mode": import_mode},
-            )
-        except Exception as exc:
-            print(f"[R2] Não foi possível salvar a planilha de usuários: {exc}")
+        # Salvar cópia no R2 é opcional. Para planilhas grandes, não bloqueia a importação.
+        if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
+            try:
+                upload_bytes_to_r2(
+                    storage_key(
+                        "imports",
+                        "usuarios_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename),
+                    ),
+                    uploaded_bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    {"type": "users_import", "mode": import_mode},
+                )
+            except Exception as exc:
+                print(f"[R2] Não foi possível salvar a planilha de usuários: {exc}")
 
         current_user = require_current_user()
         created, updated, skipped, replaced, errors = import_users_from_workbook_bytes(
@@ -5214,7 +5260,7 @@ def admin_users_import():
         )
     except Exception as exc:
         app.logger.exception("Falha ao importar usuários")
-        flash(f"Não consegui importar a planilha. Erro: {type(exc).__name__}.", "danger")
+        flash(f"Não consegui importar a planilha. Erro tratado: {type(exc).__name__}. Veja os logs se continuar acontecendo.", "danger")
     return redirect(url_for("admin_users"))
 
 
@@ -5617,16 +5663,17 @@ def admin_products_import():
             flash("A planilha enviada está vazia.", "warning")
             return redirect(url_for("admin_products"))
 
-        # Salvar cópia no R2 é opcional e nunca pode derrubar a importação.
-        try:
-            upload_bytes_to_r2(
-                storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
-                uploaded_bytes,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                {"type": "products_import", "mode": import_mode},
-            )
-        except Exception as exc:
-            print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
+        # Salvar cópia no R2 é opcional e nunca pode derrubar ou atrasar planilhas grandes.
+        if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
+            try:
+                upload_bytes_to_r2(
+                    storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
+                    uploaded_bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    {"type": "products_import", "mode": import_mode},
+                )
+            except Exception as exc:
+                print(f"[R2] Não foi possível salvar cópia da planilha importada: {exc}")
 
         try:
             created, updated, skipped, archived, row_errors = import_products_from_workbook_bytes(
@@ -5992,10 +6039,11 @@ def admin_material_entries_import():
         if not uploaded_bytes:
             flash("A planilha enviada está vazia.", "warning")
             return redirect(url_for("admin_material_entries"))
-        try:
-            upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
-        except Exception as exc:
-            print(f"[R2] Não foi possível salvar planilha de entrada: {exc}")
+        if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
+            try:
+                upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
+            except Exception as exc:
+                print(f"[R2] Não foi possível salvar planilha de entrada: {exc}")
         imported, skipped, errors = import_material_entries_from_workbook_bytes(uploaded_bytes, require_current_user().id)
         if errors:
             flash("Algumas linhas foram ignoradas: " + "; ".join(errors[:4]), "warning")
