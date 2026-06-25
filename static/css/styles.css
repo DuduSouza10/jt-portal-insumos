@@ -7999,3 +7999,38 @@ html[data-theme="light"] .product-import-form .import-mode-option {
 
 /* v111 - contadores de usuários sem itálico e traduzíveis */
 .user-filter-summary em { font-style: normal; }
+
+/* v112 - ajustes de cadastro e kit de produto */
+.form-grid label > input,
+.form-grid label > select,
+.form-grid label > textarea {
+  min-height: 52px;
+}
+
+.product-kit-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.product-kit-fieldset legend {
+  padding: 0 8px;
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.product-kit-fieldset .checkbox-line {
+  margin: 0;
+}
+
+.kit-quantity-wrap.kit-disabled {
+  opacity: .58;
+}
+
+.kit-quantity-wrap.kit-disabled input {
+  pointer-events: none;
+}

@@ -6,18 +6,18 @@
 <section class="auth-card card wide-card">
   <form method="post" class="form-grid two-cols" data-unit-filter-form>
     <label>
-      Nome do responsável
+      Nome do responsável (quem está solicitando)
       <input name="responsible_name" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     <label>
-      Tipo de acesso
+      Tipo de acesso (base ou franquia)
       <select name="role" id="roleSelect" required>
         <option value="base">Base</option>
         <option value="franchise">Franquia</option>
       </select>
     </label>
     <label id="baseNameWrap">
-      Nome da base
+      Nome da base (unidade J&T)
       <select name="organization_name" id="organizationSelect" required>
         <option value="" selected disabled>Selecione a base</option>
         {% for unit in base_unit_options %}
@@ -26,28 +26,23 @@
       </select>
     </label>
     <label id="franchiseNameWrap" class="hidden">
-      Nome da franquia
+      Nome da franquia (nome exibido no portal)
       <input name="franchise_name" id="franchiseNameInput" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">
-      Número da franquia
-      <select name="franchise_number" id="franchiseNumberSelect">
-        <option value="" selected disabled>Selecione o número da franquia</option>
-        {% for unit in franchise_unit_options %}
-          <option value="{{ unit }}">{{ unit }}</option>
-        {% endfor %}
-      </select>
+      Número de telefone (com DDD)
+      <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" placeholder="(00) 00000-0000" autocomplete="tel">
     </label>
     <label id="cnpjWrap" class="hidden">
-      CNPJ <small class="muted">opcional</small>
+      CNPJ (somente números) <small class="muted">opcional</small>
       <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" placeholder="00.000.000/0000-00">
     </label>
     <label>
-      Nome de usuário
+      Nome de usuário (login)
       <input name="username" type="text" placeholder="Ex.: mg_bhz" autocomplete="username" required>
     </label>
     <label>
-      Senha
+      Senha (acesso ao portal)
       <input name="password" type="password" placeholder="Crie uma senha segura" required>
     </label>
     <div class="full form-actions">
@@ -66,7 +61,7 @@
   const franchiseNameWrap = document.getElementById('franchiseNameWrap');
   const franchiseNameInput = document.getElementById('franchiseNameInput');
   const franchiseNumberWrap = document.getElementById('franchiseNumberWrap');
-  const franchiseNumberSelect = document.getElementById('franchiseNumberSelect');
+  const franchiseNumberInput = document.getElementById('franchiseNumberInput');
   const cnpjWrap = document.getElementById('cnpjWrap');
   const cnpjInput = document.getElementById('cnpjInput');
   if (!roleSelect) return;
@@ -82,13 +77,45 @@
     baseSelect.required = !isFranchise;
     franchiseNameInput.disabled = !isFranchise;
     franchiseNameInput.required = isFranchise;
-    franchiseNumberSelect.disabled = !isFranchise;
-    franchiseNumberSelect.required = isFranchise;
+    franchiseNumberInput.disabled = !isFranchise;
+    franchiseNumberInput.required = isFranchise;
     cnpjInput.disabled = !isFranchise;
 
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.JT_I18N.refresh(document.querySelector('[data-unit-filter-form]') || document.body);
     }
+  }
+
+
+  function onlyDigits(value, maxLength) {
+    return String(value || '').replace(/\D/g, '').slice(0, maxLength || 99);
+  }
+
+  function formatPhone(value) {
+    const digits = onlyDigits(value, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
+  function formatCnpj(value) {
+    const digits = onlyDigits(value, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+  }
+
+  if (franchiseNumberInput) {
+    franchiseNumberInput.addEventListener('input', function () {
+      franchiseNumberInput.value = formatPhone(franchiseNumberInput.value);
+    });
+  }
+  if (cnpjInput) {
+    cnpjInput.addEventListener('input', function () {
+      cnpjInput.value = formatCnpj(cnpjInput.value);
+    });
   }
 
   roleSelect.addEventListener('change', syncFields);

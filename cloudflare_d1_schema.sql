@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS products (
     image_key TEXT,
     image_content_type TEXT,
     unit_measure TEXT NOT NULL DEFAULT 'un',
+    is_kit INTEGER NOT NULL DEFAULT 0,
+    kit_quantity INTEGER NOT NULL DEFAULT 1,
     description TEXT,
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     price_cents INTEGER NOT NULL DEFAULT 0,

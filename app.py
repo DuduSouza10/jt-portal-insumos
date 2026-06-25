@@ -437,6 +437,10 @@ class User:
     def formatted_cnpj(self) -> str:
         return format_cnpj(self.cnpj)
 
+    @property
+    def formatted_phone(self) -> str:
+        return format_phone_number(self.franchise_number)
+
 
 @dataclass
 class Product:
@@ -448,6 +452,8 @@ class Product:
     image_key: str = ""
     image_content_type: str = ""
     unit_measure: str = "un"
+    is_kit: bool = False
+    kit_quantity: int = 1
     description: str = ""
     stock_quantity: int = 0
     price_cents: int = 0
@@ -672,6 +678,19 @@ def format_cnpj(value: Any) -> str:
     return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
 
 
+def normalize_phone_number(value: Any) -> str:
+    return re.sub(r"\D", "", str(value or ""))[:11]
+
+
+def format_phone_number(value: Any) -> str:
+    digits = normalize_phone_number(value)
+    if len(digits) == 11:
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+    if len(digits) == 10:
+        return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+    return digits
+
+
 def normalize_user_role(value: Any, allow_admin: bool = True) -> str | None:
     normalized = normalize_header(value)
     aliases = {
@@ -718,7 +737,7 @@ def validate_user_profile_fields(
 ) -> tuple[str, str, str, str]:
     organization = str(organization_name or "").strip()
     franchise = str(franchise_name or "").strip()
-    franchise_code = str(franchise_number or "").strip()
+    phone_digits = normalize_phone_number(franchise_number)
     cnpj_digits = normalize_cnpj(cnpj)
 
     if role == "base":
@@ -729,11 +748,12 @@ def validate_user_profile_fields(
     if role == "franchise":
         if not franchise:
             raise ValueError("Informe o nome da franquia.")
-        if franchise_code not in FRANCHISE_UNIT_OPTION_SET:
-            raise ValueError("Selecione um número de franquia válido.")
+        if len(phone_digits) not in {10, 11}:
+            raise ValueError("Informe um telefone válido com DDD, usando apenas números.")
         if cnpj_digits and len(cnpj_digits) != 14:
             raise ValueError("O CNPJ deve possuir 14 números.")
-        return franchise_code, franchise[:160], franchise_code, cnpj_digits
+        franchise_clean = franchise[:160]
+        return franchise_clean, franchise_clean, phone_digits, cnpj_digits
 
     if role == "admin":
         return ADMIN_ORGANIZATION_NAME, "", "", ""
@@ -810,6 +830,8 @@ def row_to_product(row: Any | None) -> Product | None:
         image_key=(row["image_key"] if "image_key" in row.keys() else "") or "",
         image_content_type=(row["image_content_type"] if "image_content_type" in row.keys() else "") or "",
         unit_measure=(row["unit_measure"] if "unit_measure" in row.keys() else None) or "un",
+        is_kit=bool(row["is_kit"]) if "is_kit" in row.keys() else False,
+        kit_quantity=max(1, int(row["kit_quantity"] or 1)) if "kit_quantity" in row.keys() else 1,
         description=row["description"] or "",
         stock_quantity=int(row["stock_quantity"] or 0),
         price_cents=int(row["price_cents"] or 0),
@@ -1048,6 +1070,8 @@ def init_db() -> None:
                 image_key TEXT,
                 image_content_type TEXT,
                 unit_measure TEXT NOT NULL DEFAULT 'un',
+                is_kit INTEGER NOT NULL DEFAULT 0,
+                kit_quantity INTEGER NOT NULL DEFAULT 1,
                 description TEXT,
                 stock_quantity INTEGER NOT NULL DEFAULT 0,
                 price_cents INTEGER NOT NULL DEFAULT 0,
@@ -1239,6 +1263,10 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1")
         if "internal" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN internal INTEGER NOT NULL DEFAULT 0")
+        if "is_kit" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN is_kit INTEGER NOT NULL DEFAULT 0")
+        if "kit_quantity" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1")
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
@@ -2166,6 +2194,11 @@ def product_limit_for(product: Product, user: User) -> int | None:
     return None
 
 
+def effective_product_quantity(product: Product, requested_quantity: int) -> int:
+    multiplier = product.kit_quantity if product.is_kit and product.kit_quantity > 1 else 1
+    return max(1, int(requested_quantity or 0)) * multiplier
+
+
 def parse_required_positive_int(value: Any) -> int | None:
     if value is None:
         return None
@@ -2246,6 +2279,8 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         if user.role == "franchise" and not product.visible_franchise:
             return [], f"{product.name} não está disponível para franquias."
 
+        quantity = effective_product_quantity(product, quantity)
+
         if not user.is_admin:
             limit = product_limit_for(product, user)
             if limit is not None and quantity > limit:
@@ -2264,6 +2299,10 @@ def fill_product_from_form(product: Product) -> Product:
     product.category = request.form.get("category", "").strip()
     product.category_emoji = clean_category_emoji(request.form.get("category_emoji"), product.category)
     product.unit_measure = request.form.get("unit_measure", "").strip() or "un"
+    product.is_kit = request.form.get("is_kit") == "on"
+    product.kit_quantity = parse_required_positive_int(request.form.get("kit_quantity")) or 1
+    if not product.is_kit:
+        product.kit_quantity = 1
     product.description = request.form.get("description", "").strip()
     product.stock_quantity = parse_required_positive_int(request.form.get("stock_quantity")) or 0
     price_raw = (request.form.get("price") or "0").strip()
@@ -2331,6 +2370,8 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "category_emoji": product.category_emoji or default_category_emoji(product.category),
         "image_url": url_for("product_image", product_id=product.id) if product.image_key else "",
         "unit_measure": product.unit_measure or "un",
+        "is_kit": product.is_kit,
+        "kit_quantity": product.kit_quantity if product.is_kit else 1,
         "description": product.description or "",
         "price": format_brl(product.price_cents),
         "stock_quantity": product.stock_quantity if show_stock else None,
@@ -3293,6 +3334,8 @@ PRODUCT_EXPORT_HEADERS_PT = [
     "Categoria",
     "Ícone da categoria",
     "Unidade de medida",
+    "Kit",
+    "Quantidade por kit",
     "Descrição",
     "Estoque disponível",
     "Valor unitário",
@@ -3306,19 +3349,21 @@ PRODUCT_EXPORT_HEADERS_PT = [
 
 PRODUCT_EXPORT_HEADERS_ZH = [
     "ID",
-    "产品名称 / Nome do produto",
-    "类别 / Categoria",
-    "类别图标 / Ícone da categoria",
-    "计量单位 / Unidade de medida",
-    "描述 / Descrição",
-    "可用库存 / Estoque disponível",
-    "单价 / Valor unitário",
-    "基地限制 / Limite para bases",
-    "加盟店限制 / Limite para franquias",
-    "最低订购量 / Quantidade mínima por pedido",
-    "最低库存 / Estoque mínimo",
-    "最高库存 / Estoque máximo",
-    "启用 / Ativo",
+    "产品名称",
+    "类别",
+    "类别图标",
+    "计量单位",
+    "套装",
+    "每套数量",
+    "描述",
+    "可用库存",
+    "单价",
+    "基地限制",
+    "加盟店限制",
+    "最低订购量",
+    "最低库存",
+    "最高库存",
+    "启用",
 ]
 
 EXCEL_ZH_TRANSLATIONS = {
@@ -3370,6 +3415,8 @@ def product_row_for_excel_language(product: Product, language: str = "pt") -> li
             translate_excel_value_to_zh(product.category),
             product.category_emoji,
             translate_excel_value_to_zh(product.unit_measure),
+            translate_excel_value_to_zh("Sim" if product.is_kit else "Não"),
+            product.kit_quantity if product.is_kit else "",
             translate_excel_value_to_zh(product.description),
             product.stock_quantity,
             product.price_brl,
@@ -3389,6 +3436,8 @@ def product_row_for_excel(product: Product) -> list[Any]:
         product.category,
         product.category_emoji,
         product.unit_measure,
+        "Sim" if product.is_kit else "Não",
+        product.kit_quantity if product.is_kit else "",
         product.description,
         product.stock_quantity,
         product.price_brl,
@@ -3424,6 +3473,8 @@ PRODUCT_IMPORT_HEADER_ALIASES = {
     "category": ["Categoria", "Categoria do produto", "Grupo", "Tipo", "类别", "類別", "分类", "分類"],
     "category_emoji": ["Ícone da categoria", "Icone da categoria", "Emoji", "Ícone", "Icone", "类别图标"],
     "unit_measure": ["Unidade de medida", "Unidade", "Unid.", "Unid", "UM", "U.M.", "Medida", "计量单位", "計量單位", "单位", "單位"],
+    "is_kit": ["Kit", "É kit", "E kit", "Produto kit", "套装"],
+    "kit_quantity": ["Quantidade por kit", "Qtd por kit", "Itens por kit", "Unidades por kit", "每套数量"],
     "description": ["Descrição", "Descricao", "Descrição do produto", "Descricao do produto", "Observação", "Observacao", "Detalhes", "描述", "说明", "說明", "备注", "備註"],
     "stock_quantity": ["Estoque disponível", "Estoque disponivel", "Estoque", "Quantidade", "Qtd", "Qtde", "Saldo", "可用库存", "可用庫存", "库存", "庫存", "数量", "數量"],
     "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "Custo", "单价", "單價", "价格", "價格"],
@@ -3467,6 +3518,8 @@ class ProductImportRecord:
     category: str
     category_emoji: str
     unit_measure: str
+    is_kit: bool
+    kit_quantity: int
     description: str
     stock_quantity: int
     price_cents: int
@@ -3492,6 +3545,8 @@ def parse_product_import_record(row_number: int, row_values: list[Any], header_m
             clean_import_text(get_import_value(row_values, header_map, "category")),
         ),
         unit_measure=clean_import_text(get_import_value(row_values, header_map, "unit_measure"), "un") or "un",
+        is_kit=parse_bool_value(get_import_value(row_values, header_map, "is_kit"), default=False),
+        kit_quantity=parse_optional_int(get_import_value(row_values, header_map, "kit_quantity")) or 1,
         description=clean_import_text(get_import_value(row_values, header_map, "description")),
         stock_quantity=parse_optional_int(get_import_value(row_values, header_map, "stock_quantity")) or 0,
         price_cents=parse_money_to_cents(get_import_value(row_values, header_map, "price_cents")),
@@ -3513,6 +3568,8 @@ def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
         normalize_product_lookup_key(record.category),
         record.category_emoji,
         normalize_product_lookup_key(record.unit_measure),
+        bool(record.is_kit),
+        int(record.kit_quantity or 1),
         normalize_product_lookup_key(record.description),
         int(record.stock_quantity or 0),
         int(record.price_cents or 0),
@@ -3610,6 +3667,8 @@ def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
         record.category,
         record.category_emoji,
         record.unit_measure,
+        1 if record.is_kit else 0,
+        int(record.kit_quantity or 1) if record.is_kit else 1,
         record.description,
         int(record.stock_quantity or 0),
         int(record.price_cents or 0),
@@ -3649,6 +3708,8 @@ def product_upsert_sql_rows(rows: list[tuple[int | None, ProductImportRecord]], 
             record.category,
             record.category_emoji,
             record.unit_measure,
+            1 if record.is_kit else 0,
+            int(record.kit_quantity or 1) if record.is_kit else 1,
             record.description,
             int(record.stock_quantity or 0),
             int(record.price_cents or 0),
@@ -3675,12 +3736,14 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
     created = sum(1 for target_id, _record in rows if target_id is None)
     updated = len(rows) - created
     skipped = 0
-    fields = "id, name, category, category_emoji, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, active, catalog_archived, created_at, updated_at"
+    fields = "id, name, category, category_emoji, unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, active, catalog_archived, created_at, updated_at"
     update_set = """
         name = excluded.name,
         category = excluded.category,
         category_emoji = excluded.category_emoji,
         unit_measure = excluded.unit_measure,
+        is_kit = excluded.is_kit,
+        kit_quantity = excluded.kit_quantity,
         description = excluded.description,
         stock_quantity = excluded.stock_quantity,
         price_cents = excluded.price_cents,
@@ -3774,6 +3837,8 @@ def ensure_product_import_columns(conn: Any) -> None:
         ("visible_base", "ALTER TABLE products ADD COLUMN visible_base INTEGER NOT NULL DEFAULT 1"),
         ("visible_franchise", "ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1"),
         ("internal", "ALTER TABLE products ADD COLUMN internal INTEGER NOT NULL DEFAULT 0"),
+        ("is_kit", "ALTER TABLE products ADD COLUMN is_kit INTEGER NOT NULL DEFAULT 0"),
+        ("kit_quantity", "ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -3935,7 +4000,7 @@ USER_IMPORT_HEADER_ALIASES = {
     "status": ["Status do cadastro", "Status", "Situação", "Situacao"],
     "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia"],
     "franchise_name": ["Nome da franquia", "Franquia"],
-    "franchise_number": ["Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
+    "franchise_number": ["Telefone", "Número de telefone", "Numero de telefone", "Telefone da franquia", "Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
     "cnpj": ["CNPJ", "CNPJ da franquia"],
 }
 
@@ -4933,7 +4998,7 @@ def admin_users_template():
         "Status do cadastro",
         "Nome da base",
         "Nome da franquia",
-        "Número da franquia",
+        "Telefone",
         "CNPJ",
     ]
     worksheet.append(headers)
@@ -4955,15 +5020,13 @@ def admin_users_template():
     worksheet.auto_filter.ref = "A1:I1"
 
     lists = workbook.create_sheet("Listas")
-    lists.append(["Tipos de acesso", "Status", "Bases", "Números de franquia"])
+    lists.append(["Tipos de acesso", "Status", "Bases"])
     for row_index, role_label in enumerate(["Base", "Franquia", "Administrador"], start=2):
         lists.cell(row=row_index, column=1, value=role_label)
     for row_index, status_label in enumerate(["Aprovado", "Pendente", "Recusado"], start=2):
         lists.cell(row=row_index, column=2, value=status_label)
     for row_index, base_name in enumerate(BASE_UNIT_OPTIONS, start=2):
         lists.cell(row=row_index, column=3, value=base_name)
-    for row_index, franchise_number in enumerate(FRANCHISE_UNIT_OPTIONS, start=2):
-        lists.cell(row=row_index, column=4, value=franchise_number)
     lists.sheet_state = "hidden"
 
     role_validation = DataValidation(type="list", formula1="'Listas'!$A$2:$A$4", allow_blank=False)
@@ -4973,25 +5036,22 @@ def admin_users_template():
         formula1=f"'Listas'!$C$2:$C${max(2, len(BASE_UNIT_OPTIONS) + 1)}",
         allow_blank=True,
     )
-    franchise_validation = DataValidation(
-        type="list",
-        formula1=f"'Listas'!$D$2:$D${max(2, len(FRANCHISE_UNIT_OPTIONS) + 1)}",
-        allow_blank=True,
-    )
-    for validation in [role_validation, status_validation, base_validation, franchise_validation]:
+    for validation in [role_validation, status_validation, base_validation]:
         worksheet.add_data_validation(validation)
     role_validation.add("D2:D1000")
     status_validation.add("E2:E1000")
     base_validation.add("F2:F1000")
-    franchise_validation.add("H2:H1000")
+    for row in range(2, 1001):
+        worksheet.cell(row=row, column=8).number_format = "@"
+        worksheet.cell(row=row, column=9).number_format = "@"
 
     instructions = workbook.create_sheet("Instruções")
     instructions.column_dimensions["A"].width = 30
     instructions.column_dimensions["B"].width = 95
     instructions.append(["Campo", "Como preencher"])
     instruction_rows = [
-        ("Base", "Preencha Nome da base. Deixe Nome da franquia, Número da franquia e CNPJ vazios."),
-        ("Franquia", "Preencha Nome da franquia e Número da franquia. CNPJ é opcional. Deixe Nome da base vazio."),
+        ("Base", "Preencha Nome da base. Deixe Nome da franquia, Telefone e CNPJ vazios."),
+        ("Franquia", "Preencha Nome da franquia e Telefone com DDD. CNPJ é opcional. Deixe Nome da base vazio."),
         ("Administrador", "Deixe os campos de base, franquia e CNPJ vazios. O administrador recebe acesso a todas as páginas."),
         ("Senha", "Obrigatória para todos os novos usuários. Formate a coluna como texto para preservar zeros à esquerda."),
         ("Status", "Use Aprovado, Pendente ou Recusado."),
@@ -5377,7 +5437,7 @@ def admin_products_export():
             cell.alignment = Alignment(vertical="center")
         if len(row) >= 8:
             row[7].number_format = 'R$ #,##0.00'
-    widths = [10, 38, 24, 16, 24, 48, 18, 18, 22, 24, 24, 18, 18, 14]
+    widths = [10, 38, 24, 16, 24, 12, 18, 48, 18, 18, 22, 24, 24, 18, 18, 14]
     for idx, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(idx)].width = width
     worksheet.freeze_panes = "A2"
@@ -5499,11 +5559,11 @@ def admin_product_new():
                 """
                 INSERT INTO products (
                     name, category, category_emoji, image_name, image_key, image_content_type,
-                    unit_measure, description, stock_quantity,
+                    unit_measure, is_kit, kit_quantity, description, stock_quantity,
                     price_cents, limit_base, limit_franchise, min_order_quantity,
                     min_stock, max_stock, active, visible_base, visible_franchise, internal, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
@@ -5513,6 +5573,8 @@ def admin_product_new():
                     product.image_key,
                     product.image_content_type,
                     product.unit_measure,
+                    1 if product.is_kit else 0,
+                    product.kit_quantity if product.is_kit else 1,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,
@@ -5573,7 +5635,7 @@ def admin_product_edit(product_id: int):
                 """
                 UPDATE products
                 SET name = ?, category = ?, category_emoji = ?, image_name = ?, image_key = ?,
-                    image_content_type = ?, unit_measure = ?, description = ?,
+                    image_content_type = ?, unit_measure = ?, is_kit = ?, kit_quantity = ?, description = ?,
                     stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
                     min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
                     visible_base = ?, visible_franchise = ?, internal = ?, updated_at = ?
@@ -5587,6 +5649,8 @@ def admin_product_edit(product_id: int):
                     product.image_key,
                     product.image_content_type,
                     product.unit_measure,
+                    1 if product.is_kit else 0,
+                    product.kit_quantity if product.is_kit else 1,
                     product.description,
                     product.stock_quantity,
                     product.price_cents,

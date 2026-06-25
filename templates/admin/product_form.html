@@ -73,6 +73,18 @@
       Unidade de medida
       <input name="unit_measure" value="{{ product.unit_measure if product else 'un' }}" placeholder="Ex.: un, caixa, rolo, pacote">
     </label>
+    <fieldset class="product-kit-fieldset">
+      <legend>Kit do produto</legend>
+      <label class="checkbox-line product-kit-toggle">
+        <input type="checkbox" name="is_kit" id="isKitProduct" {% if product and product.is_kit %}checked{% endif %}>
+        Criar como kit
+      </label>
+      <label id="kitQuantityWrap" class="kit-quantity-wrap">
+        Quantidade por kit
+        <input name="kit_quantity" id="kitQuantityInput" type="number" min="1" step="1" value="{{ product.kit_quantity if product and product.is_kit else 1 }}" placeholder="Ex.: 100">
+      </label>
+      <small class="hint">Ex.: kit com 100 lacres. Se o usuário adicionar 2 kits, a solicitação será registrada como 200 unidades.</small>
+    </fieldset>
     <label>
       Estoque disponível
       <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
@@ -151,6 +163,24 @@
   const internalProduct = document.getElementById('internalProduct');
   const visibleBase = document.getElementById('visibleBase');
   const visibleFranchise = document.getElementById('visibleFranchise');
+  const isKitProduct = document.getElementById('isKitProduct');
+  const kitQuantityWrap = document.getElementById('kitQuantityWrap');
+  const kitQuantityInput = document.getElementById('kitQuantityInput');
+
+  function syncKitFields() {
+    if (!isKitProduct || !kitQuantityWrap || !kitQuantityInput) return;
+    const active = isKitProduct.checked;
+    kitQuantityWrap.classList.toggle('kit-disabled', !active);
+    kitQuantityInput.disabled = !active;
+    kitQuantityInput.required = active;
+    if (!active) kitQuantityInput.value = '1';
+  }
+
+  if (isKitProduct) {
+    isKitProduct.addEventListener('change', syncKitFields);
+    syncKitFields();
+  }
+
   function syncInternalVisibility() {
     if (!internalProduct || !visibleBase || !visibleFranchise) return;
     if (internalProduct.checked) {

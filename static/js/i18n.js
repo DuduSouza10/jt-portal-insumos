@@ -850,6 +850,31 @@
     "Atendidas": "已处理"
   });
 
+  Object.assign(zh, {
+    "Telefone": "电话",
+    "Número de telefone": "电话号码",
+    "Número de telefone (com DDD)": "电话号码（含区号）",
+    "CNPJ (somente números)": "CNPJ（仅数字）",
+    "Nome do responsável (quem está solicitando)": "负责人姓名（申请人）",
+    "Nome do responsável (quem usará o acesso)": "负责人姓名（使用此账号的人）",
+    "Tipo de acesso (base ou franquia)": "访问类型（基地或加盟店）",
+    "Tipo de acesso (permissão do usuário)": "访问类型（用户权限）",
+    "Nome da base (unidade J&T)": "基地名称（J&T 网点）",
+    "Nome da franquia (nome exibido no portal)": "加盟店名称（门户显示名称）",
+    "Nome de usuário (login)": "用户名（登录）",
+    "Senha (acesso ao portal)": "密码（门户访问）",
+    "Status do cadastro (aprovação)": "注册状态（审批）",
+    "Kit": "套装",
+    "kits": "套",
+    "Kit do produto": "产品套装",
+    "Criar como kit": "创建为套装",
+    "Quantidade por kit": "每套数量",
+    "Quantidade de kits": "套装数量",
+    "Ex.: kit com 100 lacres. Se o usuário adicionar 2 kits, a solicitação será registrada como 200 unidades.": "例如：每套 100 个封条。用户添加 2 套时，申请将记录为 200 个。",
+    "Cabeçalhos e dados conhecidos em chinês simplificado.": "表头和已知数据使用简体中文。",
+    "Telefone da franquia": "加盟店电话"
+  });
+
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt', 'data-label'];
   const STORAGE_ATTR_PREFIX = 'data-i18n-original-';
   const SKIP_TAGS = new Set(['script', 'style', 'textarea', 'noscript', 'canvas', 'svg', 'path', 'code', 'pre']);

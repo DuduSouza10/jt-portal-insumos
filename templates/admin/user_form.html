@@ -6,11 +6,11 @@
 <div class="card wide-card">
   <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form>
     <label>
-      Nome do responsável
+      Nome do responsável (quem usará o acesso)
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     <label>
-      Tipo de acesso
+      Tipo de acesso (permissão do usuário)
       <select name="role" id="roleSelect" required>
         <option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>
         <option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>
@@ -18,7 +18,7 @@
       </select>
     </label>
     <label id="baseNameWrap">
-      Nome da base
+      Nome da base (unidade J&T)
       <select name="organization_name" id="organizationSelect">
         <option value="" disabled {% if not user or user.role != 'base' %}selected{% endif %}>Selecione a base</option>
         {% if user and user.role == 'base' and user.organization_name and user.organization_name not in base_unit_options %}
@@ -30,36 +30,27 @@
       </select>
     </label>
     <label id="franchiseNameWrap" class="hidden">
-      Nome da franquia
+      Nome da franquia (nome exibido no portal)
       <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">
-      Número da franquia
-      {% set current_franchise_number = (user.franchise_number or user.organization_name) if user and user.role == 'franchise' else '' %}
-      <select name="franchise_number" id="franchiseNumberSelect">
-        <option value="" disabled {% if not current_franchise_number %}selected{% endif %}>Selecione o número da franquia</option>
-        {% if current_franchise_number and current_franchise_number not in franchise_unit_options %}
-          <option value="{{ current_franchise_number }}" selected>{{ current_franchise_number }}</option>
-        {% endif %}
-        {% for unit in franchise_unit_options %}
-          <option value="{{ unit }}" {% if current_franchise_number == unit %}selected{% endif %}>{{ unit }}</option>
-        {% endfor %}
-      </select>
+      Número de telefone (com DDD)
+      <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" value="{{ user.formatted_phone if user else '' }}" placeholder="(00) 00000-0000" autocomplete="tel">
     </label>
     <label id="cnpjWrap" class="hidden">
-      CNPJ <small class="muted">opcional</small>
+      CNPJ (somente números) <small class="muted">opcional</small>
       <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" value="{{ user.formatted_cnpj if user else '' }}" placeholder="00.000.000/0000-00">
     </label>
     <label>
-      Nome de usuário
+      Nome de usuário (login)
       <input name="username" type="text" value="{{ user.username if user else '' }}" placeholder="Ex.: mg_bhz" autocomplete="username" required>
     </label>
     <label>
-      Senha {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
+      Senha (acesso ao portal) {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
       <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Nova senha opcional' }}" {% if is_new %}required{% endif %}>
     </label>
     <label>
-      Status do cadastro
+      Status do cadastro (aprovação)
       <select name="status" required>
         <option value="pending" {% if user and user.status == 'pending' %}selected{% endif %}>Pendente</option>
         <option value="approved" {% if not user or user.status == 'approved' %}selected{% endif %}>Aprovado</option>
@@ -130,7 +121,7 @@
   const franchiseNameWrap = document.getElementById('franchiseNameWrap');
   const franchiseNameInput = document.getElementById('franchiseNameInput');
   const franchiseNumberWrap = document.getElementById('franchiseNumberWrap');
-  const franchiseNumberSelect = document.getElementById('franchiseNumberSelect');
+  const franchiseNumberInput = document.getElementById('franchiseNumberInput');
   const cnpjWrap = document.getElementById('cnpjWrap');
   const cnpjInput = document.getElementById('cnpjInput');
 
@@ -149,8 +140,8 @@
     baseSelect.required = isBase;
     franchiseNameInput.disabled = !isFranchise;
     franchiseNameInput.required = isFranchise;
-    franchiseNumberSelect.disabled = !isFranchise;
-    franchiseNumberSelect.required = isFranchise;
+    franchiseNumberInput.disabled = !isFranchise;
+    franchiseNumberInput.required = isFranchise;
     cnpjInput.disabled = !isFranchise;
 
     document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
@@ -190,6 +181,38 @@
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('permission-modal-open');
+  }
+
+
+  function onlyDigits(value, maxLength) {
+    return String(value || '').replace(/\D/g, '').slice(0, maxLength || 99);
+  }
+
+  function formatPhone(value) {
+    const digits = onlyDigits(value, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
+  function formatCnpj(value) {
+    const digits = onlyDigits(value, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+  }
+
+  if (franchiseNumberInput) {
+    franchiseNumberInput.addEventListener('input', function () {
+      franchiseNumberInput.value = formatPhone(franchiseNumberInput.value);
+    });
+  }
+  if (cnpjInput) {
+    cnpjInput.addEventListener('input', function () {
+      cnpjInput.value = formatCnpj(cnpjInput.value);
+    });
   }
 
   if (openButton) openButton.addEventListener('click', openModal);

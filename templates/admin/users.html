@@ -84,7 +84,7 @@
   <table>
     <thead>
       <tr>
-        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Base/Franquia</th><th>Número</th><th>CNPJ</th><th>Status</th><th>Ações</th>
+        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Base/Franquia</th><th>Telefone</th><th>CNPJ</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="userTableBody">
@@ -98,7 +98,7 @@
         data-responsible="{{ user.responsible_name|e }}"
         data-username="{{ user.username|e }}"
         data-unit="{{ (user.franchise_name or user.organization_name)|e }}"
-        data-search="{{ (user.responsible_name ~ ' ' ~ user.username ~ ' ' ~ user.organization_name ~ ' ' ~ user.franchise_name ~ ' ' ~ user.franchise_number ~ ' ' ~ user.cnpj ~ ' ' ~ user.formatted_cnpj)|e }}"
+        data-search="{{ (user.responsible_name ~ ' ' ~ user.username ~ ' ' ~ user.organization_name ~ ' ' ~ user.franchise_name ~ ' ' ~ user.franchise_number ~ ' ' ~ user.formatted_phone ~ ' ' ~ user.cnpj ~ ' ' ~ user.formatted_cnpj)|e }}"
       >
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
@@ -110,7 +110,7 @@
             {{ user.organization_name }}
           {% endif %}
         </td>
-        <td data-label="Número">{{ (user.franchise_number or user.organization_name) if user.role == 'franchise' else '-' }}</td>
+        <td data-label="Telefone">{{ user.formatted_phone if user.role == 'franchise' else '-' }}</td>
         <td data-label="CNPJ">{{ user.formatted_cnpj or '-' }}</td>
         <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
         <td class="actions-cell" data-label="Ações">

@@ -56,6 +56,24 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function isKitProduct(product) {
+  return !!(product && product.is_kit && Number(product.kit_quantity || 0) > 1);
+}
+
+function kitMultiplier(product) {
+  return isKitProduct(product) ? Math.max(1, Number(product.kit_quantity || 1)) : 1;
+}
+
+function toRequestUnits(product, quantity) {
+  const numeric = Math.max(0, Number(quantity || 0));
+  return numeric * kitMultiplier(product);
+}
+
+function kitUnitText(product) {
+  const unitLabel = jtText(product.unit_measure || 'un');
+  return `${kitMultiplier(product)} ${unitLabel}`;
+}
+
 async function loadProducts() {
   const q = productSearch.value.trim();
   const category = categoryFilter ? categoryFilter.value : '';
@@ -99,11 +117,12 @@ function bindAddProduct(container, product) {
     }
     const current = cart.get(product.id)?.quantity || 0;
     const requestedQuantity = current + quantity;
-    if (requestedQuantity < minimum) {
+    const requestedUnits = toRequestUnits(product, requestedQuantity);
+    if (requestedUnits < minimum) {
       setMessage(jtText(`A quantidade mínima para ${productName} é ${minimum}.`), 'err');
       return;
     }
-    if (product.limit !== null && product.limit !== undefined && requestedQuantity > product.limit) {
+    if (product.limit !== null && product.limit !== undefined && requestedUnits > product.limit) {
       setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
       return;
     }
@@ -126,9 +145,11 @@ function renderProductCards() {
     const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
     const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unitLabel)}</span>` : '';
     const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
+    const kitBadge = isKitProduct(product) ? `<span class="badge">${jtText('Kit')}: ${escapeHtml(kitUnitText(product))}</span>` : '';
     const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
     const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unitLabel)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
     const minimum = Number(product.min_order_quantity || 1);
+    const inputMinimum = isKitProduct(product) ? 1 : minimum;
     const minimumBadge = minimum > 1 ? `<span class="badge minimum-badge">${jtText('Pedido mínimo')}: ${minimum} ${escapeHtml(unitLabel)}</span>` : '';
     const categoryEmoji = escapeHtml(product.category_emoji || '📦');
     const imageButton = product.image_url ? `
@@ -150,22 +171,23 @@ function renderProductCards() {
             <span class="product-icon" aria-hidden="true">${categoryEmoji}</span>
             ${imageButton}
           </span>
-          <span class="product-category" data-no-i18n>${escapeHtml(productCategory)}</span>
+          <span class="product-category">${escapeHtml(productCategory)}</span>
         </div>
         <div class="product-copy">
-          <h3 data-no-i18n>${escapeHtml(productName)}</h3>
-          <p data-no-i18n>${escapeHtml(productDescription)}</p>
+          <h3>${escapeHtml(productName)}</h3>
+          <p>${escapeHtml(productDescription)}</p>
         </div>
         <div class="meta-row">
           ${priceBadge}
           ${unitBadge}
+          ${kitBadge}
           ${stockBadge}
           ${limitBadge}
           ${minimumBadge}
         </div>
       </div>
       <div class="add-row">
-        <input data-product-quantity type="number" min="${minimum}" value="${minimum}" aria-label="${jtText('Quantidade')}">
+        <input data-product-quantity type="number" min="${inputMinimum}" value="${inputMinimum}" aria-label="${jtText(isKitProduct(product) ? 'Quantidade de kits' : 'Quantidade')}">
         <button data-add-product class="btn primary" type="button">${jtText('Adicionar')}</button>
       </div>
     `;
@@ -184,6 +206,8 @@ function renderProductTable() {
     const productCategory = product.category || 'Sem categoria';
     const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
     const minimum = Number(product.min_order_quantity || 1);
+    const inputMinimum = isKitProduct(product) ? 1 : minimum;
+    const kitText = isKitProduct(product) ? `${jtText('Kit')}: ${kitUnitText(product)}` : '-';
     const price = product.show_price
       ? `<strong>${escapeHtml(product.price)}</strong><small>/ ${escapeHtml(unitLabel)}</small>`
       : `<span class="muted">${jtText('Oculto')}</span>`;
@@ -212,14 +236,14 @@ function renderProductTable() {
           <div class="request-product-main ${product.image_url ? 'has-image' : ''}">
             <span class="request-product-icon" aria-hidden="true">${escapeHtml(product.category_emoji || '📦')}</span>
             ${imageButton}
-            <div data-no-i18n>
+            <div>
               <strong>${escapeHtml(productName)}</strong>
               <small>${escapeHtml(productDescription)}</small>
             </div>
           </div>
         </td>
         <td data-label="${escapeHtml(jtText('Categoria'))}">
-          <strong data-no-i18n>${escapeHtml(productCategory)}</strong>
+          <strong>${escapeHtml(productCategory)}</strong>
         </td>
         <td class="request-product-value" data-label="${escapeHtml(jtText('Preço / unidade'))}">${price}</td>
         <td class="request-product-value" data-label="${escapeHtml(jtText('Estoque'))}">${stock}</td>
@@ -227,10 +251,11 @@ function renderProductTable() {
           <div class="request-product-rules">
             <span><b>${jtText('Limite')}:</b> ${limit}</span>
             <span><b>${jtText('Pedido mínimo')}:</b> ${minimumOrder}</span>
+            <span><b>${jtText('Kit')}:</b> ${escapeHtml(kitText)}</span>
           </div>
         </td>
         <td class="request-product-quantity" data-label="${escapeHtml(jtText('Quantidade'))}">
-          <input data-product-quantity type="number" min="${minimum}" value="${minimum}" aria-label="${escapeHtml(jtText('Quantidade'))}">
+          <input data-product-quantity type="number" min="${inputMinimum}" value="${inputMinimum}" aria-label="${escapeHtml(jtText(isKitProduct(product) ? 'Quantidade de kits' : 'Quantidade'))}">
         </td>
         <td class="request-product-action" data-label="${escapeHtml(jtText('Ação'))}">
           <button data-add-product class="btn primary" type="button">${jtText('Adicionar')}</button>
@@ -283,7 +308,7 @@ function renderProducts() {
 function renderCart() {
   cartItems.innerHTML = '';
   const values = Array.from(cart.values());
-  const totalQty = values.reduce((sum, item) => sum + item.quantity, 0);
+  const totalQty = values.reduce((sum, item) => sum + toRequestUnits(item.product, item.quantity), 0);
   cartCount.textContent = `${totalQty} ${totalQty === 1 ? jtText('item') : jtText('itens')}`;
 
   if (!values.length) {
@@ -296,13 +321,17 @@ function renderCart() {
     div.className = 'cart-item';
     div.style.animationDelay = `${Math.min(index * 0.035, 0.25)}s`;
     const minimum = Number(item.product.min_order_quantity || 1);
-    const minimumText = minimum > 1 ? ` • ${jtText('Mínimo')}: ${minimum}` : '';
+    const inputMinimum = isKitProduct(item.product) ? 1 : minimum;
+    const unitLabel = jtText(item.product.unit_measure || 'un');
+    const requestedUnits = toRequestUnits(item.product, item.quantity);
+    const minimumText = minimum > 1 ? ` • ${jtText('Mínimo')}: ${minimum} ${unitLabel}` : '';
+    const kitText = isKitProduct(item.product) ? ` • ${item.quantity} ${jtText('kits')} = ${requestedUnits} ${unitLabel}` : '';
     div.innerHTML = `
       <div>
-        <strong data-no-i18n>${escapeHtml(item.product.name || '')}</strong>
-        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(jtText(item.product.unit_measure || 'un'))}${minimumText}</span>
+        <strong>${escapeHtml(item.product.name || '')}</strong>
+        <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(unitLabel)}${minimumText}${escapeHtml(kitText)}</span>
       </div>
-      <input type="number" min="${minimum}" value="${item.quantity}">
+      <input type="number" min="${inputMinimum}" value="${item.quantity}" aria-label="${escapeHtml(jtText(isKitProduct(item.product) ? 'Quantidade de kits' : 'Quantidade'))}">
       <button class="btn ghost danger" type="button">×</button>
     `;
     const input = div.querySelector('input');
@@ -313,12 +342,13 @@ function renderCart() {
         input.value = item.quantity;
         return;
       }
-      if (quantity < minimum) {
+      const requestedUnits = toRequestUnits(item.product, quantity);
+      if (requestedUnits < minimum) {
         input.value = item.quantity;
         setMessage(jtText(`A quantidade mínima para ${item.product.name} é ${minimum}.`), 'err');
         return;
       }
-      if (item.product.limit !== null && item.product.limit !== undefined && quantity > item.product.limit) {
+      if (item.product.limit !== null && item.product.limit !== undefined && requestedUnits > item.product.limit) {
         input.value = item.quantity;
         setMessage(jtText(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`), 'err');
         return;

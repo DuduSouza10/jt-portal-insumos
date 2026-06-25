@@ -32,7 +32,7 @@
         <select id="productCategoryFilter" name="category">
           <option value="">Todas</option>
           {% for category in product_categories_filter|default([]) %}
-          <option value="{{ category }}" data-no-i18n {{ 'selected' if product_filters.category == category else '' }}>{{ category }}</option>
+          <option value="{{ category }}" {{ 'selected' if product_filters.category == category else '' }}>{{ category }}</option>
           {% endfor %}
         </select>
       </label>
@@ -79,7 +79,7 @@
         </a>
         <a class="export-language-option btn primary" href="{{ url_for('admin_products_export', lang='zh') }}">
           <strong>Chinês simplificado</strong>
-          <small>Cabeçalhos bilíngues e dados conhecidos traduzidos.</small>
+          <small>Cabeçalhos e dados conhecidos em chinês simplificado.</small>
         </a>
       </div>
     </section>
@@ -107,13 +107,13 @@
       </label>
     </fieldset>
     <button class="btn primary" type="submit">Importar dados</button>
-    <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.</small>
+    <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Kit, Quantidade por kit, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.</small>
   </form>
   <div class="products-table-wrap">
   <table class="products-admin-table">
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Público</th><th>Unidade</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Público</th><th>Unidade</th><th>Kit</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="productTableBody">
@@ -136,10 +136,10 @@
               <img src="{{ url_for('product_image', product_id=product.id) }}" alt="{{ product.name }}">
             </button>
             {% endif %}
-            <div data-no-i18n><strong>{{ product.name }}</strong>{% if product.description %}<br><small>{{ product.description }}</small>{% endif %}</div>
+            <div><strong>{{ product.name }}</strong>{% if product.description %}<br><small>{{ product.description }}</small>{% endif %}</div>
           </div>
         </td>
-        <td data-label="Categoria"><span data-no-i18n>{{ product.category_emoji }} {{ product.category or '-' }}</span></td>
+        <td data-label="Categoria"><span>{{ product.category_emoji }} {{ product.category or '-' }}</span></td>
         <td data-label="Público">
           {% if product.internal %}
             <span class="audience-pill internal">Interno</span>
@@ -150,6 +150,7 @@
           {% endif %}
         </td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
+        <td data-label="Kit">{% if product.is_kit %}<span class="stock-pill healthy">{{ product.kit_quantity }} {{ product.unit_measure or 'un' }}</span>{% else %}<span class="muted">Não</span>{% endif %}</td>
         <td class="product-stock-cell" data-label="Estoque"><strong>{{ product.stock_quantity }}</strong></td>
         <td data-label="Pedido mín.">{{ product.min_order_quantity if product.min_order_quantity is not none else '-' }}</td>
         <td data-label="Min.">{{ product.min_stock if product.min_stock is not none else '-' }}</td>
@@ -168,10 +169,10 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="14" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="15" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
       {% if products %}
-      <tr id="productLiveEmpty" class="hidden"><td colspan="14" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      <tr id="productLiveEmpty" class="hidden"><td colspan="15" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
       {% endif %}
     </tbody>
   </table>
