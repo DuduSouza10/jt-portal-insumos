@@ -103,11 +103,16 @@
     <div class="stock-priority-list">
       {% for row in risk_rows %}
       <article class="stock-priority-item {{ row.status }}" data-stock-product="{{ row.product.name|e }}" data-stock-category="{{ (row.product.category or 'Sem categoria')|e }}">
-        <div>
-          <strong>{{ row.product.name }}</strong>
-          <small>{{ row.label }} • Min {{ row.min if row.min is not none else '-' }} / Máx {{ row.max if row.max is not none else '-' }}</small>
+        <div class="stock-priority-main">
+          <div class="stock-priority-copy">
+            <strong>{{ row.product.name }}</strong>
+            <small>{{ row.label }} • Min {{ row.min if row.min is not none else '-' }} / Máx {{ row.max if row.max is not none else '-' }}</small>
+          </div>
+          <div class="stock-priority-value">
+            <b>{{ row.product.stock_quantity }}</b>
+            <span>{{ row.product.unit_measure or 'un' }}</span>
+          </div>
         </div>
-        <b>{{ row.product.stock_quantity }}</b> <small>{{ row.product.unit_measure or 'un' }}</small>
       </article>
       {% else %}
       <p class="muted">Nenhum produto cadastrado.</p>
