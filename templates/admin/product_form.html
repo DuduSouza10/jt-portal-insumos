@@ -3,141 +3,260 @@
 {% block page_title %}{{ 'Editar produto' if product else 'Novo produto' }}{% endblock %}
 {% block page_subtitle %}Defina estoque, valor, limites, quantidade mínima por pedido e parâmetros de estoque.{% endblock %}
 {% block content %}
-<div class="card wide-card">
-  <form id="productForm" method="post" class="form-grid two-cols" enctype="multipart/form-data">
-    <label>
-      Nome do produto
-      <input name="name" value="{{ product.name if product else '' }}" required>
-    </label>
-    <div class="category-field">
-      <label for="categorySearch">Categoria</label>
-      <input type="hidden" name="category" id="categoryValue" value="{{ product.category if product else '' }}">
-      <input type="hidden" name="category_emoji" id="categoryEmojiValue" value="{{ product.category_emoji if product else '' }}">
-      <div class="category-picker">
-        <span id="categoryEmojiPreview" class="category-emoji-preview" aria-hidden="true">{{ product.category_emoji if product else '📦' }}</span>
-        <div class="category-search-wrap">
-          <input
-            id="categorySearch"
-            type="search"
-            value="{{ product.category if product else '' }}"
-            placeholder="Pesquisar ou selecionar categoria..."
-            autocomplete="off"
-            aria-autocomplete="list"
-            aria-controls="categorySuggestions"
-            aria-expanded="false"
-          >
-          <div id="categorySuggestions" class="category-suggestions hidden" role="listbox"></div>
-        </div>
-        <button id="openNewCategory" class="btn ghost category-new-button" type="button">+ Nova categoria</button>
+<div class="card wide-card product-form-card">
+  <form id="productForm" method="post" class="form-grid" enctype="multipart/form-data">
+    <section class="product-form-hero full">
+      <div class="product-form-hero-copy">
+        <span class="product-form-kicker">Cadastro de produto</span>
+        <h2>{{ 'Editar produto' if product else 'Criar novo produto' }}</h2>
+        <p>
+          Organize as informações principais, estoque e regras de solicitação em uma tela mais clara e rápida de preencher.
+        </p>
       </div>
-      <div id="newCategoryPanel" class="new-category-panel hidden">
-        <label class="new-category-emoji">
-          Ícone
-          <input id="newCategoryEmoji" type="text" value="📦" maxlength="8" aria-label="Emoji da categoria">
+      <div class="product-form-hero-aside">
+        <div class="hero-chip-group">
+          <span class="hero-chip">Estoque</span>
+          <span class="hero-chip">Limites</span>
+          <span class="hero-chip">Público</span>
+          <span class="hero-chip">Kit</span>
+        </div>
+        <small>Preencha os blocos abaixo para manter o cadastro visualmente organizado.</small>
+      </div>
+    </section>
+
+    <section class="form-panel full">
+      <div class="form-panel-head">
+        <div>
+          <span class="form-panel-kicker">Identificação</span>
+          <h3>Informações principais</h3>
+        </div>
+        <p>Defina nome, categoria e imagem que serão exibidos no catálogo.</p>
+      </div>
+
+      <div class="form-panel-grid two-cols-grid">
+        <label class="field-card">
+          <span class="field-label">Nome do produto</span>
+          <input name="name" value="{{ product.name if product else '' }}" required placeholder="Ex.: Crachá com cordão">
         </label>
-        <input id="newCategoryInput" type="text" placeholder="Nome da nova categoria" maxlength="120">
-        <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
-        <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
-      </div>
-      <small class="hint">O ícone escolhido será usado em todos os produtos dessa categoria.</small>
-    </div>
-    <div class="product-image-field full">
-      <label for="productImage">Imagem do produto</label>
-      <div class="product-image-editor">
-        {% if product and product.image_key %}
-        <button
-          class="product-image-current"
-          type="button"
-          data-image-preview="{{ url_for('product_image', product_id=product.id) }}"
-          data-image-title="{{ product.name }}"
-          title="Ampliar imagem"
-        >
-          <img src="{{ url_for('product_image', product_id=product.id) }}" alt="{{ product.name }}">
-        </button>
-        {% else %}
-        <span class="product-image-placeholder" aria-hidden="true">🖼️</span>
-        {% endif %}
-        <div class="product-image-input">
-          <input id="productImage" name="product_image" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
-          <small class="hint">PNG, JPG, WEBP ou GIF. Tamanho máximo: 3 MB.</small>
-          {% if product and product.image_key %}
-          <label class="checkbox-line remove-product-image">
-            <input type="checkbox" name="remove_image">
-            Remover imagem atual
-          </label>
-          {% endif %}
+
+        <div class="category-field field-card">
+          <label for="categorySearch">Categoria</label>
+          <input type="hidden" name="category" id="categoryValue" value="{{ product.category if product else '' }}">
+          <input type="hidden" name="category_emoji" id="categoryEmojiValue" value="{{ product.category_emoji if product else '' }}">
+          <div class="category-picker">
+            <span id="categoryEmojiPreview" class="category-emoji-preview" aria-hidden="true">{{ product.category_emoji if product else '📦' }}</span>
+            <div class="category-search-wrap">
+              <input
+                id="categorySearch"
+                type="search"
+                value="{{ product.category if product else '' }}"
+                placeholder="Pesquisar ou selecionar categoria..."
+                autocomplete="off"
+                aria-autocomplete="list"
+                aria-controls="categorySuggestions"
+                aria-expanded="false"
+              >
+              <div id="categorySuggestions" class="category-suggestions hidden" role="listbox"></div>
+            </div>
+            <button id="openNewCategory" class="btn ghost category-new-button" type="button">+ Nova categoria</button>
+          </div>
+          <div id="newCategoryPanel" class="new-category-panel hidden">
+            <label class="new-category-emoji">
+              Ícone
+              <input id="newCategoryEmoji" type="text" value="📦" maxlength="8" aria-label="Emoji da categoria">
+            </label>
+            <input id="newCategoryInput" type="text" placeholder="Nome da nova categoria" maxlength="120">
+            <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
+            <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
+          </div>
+          <small class="hint">O ícone escolhido será usado em todos os produtos dessa categoria.</small>
+        </div>
+
+        <div class="product-image-field product-image-field-premium full">
+          <label for="productImage">Imagem do produto</label>
+          <div class="product-image-editor product-image-editor-premium">
+            <div class="product-image-visual-shell">
+              <button
+                id="productImagePreviewButton"
+                class="product-image-current product-image-card{% if not (product and product.image_key) %} hidden{% endif %}"
+                type="button"
+                {% if product and product.image_key %}
+                data-image-preview="{{ url_for('product_image', product_id=product.id) }}"
+                data-image-title="{{ product.name }}"
+                data-initial-preview="{{ url_for('product_image', product_id=product.id) }}"
+                data-initial-title="{{ product.name }}"
+                title="Ampliar imagem"
+                {% endif %}
+              >
+                <img
+                  id="productImagePreviewImg"
+                  {% if product and product.image_key %}src="{{ url_for('product_image', product_id=product.id) }}"{% endif %}
+                  alt="{{ product.name if product else 'Pré-visualização da imagem do produto' }}"
+                >
+              </button>
+              <div id="productImagePlaceholder" class="product-image-placeholder product-image-card{% if product and product.image_key %} hidden{% endif %}" aria-hidden="true">
+                <span>🖼️</span>
+                <strong>Prévia da imagem</strong>
+                <small>Nenhuma imagem selecionada</small>
+              </div>
+            </div>
+
+            <div class="product-image-input product-image-input-premium">
+              <div class="product-image-texts">
+                <strong>Selecione uma imagem de capa</strong>
+                <p>Use uma imagem nítida para deixar o catálogo mais organizado e profissional.</p>
+              </div>
+              <input id="productImage" name="product_image" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif">
+              <small class="hint">PNG, JPG, WEBP ou GIF. Tamanho máximo: 3 MB.</small>
+              {% if product and product.image_key %}
+              <label class="checkbox-line remove-product-image remove-product-image-premium">
+                <input type="checkbox" name="remove_image" id="removeProductImage">
+                Remover imagem atual
+              </label>
+              {% endif %}
+            </div>
+          </div>
         </div>
       </div>
+    </section>
+
+    <div class="product-form-columns full">
+      <section class="form-panel">
+        <div class="form-panel-head compact">
+          <div>
+            <span class="form-panel-kicker">Configuração</span>
+            <h3>Detalhes do produto</h3>
+          </div>
+          <p>Defina unidade, kit e descrição.</p>
+        </div>
+
+        <div class="form-panel-grid single-col-grid">
+          <label class="field-card">
+            <span class="field-label">Unidade de medida</span>
+            <input name="unit_measure" value="{{ product.unit_measure if product else 'un' }}" placeholder="Ex.: unidade, caixa, rolo, pacote">
+          </label>
+
+          <fieldset class="product-kit-fieldset field-card">
+            <legend>Kit do produto</legend>
+            <label class="checkbox-line product-kit-toggle">
+              <input type="checkbox" name="is_kit" id="isKitProduct" {% if product and product.is_kit %}checked{% endif %}>
+              Criar como kit
+            </label>
+            <label id="kitQuantityWrap" class="kit-quantity-wrap">
+              Quantidade por kit
+              <input name="kit_quantity" id="kitQuantityInput" type="number" min="1" step="1" value="{{ product.kit_quantity if product and product.is_kit else 1 }}" placeholder="Ex.: 100">
+            </label>
+            <small class="hint">Ex.: kit com 100 lacres. Se o usuário adicionar 2 kits, a solicitação será registrada como 200 unidades.</small>
+          </fieldset>
+
+          <label class="field-card textarea-card">
+            <span class="field-label">Descrição</span>
+            <textarea name="description" rows="6" placeholder="Descreva características, uso ou observações importantes do produto.">{{ product.description if product else '' }}</textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="form-panel">
+        <div class="form-panel-head compact">
+          <div>
+            <span class="form-panel-kicker">Estoque</span>
+            <h3>Valores e limites</h3>
+          </div>
+          <p>Controle disponibilidade, valor e regras de solicitação.</p>
+        </div>
+
+        <div class="form-panel-grid two-cols-grid metrics-grid">
+          <label class="field-card">
+            <span class="field-label">Estoque disponível</span>
+            <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
+          </label>
+          <label class="field-card">
+            <span class="field-label">Valor unitário</span>
+            <input name="price" inputmode="decimal" value="{{ ('%.2f' % product.price_brl).replace('.', ',') if product else '0,00' }}" required>
+          </label>
+          <label class="field-card">
+            <span class="field-label">Limite para bases</span>
+            <input name="limit_base" type="number" min="0" value="{{ product.limit_base if product and product.limit_base is not none else '' }}" placeholder="Vazio = sem limite">
+          </label>
+          <label class="field-card">
+            <span class="field-label">Limite para franquias</span>
+            <input name="limit_franchise" type="number" min="0" value="{{ product.limit_franchise if product and product.limit_franchise is not none else '' }}" placeholder="Vazio = sem limite">
+          </label>
+          <label class="field-card">
+            <span class="field-label">Quantidade mínima por pedido</span>
+            <input name="min_order_quantity" type="number" min="1" value="{{ product.min_order_quantity if product and product.min_order_quantity is not none else '' }}" placeholder="Opcional, ex.: 5">
+          </label>
+          <label class="field-card">
+            <span class="field-label">Estoque mínimo</span>
+            <input name="min_stock" type="number" min="0" value="{{ product.min_stock if product and product.min_stock is not none else '' }}" placeholder="Ex.: 100">
+          </label>
+          <label class="field-card full-on-metrics">
+            <span class="field-label">Estoque máximo</span>
+            <input name="max_stock" type="number" min="0" value="{{ product.max_stock if product and product.max_stock is not none else '' }}" placeholder="Ex.: 500">
+          </label>
+        </div>
+      </section>
     </div>
-    <label>
-      Unidade de medida
-      <input name="unit_measure" value="{{ product.unit_measure if product else 'un' }}" placeholder="Ex.: un, caixa, rolo, pacote">
-    </label>
-    <fieldset class="product-kit-fieldset">
-      <legend>Kit do produto</legend>
-      <label class="checkbox-line product-kit-toggle">
-        <input type="checkbox" name="is_kit" id="isKitProduct" {% if product and product.is_kit %}checked{% endif %}>
-        Criar como kit
-      </label>
-      <label id="kitQuantityWrap" class="kit-quantity-wrap">
-        Quantidade por kit
-        <input name="kit_quantity" id="kitQuantityInput" type="number" min="1" step="1" value="{{ product.kit_quantity if product and product.is_kit else 1 }}" placeholder="Ex.: 100">
-      </label>
-      <small class="hint">Ex.: kit com 100 lacres. Se o usuário adicionar 2 kits, a solicitação será registrada como 200 unidades.</small>
-    </fieldset>
-    <label>
-      Estoque disponível
-      <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
-    </label>
-    <label>
-      Valor unitário
-      <input name="price" inputmode="decimal" value="{{ ('%.2f' % product.price_brl).replace('.', ',') if product else '0,00' }}" required>
-    </label>
-    <label>
-      Limite para bases
-      <input name="limit_base" type="number" min="0" value="{{ product.limit_base if product and product.limit_base is not none else '' }}" placeholder="Vazio = sem limite">
-    </label>
-    <label>
-      Limite para franquias
-      <input name="limit_franchise" type="number" min="0" value="{{ product.limit_franchise if product and product.limit_franchise is not none else '' }}" placeholder="Vazio = sem limite">
-    </label>
-    <label>
-      Quantidade mínima por pedido
-      <input name="min_order_quantity" type="number" min="1" value="{{ product.min_order_quantity if product and product.min_order_quantity is not none else '' }}" placeholder="Opcional, ex.: 5">
-    </label>
-    <label>
-      Estoque mínimo
-      <input name="min_stock" type="number" min="0" value="{{ product.min_stock if product and product.min_stock is not none else '' }}" placeholder="Ex.: 100">
-    </label>
-    <label>
-      Estoque máximo
-      <input name="max_stock" type="number" min="0" value="{{ product.max_stock if product and product.max_stock is not none else '' }}" placeholder="Ex.: 500">
-    </label>
-    <label class="full">
-      Descrição
-      <textarea name="description" rows="4">{{ product.description if product else '' }}</textarea>
-    </label>
-    <label class="checkbox-line full">
-      <input type="checkbox" name="active" {% if not product or product.active %}checked{% endif %}>
-      Produto ativo para solicitação
-    </label>
-    <fieldset class="product-audience full">
-      <legend>Público do produto</legend>
-      <label class="checkbox-line internal-product-option">
-        <input type="checkbox" name="internal" id="internalProduct" {% if product and product.internal %}checked{% endif %}>
-        Interno
-      </label>
-      <label class="checkbox-line">
-        <input type="checkbox" name="visible_base" id="visibleBase" {% if not product or product.visible_base %}checked{% endif %}>
-        Base
-      </label>
-      <label class="checkbox-line">
-        <input type="checkbox" name="visible_franchise" id="visibleFranchise" {% if not product or product.visible_franchise %}checked{% endif %}>
-        Franquia
-      </label>
-      <small class="hint">Marque Interno para produtos usados somente pela empresa. Produtos internos não aparecem para bases/franquias.</small>
-    </fieldset>
-    <div class="full form-actions">
+
+    <div class="product-form-columns full product-form-footer-panels">
+      <section class="form-panel">
+        <div class="form-panel-head compact">
+          <div>
+            <span class="form-panel-kicker">Visibilidade</span>
+            <h3>Público do produto</h3>
+          </div>
+          <p>Escolha para quem o item ficará disponível.</p>
+        </div>
+
+        <fieldset class="product-audience premium-audience-panel">
+          <legend>Público do produto</legend>
+          <label class="checkbox-line internal-product-option audience-option">
+            <input type="checkbox" name="internal" id="internalProduct" {% if product and product.internal %}checked{% endif %}>
+            <span>
+              <strong>Interno</strong>
+              <small>Uso somente pela empresa.</small>
+            </span>
+          </label>
+          <label class="checkbox-line audience-option">
+            <input type="checkbox" name="visible_base" id="visibleBase" {% if not product or product.visible_base %}checked{% endif %}>
+            <span>
+              <strong>Base</strong>
+              <small>Disponível para bases.</small>
+            </span>
+          </label>
+          <label class="checkbox-line audience-option">
+            <input type="checkbox" name="visible_franchise" id="visibleFranchise" {% if not product or product.visible_franchise %}checked{% endif %}>
+            <span>
+              <strong>Franquia</strong>
+              <small>Disponível para franquias.</small>
+            </span>
+          </label>
+          <small class="hint">Marque Interno para produtos usados somente pela empresa. Produtos internos não aparecem para bases/franquias.</small>
+        </fieldset>
+      </section>
+
+      <section class="form-panel">
+        <div class="form-panel-head compact">
+          <div>
+            <span class="form-panel-kicker">Status</span>
+            <h3>Publicação do produto</h3>
+          </div>
+          <p>Controle se o item pode ser solicitado no portal.</p>
+        </div>
+
+        <div class="product-status-panel">
+          <label class="checkbox-line product-active-toggle">
+            <input type="checkbox" name="active" {% if not product or product.active %}checked{% endif %}>
+            <span>
+              <strong>Produto ativo para solicitação</strong>
+              <small>Quando desativado, o item deixa de aparecer no catálogo para novos pedidos.</small>
+            </span>
+          </label>
+        </div>
+      </section>
+    </div>
+
+    <div class="full form-actions product-form-actions">
       <button class="btn primary" type="submit">Salvar produto</button>
       <a class="btn ghost" href="{{ url_for('admin_products') }}">Cancelar</a>
     </div>
@@ -166,6 +285,12 @@
   const isKitProduct = document.getElementById('isKitProduct');
   const kitQuantityWrap = document.getElementById('kitQuantityWrap');
   const kitQuantityInput = document.getElementById('kitQuantityInput');
+  const imageInput = document.getElementById('productImage');
+  const imagePreviewButton = document.getElementById('productImagePreviewButton');
+  const imagePreviewImg = document.getElementById('productImagePreviewImg');
+  const imagePlaceholder = document.getElementById('productImagePlaceholder');
+  const removeImageCheckbox = document.getElementById('removeProductImage');
+  let temporaryImageUrl = null;
 
   function syncKitFields() {
     if (!isKitProduct || !kitQuantityWrap || !kitQuantityInput) return;
@@ -175,6 +300,64 @@
     kitQuantityInput.required = active;
     if (!active) kitQuantityInput.value = '1';
   }
+
+  function releaseTemporaryImage() {
+    if (temporaryImageUrl) {
+      URL.revokeObjectURL(temporaryImageUrl);
+      temporaryImageUrl = null;
+    }
+  }
+
+  function showImagePreview(src, title) {
+    if (!imagePreviewButton || !imagePreviewImg || !imagePlaceholder) return;
+    imagePreviewImg.src = src;
+    imagePreviewButton.dataset.imagePreview = src;
+    imagePreviewButton.dataset.imageTitle = title || 'Pré-visualização da imagem do produto';
+    imagePreviewButton.title = 'Ampliar imagem';
+    imagePreviewButton.classList.remove('hidden');
+    imagePlaceholder.classList.add('hidden');
+  }
+
+  function hideImagePreview() {
+    if (!imagePreviewButton || !imagePreviewImg || !imagePlaceholder) return;
+    imagePreviewImg.removeAttribute('src');
+    imagePreviewButton.removeAttribute('data-image-preview');
+    imagePreviewButton.removeAttribute('data-image-title');
+    imagePreviewButton.classList.add('hidden');
+    imagePlaceholder.classList.remove('hidden');
+  }
+
+  function syncImagePreview() {
+    if (!imageInput) return;
+    if (removeImageCheckbox && removeImageCheckbox.checked) {
+      releaseTemporaryImage();
+      hideImagePreview();
+      return;
+    }
+    if (imageInput.files && imageInput.files[0]) {
+      releaseTemporaryImage();
+      temporaryImageUrl = URL.createObjectURL(imageInput.files[0]);
+      showImagePreview(temporaryImageUrl, imageInput.files[0].name || 'Nova imagem do produto');
+      return;
+    }
+    const existing = imagePreviewButton && imagePreviewButton.dataset.initialPreview;
+    if (existing) {
+      showImagePreview(existing, imagePreviewButton.dataset.initialTitle || 'Imagem atual do produto');
+      return;
+    }
+    hideImagePreview();
+  }
+
+  if (imageInput) {
+    imageInput.addEventListener('change', function () {
+      if (removeImageCheckbox) removeImageCheckbox.checked = false;
+      syncImagePreview();
+    });
+  }
+  if (removeImageCheckbox) {
+    removeImageCheckbox.addEventListener('change', syncImagePreview);
+  }
+  syncImagePreview();
 
   if (isKitProduct) {
     isKitProduct.addEventListener('change', syncKitFields);
