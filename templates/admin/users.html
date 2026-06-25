@@ -1,168 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Usuários • Portal de Insumos J&T
-<script>
-(function () {
-  const form = document.getElementById('userLiveFilterForm');
-  const search = document.getElementById('userLiveSearch');
-  const statusFilter = document.getElementById('userStatusFilter');
-  const roleFilter = document.getElementById('userRoleFilter');
-  const sortFilter = document.getElementById('userSortFilter');
-  const clearButton = document.getElementById('userClearFiltersButton');
-  const applyButton = document.getElementById('userApplyFilterButton');
-  const tbody = document.getElementById('userTableBody');
-  const rows = Array.from(document.querySelectorAll('[data-user-row]'));
-  const tabs = Array.from(document.querySelectorAll('[data-user-status-tab]'));
-  const emptyRow = document.getElementById('userLiveEmpty');
-
-  if (!form || !tbody || !rows.length) return;
-
-  const counters = {
-    shown: document.getElementById('userShownCount'),
-    total: document.getElementById('userTotalCount'),
-    pending: document.getElementById('userPendingCount'),
-    approved: document.getElementById('userApprovedCount'),
-    rejected: document.getElementById('userRejectedCount'),
-    admin: document.getElementById('userAdminCount'),
-    base: document.getElementById('userBaseCount'),
-    franchise: document.getElementById('userFranchiseCount')
-  };
-
-  function normalize(value) {
-    return String(value || '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLocaleLowerCase('pt-BR')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function textOf(row, key) {
-    return normalize(row.dataset[key] || '');
-  }
-
-  function dateOf(row) {
-    const value = row.dataset.created || '';
-    const stamp = Date.parse(value);
-    return Number.isFinite(stamp) ? stamp : 0;
-  }
-
-  function idOf(row) {
-    const value = parseInt(row.dataset.userId || '0', 10);
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  function compareText(left, right, key, direction = 1) {
-    const result = textOf(left, key).localeCompare(textOf(right, key), 'pt-BR', { numeric: true, sensitivity: 'base' });
-    return result * direction || (idOf(right) - idOf(left));
-  }
-
-  function sortedRows() {
-    const mode = sortFilter ? sortFilter.value : 'newest';
-    return rows.slice().sort(function (left, right) {
-      switch (mode) {
-        case 'oldest': return dateOf(left) - dateOf(right) || idOf(left) - idOf(right);
-        case 'responsible_asc': return compareText(left, right, 'responsible', 1);
-        case 'responsible_desc': return compareText(left, right, 'responsible', -1);
-        case 'username_asc': return compareText(left, right, 'username', 1);
-        case 'username_desc': return compareText(left, right, 'username', -1);
-        case 'role_asc': return compareText(left, right, 'role', 1);
-        case 'unit_asc': return compareText(left, right, 'unit', 1);
-        case 'status_asc': return compareText(left, right, 'status', 1);
-        case 'newest':
-        default: return dateOf(right) - dateOf(left) || idOf(right) - idOf(left);
-      }
-    });
-  }
-
-  function setCounter(name, value) {
-    if (counters[name]) counters[name].textContent = String(value);
-  }
-
-  function syncTabs(status) {
-    tabs.forEach(function (tab) {
-      const active = (tab.dataset.userStatusTab || '') === (status || '');
-      tab.classList.toggle('active', active);
-      tab.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
-  }
-
-  function applyFilters() {
-    const status = statusFilter ? statusFilter.value : '';
-    const role = roleFilter ? roleFilter.value : '';
-    const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
-    const counts = { shown: 0, pending: 0, approved: 0, rejected: 0, admin: 0, base: 0, franchise: 0 };
-    const ordered = sortedRows();
-
-    ordered.forEach(function (row) {
-      const rowStatus = row.dataset.status || '';
-      const rowRole = row.dataset.role || '';
-      const searchable = normalize(row.dataset.search || row.textContent || '');
-      const matchesStatus = !status || rowStatus === status;
-      const matchesRole = !role || rowRole === role;
-      const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
-      const visible = matchesStatus && matchesRole && matchesSearch;
-
-      row.classList.toggle('user-live-hidden', !visible);
-      tbody.appendChild(row);
-
-      if (visible) {
-        counts.shown += 1;
-        if (counts[rowStatus] !== undefined) counts[rowStatus] += 1;
-        if (counts[rowRole] !== undefined) counts[rowRole] += 1;
-      }
-    });
-
-    if (emptyRow) {
-      emptyRow.classList.toggle('hidden', counts.shown > 0);
-      tbody.appendChild(emptyRow);
-    }
-
-    setCounter('shown', counts.shown);
-    setCounter('total', rows.length);
-    setCounter('pending', counts.pending);
-    setCounter('approved', counts.approved);
-    setCounter('rejected', counts.rejected);
-    setCounter('admin', counts.admin);
-    setCounter('base', counts.base);
-    setCounter('franchise', counts.franchise);
-    syncTabs(status);
-  }
-
-  form.addEventListener('submit', function (event) {
-    event.preventDefault();
-    applyFilters();
-  });
-
-  [search, statusFilter, roleFilter, sortFilter].forEach(function (control) {
-    if (!control) return;
-    control.addEventListener('input', applyFilters);
-    control.addEventListener('change', applyFilters);
-  });
-
-  tabs.forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      if (statusFilter) statusFilter.value = tab.dataset.userStatusTab || '';
-      applyFilters();
-    });
-  });
-
-  if (applyButton) applyButton.addEventListener('click', applyFilters);
-  if (clearButton) {
-    clearButton.addEventListener('click', function () {
-      if (search) search.value = '';
-      if (statusFilter) statusFilter.value = '';
-      if (roleFilter) roleFilter.value = '';
-      if (sortFilter) sortFilter.value = 'newest';
-      applyFilters();
-      if (search) search.focus();
-    });
-  }
-
-  applyFilters();
-})();
-</script>
-
-{% endblock %}
+{% block title %}Usuários • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Cadastro de usuários{% endblock %}
 {% block page_subtitle %}Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.{% endblock %}
 {% block content %}
@@ -312,9 +149,173 @@
         </td>
       </tr>
       {% else %}
-      <tr id="userLiveEmpty"><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="8" class="muted center">Nenhum usuário cadastrado.</td></tr>
       {% endfor %}
+      <tr id="userLiveEmpty" class="hidden"><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
     </tbody>
   </table>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const form = document.getElementById('userLiveFilterForm');
+  const search = document.getElementById('userLiveSearch');
+  const statusFilter = document.getElementById('userStatusFilter');
+  const roleFilter = document.getElementById('userRoleFilter');
+  const sortFilter = document.getElementById('userSortFilter');
+  const clearButton = document.getElementById('userClearFiltersButton');
+  const applyButton = document.getElementById('userApplyFilterButton');
+  const tbody = document.getElementById('userTableBody');
+  const rows = Array.from(document.querySelectorAll('[data-user-row]'));
+  const tabs = Array.from(document.querySelectorAll('[data-user-status-tab]'));
+  const emptyRow = document.getElementById('userLiveEmpty');
+
+  if (!form || !tbody) return;
+
+  const counters = {
+    shown: document.getElementById('userShownCount'),
+    total: document.getElementById('userTotalCount'),
+    pending: document.getElementById('userPendingCount'),
+    approved: document.getElementById('userApprovedCount'),
+    rejected: document.getElementById('userRejectedCount'),
+    admin: document.getElementById('userAdminCount'),
+    base: document.getElementById('userBaseCount'),
+    franchise: document.getElementById('userFranchiseCount')
+  };
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function textOf(row, key) {
+    return normalize(row.dataset[key] || '');
+  }
+
+  function dateOf(row) {
+    const value = row.dataset.created || '';
+    const stamp = Date.parse(value);
+    return Number.isFinite(stamp) ? stamp : 0;
+  }
+
+  function idOf(row) {
+    const value = parseInt(row.dataset.userId || '0', 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function compareText(left, right, key, direction = 1) {
+    const result = textOf(left, key).localeCompare(textOf(right, key), 'pt-BR', { numeric: true, sensitivity: 'base' });
+    return result * direction || (idOf(right) - idOf(left));
+  }
+
+  function sortedRows() {
+    const mode = sortFilter ? sortFilter.value : 'newest';
+    return rows.slice().sort(function (left, right) {
+      switch (mode) {
+        case 'oldest': return dateOf(left) - dateOf(right) || idOf(left) - idOf(right);
+        case 'responsible_asc': return compareText(left, right, 'responsible', 1);
+        case 'responsible_desc': return compareText(left, right, 'responsible', -1);
+        case 'username_asc': return compareText(left, right, 'username', 1);
+        case 'username_desc': return compareText(left, right, 'username', -1);
+        case 'role_asc': return compareText(left, right, 'role', 1);
+        case 'unit_asc': return compareText(left, right, 'unit', 1);
+        case 'status_asc': return compareText(left, right, 'status', 1);
+        case 'newest':
+        default: return dateOf(right) - dateOf(left) || idOf(right) - idOf(left);
+      }
+    });
+  }
+
+  function setCounter(name, value) {
+    if (counters[name]) counters[name].textContent = String(value);
+  }
+
+  function syncTabs(status) {
+    tabs.forEach(function (tab) {
+      const active = (tab.dataset.userStatusTab || '') === (status || '');
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function applyFilters() {
+    const status = statusFilter ? statusFilter.value : '';
+    const role = roleFilter ? roleFilter.value : '';
+    const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
+    const counts = { shown: 0, pending: 0, approved: 0, rejected: 0, admin: 0, base: 0, franchise: 0 };
+    const ordered = sortedRows();
+
+    ordered.forEach(function (row) {
+      const rowStatus = row.dataset.status || '';
+      const rowRole = row.dataset.role || '';
+      const searchable = normalize(row.dataset.search || row.textContent || '');
+      const matchesStatus = !status || status === 'all' || rowStatus === status;
+      const matchesRole = !role || role === 'all' || rowRole === role;
+      const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
+      const visible = matchesStatus && matchesRole && matchesSearch;
+
+      row.classList.toggle('user-live-hidden', !visible);
+      tbody.appendChild(row);
+
+      if (visible) {
+        counts.shown += 1;
+        if (counts[rowStatus] !== undefined) counts[rowStatus] += 1;
+        if (counts[rowRole] !== undefined) counts[rowRole] += 1;
+      }
+    });
+
+    if (emptyRow) {
+      emptyRow.classList.toggle('hidden', counts.shown > 0);
+      tbody.appendChild(emptyRow);
+    }
+
+    setCounter('shown', counts.shown);
+    setCounter('total', rows.length);
+    setCounter('pending', counts.pending);
+    setCounter('approved', counts.approved);
+    setCounter('rejected', counts.rejected);
+    setCounter('admin', counts.admin);
+    setCounter('base', counts.base);
+    setCounter('franchise', counts.franchise);
+    syncTabs(status);
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    applyFilters();
+  });
+
+  [search, statusFilter, roleFilter, sortFilter].forEach(function (control) {
+    if (!control) return;
+    control.addEventListener('input', applyFilters);
+    control.addEventListener('change', applyFilters);
+  });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      if (statusFilter) statusFilter.value = tab.dataset.userStatusTab || '';
+      applyFilters();
+    });
+  });
+
+  if (applyButton) applyButton.addEventListener('click', applyFilters);
+  if (clearButton) {
+    clearButton.addEventListener('click', function () {
+      if (search) search.value = '';
+      if (statusFilter) statusFilter.value = '';
+      if (roleFilter) roleFilter.value = '';
+      if (sortFilter) sortFilter.value = 'newest';
+      applyFilters();
+      if (search) search.focus();
+    });
+  }
+
+  applyFilters();
+})();
+</script>
 {% endblock %}
