@@ -931,7 +931,52 @@
   function translatePiece(value) {
     const raw = String(value == null ? '' : value).trim();
     if (!raw) return raw;
-    return zh[raw] || translateFallback(raw);
+    return zh[raw] || translateUnitLabel(raw) || translateFallback(raw);
+  }
+
+  function translateUnitLabel(value) {
+    let raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    raw = raw
+      .replace(/^[个单位卷箱包米公斤]+\s+/u, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const normalize = function (text) {
+      return String(text || '')
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLocaleLowerCase('pt-BR')
+        .trim();
+    };
+    const map = {
+      'un': '个',
+      'und': '个',
+      'uni': '个',
+      'unid': '个',
+      'unidade': '单位',
+      'unidades': '单位',
+      'rolo': '卷',
+      'rolos': '卷',
+      'caixa': '箱',
+      'caixas': '箱',
+      'cx': '箱',
+      'pacote': '包',
+      'pacotes': '包',
+      'pct': '包',
+      'metro': '米',
+      'metros': '米',
+      'm': '米',
+      'kg': '公斤',
+      'quilo': '公斤',
+      'quilos': '公斤'
+    };
+    const normalized = normalize(raw);
+    if (map[normalized]) return map[normalized];
+    const parts = normalized.split(/\s+|\//).filter(Boolean);
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      if (map[parts[index]]) return map[parts[index]];
+    }
+    return null;
   }
 
   function translateCore(core) {
@@ -939,6 +984,12 @@
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     if (zh[core]) return zh[core];
     let match;
+    const unitOnly = translateUnitLabel(core);
+    if (unitOnly) return unitOnly;
+    if ((match = core.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/))) {
+      const unit = translateUnitLabel(match[2]);
+      if (unit) return `${match[1]} ${unit}`;
+    }
     if ((match = core.match(/^(.+?)\s*•\s*Min\s+(.+?)\s*\/\s*Máx\s+(.+)$/))) return `${translatePiece(match[1])} • 最低 ${translatePiece(match[2])} / 最高 ${translatePiece(match[3])}`;
     if ((match = core.match(/^(.+?)\s*•\s*Mín\.?\s+(.+?)\s*\/\s*Máx\.?\s+(.+)$/))) return `${translatePiece(match[1])} • 最低 ${translatePiece(match[2])} / 最高 ${translatePiece(match[3])}`;
     if ((match = core.match(/^(.+?)\s*•\s*Mín\.?:\s*(.+?)\s*•\s*Máx\.?:\s*(.+)$/))) return `${translatePiece(match[1])} • 最低：${translatePiece(match[2])} • 最高：${translatePiece(match[3])}`;

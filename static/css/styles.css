@@ -7090,3 +7090,61 @@ html[data-theme="light"] .settings-dock.open .settings-toggle.bunny-settings-tog
     justify-content: space-between;
   }
 }
+
+
+/* v97 - coluna estoque da tabela de produtos alinhada e responsiva */
+.products-admin-table .product-stock-td {
+  min-width: 96px;
+  vertical-align: middle !important;
+}
+
+.product-stock-display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.product-stock-display strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 12px;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.09);
+}
+
+.product-stock-display span {
+  display: inline-block;
+  min-width: 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-theme="light"] .product-stock-display strong {
+  background: rgba(230,0,18,.055);
+  border-color: rgba(230,0,18,.12);
+}
+
+@media (max-width: 760px) {
+  .products-admin-table .product-stock-td {
+    min-width: 0;
+  }
+  .product-stock-display {
+    justify-content: flex-end;
+  }
+}

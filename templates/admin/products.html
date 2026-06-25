@@ -127,7 +127,12 @@
           {% if not product.visible_base and not product.visible_franchise %}<span class="muted">Somente admin</span>{% endif %}
         </td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
-        <td data-label="Estoque"><strong>{{ product.stock_quantity }}</strong> <small>{{ product.unit_measure or 'un' }}</small></td>
+        <td class="product-stock-td" data-label="Estoque">
+          <div class="product-stock-display">
+            <strong>{{ product.stock_quantity }}</strong>
+            <span>{{ product.unit_measure or 'un' }}</span>
+          </div>
+        </td>
         <td data-label="Pedido mín.">{{ product.min_order_quantity if product.min_order_quantity is not none else '-' }}</td>
         <td data-label="Min.">{{ product.min_stock if product.min_stock is not none else '-' }}</td>
         <td data-label="Max.">{{ product.max_stock if product.max_stock is not none else '-' }}</td>
