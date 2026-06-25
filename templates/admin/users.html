@@ -72,13 +72,30 @@
     </div>
   </form>
 
-  <form class="import-form user-import-form" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data">
+  <form class="import-form user-import-form" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
     <label>
       Cadastro em massa de usuários (.xlsx)
       <input type="file" name="spreadsheet" accept=".xlsx" required>
     </label>
+    <fieldset class="import-mode-fieldset">
+      <legend>Como deseja importar?</legend>
+      <label class="import-mode-option">
+        <input type="radio" name="import_mode" value="merge" checked>
+        <span>
+          <strong>Adicionar ou atualizar</strong>
+          <small>Cria novos usuários e atualiza usuários existentes pelo login.</small>
+        </span>
+      </label>
+      <label class="import-mode-option danger-option">
+        <input type="radio" name="import_mode" value="replace">
+        <span>
+          <strong>Substituir cadastros</strong>
+          <small>Atualiza a planilha e recusa cadastros que não estiverem nela, exceto o usuário logado.</small>
+        </span>
+      </label>
+    </fieldset>
     <button class="btn primary" type="submit">Importar usuários</button>
-    <small>Use o modelo acima. Usuários repetidos ou linhas inválidas são ignorados e informados após a importação.</small>
+    <small>Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
   </form>
 
   <table>
@@ -182,6 +199,18 @@
   const rows = Array.from(document.querySelectorAll('[data-user-row]'));
   const tabs = Array.from(document.querySelectorAll('[data-user-status-tab]'));
   const emptyRow = document.getElementById('userLiveEmpty');
+  const userImportForm = document.querySelector('[data-user-import-form]');
+
+  if (userImportForm) {
+    userImportForm.addEventListener('submit', function (event) {
+      const selectedMode = userImportForm.querySelector('input[name="import_mode"]:checked');
+      if (selectedMode && selectedMode.value === 'replace') {
+        const message = 'Substituir cadastros? Usuários que não estiverem na planilha serão recusados, exceto o usuário logado.';
+        const confirmed = window.confirm(window.jtText ? window.jtText(message) : message);
+        if (!confirmed) event.preventDefault();
+      }
+    });
+  }
 
   if (!form || !tbody) return;
 

@@ -9532,3 +9532,34 @@ table td,
   transform: none !important;
   animation: none !important;
 }
+
+/* v121 - modos de importação também para usuários */
+.user-import-form {
+  display: grid !important;
+  grid-template-columns: minmax(260px, .85fr) minmax(460px, 1.35fr) auto !important;
+  align-items: end !important;
+  gap: 14px !important;
+}
+
+.user-import-form > label {
+  align-self: end !important;
+}
+
+.user-import-form > .btn {
+  min-height: 52px !important;
+  align-self: end !important;
+  white-space: nowrap !important;
+}
+
+.user-import-form > small {
+  grid-column: 1 / -1 !important;
+}
+
+@media (max-width: 1180px) {
+  .user-import-form {
+    grid-template-columns: 1fr !important;
+  }
+  .user-import-form > .btn {
+    width: 100% !important;
+  }
+}

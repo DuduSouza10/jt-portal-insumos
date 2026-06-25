@@ -4161,11 +4161,50 @@ def execute_user_import_chunk(conn: Any, records: list[UserImportRecord], row_er
     return imported, skipped
 
 
-def import_users_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, list[str]]:
+def update_user_import_records(conn: Any, records: list[UserImportRecord], row_errors: list[str]) -> tuple[int, int]:
+    updated = 0
+    skipped = 0
+    for record in records:
+        try:
+            conn.execute(
+                """
+                UPDATE users
+                   SET responsible_name = ?, organization_name = ?, franchise_name = ?,
+                       franchise_number = ?, cnpj = ?, email = ?, password_hash = ?,
+                       role = ?, status = ?, updated_at = ?, page_permissions_configured = 0
+                 WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
+                """,
+                (
+                    record.responsible_name,
+                    record.organization_name,
+                    record.franchise_name,
+                    record.franchise_number,
+                    record.cnpj,
+                    synthetic_email_for_username(record.username),
+                    record.password_hash,
+                    record.role,
+                    record.status,
+                    now_iso(),
+                    record.username,
+                ),
+            )
+            updated += 1
+        except Exception as exc:
+            skipped += 1
+            row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:140]}")
+            print(f"[IMPORTAÇÃO USUÁRIOS] Erro ao atualizar linha {record.source_row}: {exc}")
+    return updated, skipped
+
+
+def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None) -> tuple[int, int, int, int, list[str]]:
+    import_mode = (import_mode or "merge").strip().lower()
+    if import_mode not in {"merge", "replace"}:
+        import_mode = "merge"
+
     workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
     worksheet = workbook.active
     if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
-        return 0, 0, ["planilha vazia"]
+        return 0, 0, 0, 0, ["planilha vazia"]
 
     header_row_number, header_map = detect_user_header_row(worksheet)
     required_keys = ["responsible_name", "username", "password", "role", "status"]
@@ -4179,7 +4218,7 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, l
             workbook.close()
         except Exception:
             pass
-        return 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(missing_headers)]
+        return 0, 0, 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(missing_headers)]
 
     records: list[UserImportRecord] = []
     skipped = 0
@@ -4208,28 +4247,51 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes) -> tuple[int, int, l
     except Exception:
         pass
     if not records:
-        return 0, skipped, errors
+        return 0, 0, skipped, 0, errors
 
     with db_connect() as conn:
-        existing_rows = conn.execute("SELECT username FROM users").fetchall()
-        existing_usernames = {
-            normalize_username(row["username"])
+        existing_rows = conn.execute("SELECT id, username FROM users").fetchall()
+        existing_by_username = {
+            normalize_username(row["username"]): int(row["id"])
             for row in existing_rows
             if row["username"]
         }
         new_records: list[UserImportRecord] = []
-        for record in records:
-            if record.username in existing_usernames:
-                skipped += 1
-                errors.append(f"linha {record.source_row}: nome de usuário já cadastrado")
-                continue
-            existing_usernames.add(record.username)
-            new_records.append(record)
+        update_records: list[UserImportRecord] = []
+        imported_usernames = {record.username for record in records}
 
-        imported, insert_skipped = execute_user_import_chunk(conn, new_records, errors)
+        for record in records:
+            if record.username in existing_by_username:
+                update_records.append(record)
+            else:
+                existing_by_username[record.username] = 0
+                new_records.append(record)
+
+        created, insert_skipped = execute_user_import_chunk(conn, new_records, errors)
         skipped += insert_skipped
+        updated, update_skipped = update_user_import_records(conn, update_records, errors)
+        skipped += update_skipped
+
+        replaced = 0
+        if import_mode == "replace":
+            params: list[Any] = []
+            where_parts = []
+            if imported_usernames:
+                placeholders = ",".join("?" for _ in imported_usernames)
+                where_parts.append(f"LOWER(TRIM(username)) NOT IN ({placeholders})")
+                params.extend(sorted(imported_usernames))
+            if current_user_id is not None:
+                where_parts.append("id <> ?")
+                params.append(current_user_id)
+            where_sql = " AND ".join(where_parts) if where_parts else "1 = 1"
+            cursor = conn.execute(
+                f"UPDATE users SET status = 'rejected', updated_at = ? WHERE {where_sql}",
+                [now_iso(), *params],
+            )
+            replaced = int(getattr(cursor, "rowcount", 0) or 0)
+
         conn.commit()
-    return imported, skipped, errors
+    return created, updated, skipped, replaced, errors
 
 
 
@@ -5119,6 +5181,9 @@ def admin_users_import():
         if not uploaded_bytes:
             flash("A planilha enviada está vazia.", "warning")
             return redirect(url_for("admin_users"))
+        import_mode = (request.form.get("import_mode") or "merge").strip().lower()
+        if import_mode not in {"merge", "replace"}:
+            import_mode = "merge"
         try:
             upload_bytes_to_r2(
                 storage_key(
@@ -5127,19 +5192,25 @@ def admin_users_import():
                 ),
                 uploaded_bytes,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                {"type": "users_import"},
+                {"type": "users_import", "mode": import_mode},
             )
         except Exception as exc:
             print(f"[R2] Não foi possível salvar a planilha de usuários: {exc}")
 
-        imported, skipped, errors = import_users_from_workbook_bytes(uploaded_bytes)
+        current_user = require_current_user()
+        created, updated, skipped, replaced, errors = import_users_from_workbook_bytes(
+            uploaded_bytes,
+            import_mode=import_mode,
+            current_user_id=current_user.id,
+        )
         if errors:
             preview = "; ".join(errors[:5])
             suffix = "" if len(errors) <= 5 else f"; +{len(errors) - 5} outro(s) erro(s)."
             flash(f"Algumas linhas foram ignoradas: {preview}{suffix}", "warning")
+        mode_message = " Cadastros fora da planilha foram recusados, exceto o usuário logado." if import_mode == "replace" else " Usuários repetidos foram atualizados pelo login."
         flash(
-            f"Importação concluída: {imported} usuário(s) criado(s), {skipped} linha(s) ignorada(s).",
-            "success" if imported else "warning",
+            f"Importação concluída: {created} criado(s), {updated} atualizado(s), {skipped} linha(s) ignorada(s), {replaced} substituído(s).{mode_message}",
+            "success" if created or updated or replaced else "warning",
         )
     except Exception as exc:
         app.logger.exception("Falha ao importar usuários")
