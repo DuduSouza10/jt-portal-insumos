@@ -632,23 +632,26 @@
   "UNIDADE": "单位",
   "Rolo": "卷",
   "ROLO": "卷",
-  "Crachá com cordão": "工牌挂绳",
+  "Crachá com cordão": "挂绳工牌",
   "Etiqueta térmica": "热敏标签",
-  "Etiqueta térmica rolo com 500 unidades": "500张/卷热敏标签",
+  "Etiqueta térmica rolo com 500 unidades": "热敏标签（500张/卷）",
+
+  "Etiqueta térmica — rolo com 500 unidades": "热敏标签（500张/卷）",
+  "Manga pallet plástica e Packtainer plástico": "塑料托盘缠绕膜和塑料周转箱",
   "Lacre plástico": "塑料封条",
   "Lacres": "封条",
   "PDA": "PDA",
   "Envelope de segurança P": "安全信封 P",
   "Envelope de segurança M": "安全信封 M",
-  "Camiseta Básica Personalizada | J&T": "J&T 定制基础 T 恤",
-  "Camiseta Polo Personalizada J&T": "J&T 定制 Polo 衫",
-  "Packtainer Plástico": "塑料 Packtainer",
-  "Packtainer plástico": "塑料 Packtainer",
-  "Packtainer plástica": "塑料 Packtainer",
+  "Camiseta Básica Personalizada | J&T": "J&T定制基础T恤",
+  "Camiseta Polo Personalizada J&T": "J&T定制Polo衫",
+  "Packtainer Plástico": "塑料周转箱",
+  "Packtainer plástico": "塑料周转箱",
+  "Packtainer plástica": "塑料周转箱",
   "Manga pallet plástica": "塑料托盘缠绕膜",
   "Manga pallet plástico": "塑料托盘缠绕膜",
   "Manga pallet Plástico": "塑料托盘缠绕膜",
-  "Colete EPI Personalizado J&T": "J&T 定制防护背心",
+  "Colete EPI Personalizado J&T": "J&T定制防护背心",
   "Editar categorias existentes": "编辑现有类别",
   "Altere o nome ou o ícone. A mudança será aplicada em todos os produtos dessa categoria.": "修改名称或图标。更改将应用于该类别的所有产品。",
   "Nome da categoria": "类别名称",
@@ -1114,9 +1117,9 @@
     'manga de pallet plastico': '塑料托盘缠绕膜',
     'manga de palete plastica': '塑料托盘缠绕膜',
     'manga de palete plastico': '塑料托盘缠绕膜',
-    'packtainer plastico': '塑料 Packtainer',
-    'packtainer plastica': '塑料 Packtainer',
-    'packtainer': 'Packtainer',
+    'packtainer plastico': '塑料周转箱',
+    'packtainer plastica': '塑料周转箱',
+    'packtainer': '周转箱',
     'lacre plastico': '塑料封条',
     'lacres plasticos': '塑料封条',
     'lacre plastica': '塑料封条',
@@ -1152,7 +1155,7 @@
 
     const replacements = [
       [/manga\s+(?:de\s+)?pal(?:l)?et[e]?\s+pl[aá]stic[oa]/giu, '塑料托盘缠绕膜'],
-      [/packtainer\s+pl[aá]stic[oa]/giu, '塑料 Packtainer'],
+      [/packtainer\s+pl[aá]stic[oa]/giu, '塑料周转箱'],
       [/lacre[s]?\s+pl[aá]stic[oa]s?/giu, '塑料封条'],
       [/etiqueta[s]?\s+t[eé]rmica[s]?/giu, '热敏标签'],
       [/envelope[s]?\s+de\s+seguran[cç]a/giu, '安全信封'],
@@ -1179,7 +1182,16 @@
         return pair[1];
       });
     });
-    out = out.replace(/\s+/g, ' ').trim();
+    out = out
+      .replace(/\s+e\s+/giu, function () { changed = true; return '和'; })
+      .replace(/\bcom\b/giu, function () { changed = true; return '含'; })
+      .replace(/卷\s*含\s*(\d+)\s*单位/giu, function (_, qty) { changed = true; return '热敏标签（' + qty + '张/卷）'; })
+      .replace(/热敏标签\s*[—-]?\s*卷\s*含\s*(\d+)\s*单位/giu, function (_, qty) { changed = true; return '热敏标签（' + qty + '张/卷）'; })
+      .replace(/塑料\s*周转箱/giu, '塑料周转箱')
+      .replace(/塑料\s*托盘\s*缠绕膜/giu, '塑料托盘缠绕膜')
+      .replace(/挂绳\s*工牌/giu, '挂绳工牌')
+      .replace(/\s+/g, ' ')
+      .trim();
     return changed ? prefix + out : null;
   }
 
@@ -1318,12 +1330,12 @@
       'CAIXA': '箱',
       'CAIXAS': '箱',
       'UN': '个',
-      'CRACHA COM CORDAO': '工牌挂绳',
+      'CRACHA COM CORDAO': '挂绳工牌',
       'CRACHA': '工牌',
       'CORDAO': '挂绳',
       'ETIQUETA TERMICA': '热敏标签',
       'ETIQUETAS TERMICAS': '热敏标签',
-      'ETIQUETA TERMICA ROLO COM 500 UNIDADES': '500张/卷热敏标签',
+      'ETIQUETA TERMICA ROLO COM 500 UNIDADES': '热敏标签（500张/卷）',
       'LACRE PLASTICO': '塑料封条',
       'LACRES PLASTICOS': '塑料封条',
       'ENVELOPE DE SEGURANCA P': '安全信封 P',
@@ -1332,18 +1344,18 @@
       'ENVELOPE DE SEGURANCA': '安全信封',
       'ENVELOPE MEDIO': '中号信封',
       'ENVELOPE PEQUENO': '小号信封',
-      'CAMISETA BASICA PERSONALIZADA | J T': 'J&T 定制基础 T 恤',
-      'CAMISETA BASICA PERSONALIZADA J T': 'J&T 定制基础 T 恤',
-      'CAMISETA POLO PERSONALIZADA J T': 'J&T 定制 Polo 衫',
-      'PACKTAINER PLASTICO': '塑料 Packtainer',
-      'PACKTAINER PLASTICA': '塑料 Packtainer',
-      'PACKTAINER PLÁSTICO': '塑料 Packtainer',
-      'PACKTAINER PLÁSTICA': '塑料 Packtainer',
+      'CAMISETA BASICA PERSONALIZADA | J T': 'J&T定制基础T恤',
+      'CAMISETA BASICA PERSONALIZADA J T': 'J&T定制基础T恤',
+      'CAMISETA POLO PERSONALIZADA J T': 'J&T定制Polo衫',
+      'PACKTAINER PLASTICO': '塑料周转箱',
+      'PACKTAINER PLASTICA': '塑料周转箱',
+      'PACKTAINER PLÁSTICO': '塑料周转箱',
+      'PACKTAINER PLÁSTICA': '塑料周转箱',
       'MANGA PALLET PLASTICO': '塑料托盘缠绕膜',
       'MANGA PALLET PLASTICA': '塑料托盘缠绕膜',
       'MANGA PALLET PLÁSTICO': '塑料托盘缠绕膜',
       'MANGA PALLET PLÁSTICA': '塑料托盘缠绕膜',
-      'COLETE EPI PERSONALIZADO J T': 'J&T 定制防护背心',
+      'COLETE EPI PERSONALIZADO J T': 'J&T定制防护背心',
       'PAPEL A4': 'A4 纸',
       'TONER': '硒鼓',
       'BOBINA': '卷纸',
@@ -1380,7 +1392,7 @@
       ['PLASTICA', '塑料'],
       ['MANGA', '缠绕膜'],
       ['PALLET', '托盘'],
-      ['PACKTAINER', 'Packtainer'],
+      ['PACKTAINER', '周转箱'],
       ['TERMICA', '热敏'],
       ['TERMICO', '热敏'],
       ['SEGURANCA', '安全'],
