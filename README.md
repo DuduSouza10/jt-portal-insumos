@@ -309,3 +309,8 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Categorias agora aceitam um emoji próprio; o ícone escolhido é aplicado a todos os produtos da mesma categoria.
 - Produtos podem ter uma quantidade mínima opcional por pedido, validada tanto na tela quanto no servidor.
 - Exportação e importação de produtos incluem o ícone da categoria e a quantidade mínima por pedido.
+
+
+## v107 - Correção final das cores do topo
+- Reforço dos seletores do menu superior para manter vermelho escuro no estado normal e branco apenas no hover/ativo.
+- Aplicação também nos botões superiores de ação das páginas administrativas.

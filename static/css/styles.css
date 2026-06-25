@@ -7452,3 +7452,112 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
   background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
   color: #ffffff !important;
 }
+
+
+/* v107 - correção final das cores dos botões superiores
+   Normal = vermelho escuro com texto branco.
+   Hover/selecionado = branco com texto vermelho. */
+body .site-header.compact-header .nav-header.premium-topbar .top-nav,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav {
+  background: rgba(42, 0, 6, .58) !important;
+  border-color: rgba(230, 0, 18, .28) !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > a,
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown > .nav-drop-toggle,
+body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout,
+body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown > .nav-drop-toggle,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn {
+  background: linear-gradient(135deg, #460006 0%, #70000b 48%, #970010 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, .16) !important;
+  box-shadow: 0 10px 20px rgba(59, 0, 8, .30) !important;
+  text-shadow: none !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > a *,
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown > .nav-drop-toggle *,
+body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout *,
+body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn * {
+  color: inherit !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, .active),
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, .open, .active) > .nav-drop-toggle,
+body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:hover,
+body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:hover,
+body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn.active,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, .open, .active) > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:hover,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:hover,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn.active,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, .active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, .open, .active) > .nav-drop-toggle,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:hover,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:hover,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn.active {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181, 0, 19, .32) !important;
+  box-shadow: 0 12px 26px rgba(230, 0, 18, .20) !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:focus, :focus-visible):not(:hover):not(.active),
+body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:focus-within:not(:hover):not(.open):not(.active) > .nav-drop-toggle,
+body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:is(:focus, :focus-visible):not(:hover) {
+  background: linear-gradient(135deg, #460006 0%, #70000b 48%, #970010 100%) !important;
+  color: #ffffff !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a {
+  background: linear-gradient(135deg, #460006 0%, #70000b 48%, #970010 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, .14) !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, .active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, .active) {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181, 0, 19, .30) !important;
+}
+
+/* Botões de ação que ficam no topo dos cards/páginas administrativas. */
+body .section-head .product-tools > .btn,
+body .section-head > .btn,
+body .product-tools .btn,
+body .product-filter-actions .btn,
+body .user-filter-actions .btn,
+body .asset-filter-actions .btn,
+body .monthly-report-form .btn,
+body .report-actions .btn {
+  background: linear-gradient(135deg, #460006 0%, #70000b 48%, #970010 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, .16) !important;
+  box-shadow: 0 10px 20px rgba(59, 0, 8, .22) !important;
+}
+
+body .section-head .product-tools > .btn:hover,
+body .section-head > .btn:hover,
+body .product-tools .btn:hover,
+body .product-filter-actions .btn:hover,
+body .user-filter-actions .btn:hover,
+body .asset-filter-actions .btn:hover,
+body .monthly-report-form .btn:hover,
+body .report-actions .btn:hover {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181, 0, 19, .32) !important;
+}
