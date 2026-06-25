@@ -15,11 +15,11 @@
 
   <form id="productLiveFilterForm" class="product-filter-card" method="get" action="{{ url_for('admin_products') }}">
     <div class="product-filter-main">
-      <label class="product-filter-search">
+      <label class="product-filter-search product-filter-field field-search">
         Pesquisar produto
         <input id="productLiveSearch" type="search" name="q" value="{{ product_filters.q if product_filters else '' }}" placeholder="Nome, categoria, descrição ou unidade..." autocomplete="off">
       </label>
-      <label>
+      <label class="product-filter-field field-status">
         Filtrar status
         <select id="productStatusFilter" name="status">
           <option value="all" {{ 'selected' if product_filters.status == 'all' else '' }}>Todos</option>
@@ -27,7 +27,7 @@
           <option value="inactive" {{ 'selected' if product_filters.status == 'inactive' else '' }}>Inativos</option>
         </select>
       </label>
-      <label>
+      <label class="product-filter-field field-category">
         Filtrar categoria
         <select id="productCategoryFilter" name="category">
           <option value="">Todas</option>
@@ -36,7 +36,7 @@
           {% endfor %}
         </select>
       </label>
-      <label>
+      <label class="product-filter-field field-sort">
         Classificar por
         <select id="productSortFilter" name="sort">
           <option value="default" {{ 'selected' if product_filters.sort == 'default' else '' }}>Padrão</option>
@@ -48,7 +48,7 @@
           <option value="stock_asc" {{ 'selected' if product_filters.sort == 'stock_asc' else '' }}>Menor estoque</option>
         </select>
       </label>
-      <div class="product-filter-actions">
+      <div class="product-filter-actions field-actions">
         <button class="btn primary" type="button" id="productApplyFilterButton">Aplicar filtros</button>
         <button class="btn ghost" type="button" id="productClearFiltersButton">Limpar filtros</button>
       </div>
