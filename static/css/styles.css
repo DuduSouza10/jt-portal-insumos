@@ -7342,3 +7342,70 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
 .product-live-hidden {
   display: none !important;
 }
+
+
+/* v105 - cores do menu superior: vermelho escuro + hover/ativo branco */
+.nav-header .top-nav {
+  background: rgba(62, 0, 7, .34) !important;
+  border: 1px solid rgba(230, 0, 18, .20) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+
+.nav-header .top-nav > a,
+.nav-header .nav-dropdown > .nav-drop-toggle,
+.nav-header .logout,
+.nav-header .public-actions .btn.ghost,
+.nav-header .public-actions .btn.primary {
+  background: linear-gradient(135deg, #5f0008, #9b0010) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,.13) !important;
+  box-shadow: 0 8px 18px rgba(80,0,8,.20) !important;
+}
+
+.nav-header .top-nav > a *,
+.nav-header .nav-dropdown > .nav-drop-toggle *,
+.nav-header .logout *,
+.nav-header .public-actions .btn * {
+  color: inherit !important;
+}
+
+.nav-header .top-nav > a::before,
+.nav-header .top-nav > a::after,
+.nav-header .nav-dropdown > .nav-drop-toggle::before,
+.nav-header .nav-dropdown > .nav-drop-toggle::after,
+.nav-header .logout::before,
+.nav-header .logout::after {
+  display: none !important;
+}
+
+.nav-header .top-nav > a:hover,
+.nav-header .top-nav > a.active,
+.nav-header .nav-dropdown:hover > .nav-drop-toggle,
+.nav-header .nav-dropdown:focus-within > .nav-drop-toggle,
+.nav-header .nav-dropdown.open > .nav-drop-toggle,
+.nav-header .nav-dropdown.active > .nav-drop-toggle,
+.nav-header .logout:hover,
+.nav-header .public-actions .btn:hover,
+.nav-header .public-actions .btn.active {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181,0,19,.28) !important;
+  box-shadow: 0 10px 24px rgba(230,0,18,.18) !important;
+}
+
+.nav-header .nav-drop-menu {
+  border-color: rgba(230,0,18,.22) !important;
+}
+
+.nav-header .nav-drop-menu a {
+  background: linear-gradient(135deg, #5f0008, #9b0010) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+}
+
+.nav-header .nav-drop-menu a:hover,
+.nav-header .nav-drop-menu a.active {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181,0,19,.26) !important;
+}
