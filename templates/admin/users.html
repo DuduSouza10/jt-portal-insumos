@@ -121,26 +121,40 @@
             </form>
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="rejected">
-              <button class="btn tiny danger" type="submit">Recusar</button>
+              <button class="btn tiny danger icon-action-btn" type="submit" title="Recusar" aria-label="Recusar cadastro">
+                <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
+              </button>
             </form>
-            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" title="Editar" aria-label="Editar acesso">
+              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+            </a>
             <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-              <button class="btn tiny ghost" type="submit">Excluir</button>
+              <button class="btn tiny ghost icon-action-btn" type="submit" title="Excluir" aria-label="Excluir usuário">
+                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
+              </button>
             </form>
           {% elif user.status == 'rejected' and not user.is_admin %}
-            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" title="Editar" aria-label="Editar acesso">
+              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+            </a>
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
             </form>
             <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-              <button class="btn tiny danger" type="submit">Excluir</button>
+              <button class="btn tiny danger icon-action-btn" type="submit" title="Excluir" aria-label="Excluir usuário">
+                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
+              </button>
             </form>
           {% else %}
-            <a class="btn tiny ghost" href="{{ url_for('admin_user_edit', user_id=user.id) }}">Editar acesso</a>
+            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" title="Editar" aria-label="Editar acesso">
+              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+            </a>
             {% if current_user and user.id != current_user.id %}
               <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-                <button class="btn tiny danger" type="submit">Excluir</button>
+                <button class="btn tiny danger icon-action-btn" type="submit" title="Excluir" aria-label="Excluir usuário">
+                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
+              </button>
               </form>
             {% else %}
               <span class="muted">Usuário atual</span>

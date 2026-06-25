@@ -748,7 +748,7 @@ def validate_user_profile_fields(
     if role == "franchise":
         if not franchise:
             raise ValueError("Informe o nome da franquia.")
-        if len(phone_digits) not in {10, 11}:
+        if phone_digits and len(phone_digits) not in {10, 11}:
             raise ValueError("Informe um telefone válido com DDD, usando apenas números.")
         if cnpj_digits and len(cnpj_digits) != 14:
             raise ValueError("O CNPJ deve possuir 14 números.")
@@ -1948,6 +1948,21 @@ def notify_feishu_supply_request_created(supply_request: SupplyRequest, link_url
     lines.extend(["", "---", "**Itens solicitados**", "", *request_item_feishu_lines(supply_request.items)])
 
     send_feishu_card("Nova solicitação de insumos", lines, "Abrir solicitação", link_url)
+
+
+def notify_feishu_user_registration_requested(user: User, link_url: str) -> None:
+    org_label = user.franchise_name or user.organization_name or "-"
+    lines = [
+        feishu_line("Responsável", user.responsible_name),
+        feishu_line("Usuário", user.username),
+        feishu_line("Tipo", user_role_label(user.role)),
+        feishu_line("Base/Franquia", org_label),
+        feishu_line("Telefone", user.formatted_phone or "-"),
+        feishu_line("CNPJ", user.formatted_cnpj or "-"),
+        feishu_line("Status", "Pendente"),
+        feishu_line("Data", format_feishu_datetime(user.created_at)),
+    ]
+    send_feishu_card("Novo cadastro solicitado", lines, "Abrir cadastros", link_url)
 
 
 def notify_feishu_asset_created(
@@ -4672,8 +4687,9 @@ def register():
             return redirect(url_for("register"))
 
         try:
+            new_user_id: int | None = None
             with db_connect() as conn:
-                conn.execute(
+                cursor = conn.execute(
                     """
                     INSERT INTO users (
                         responsible_name, organization_name, franchise_name, franchise_number, cnpj,
@@ -4694,7 +4710,15 @@ def register():
                         now_iso(),
                     ),
                 )
+                new_user_id = get_cursor_lastrowid(cursor)
                 conn.commit()
+            if new_user_id is not None:
+                try:
+                    created_user = get_user(int(new_user_id))
+                    if created_user is not None:
+                        notify_feishu_user_registration_requested(created_user, public_url_for("admin_users", status="pending"))
+                except Exception:
+                    app.logger.exception("Falha ao preparar notificacao Feishu do cadastro")
             flash("Cadastro enviado. Aguarde aprovação de um administrador.", "success")
             return redirect(url_for("login"))
         except sqlite3.IntegrityError:
@@ -5393,12 +5417,48 @@ def admin_products():
         "admin/products.html",
         products=products,
         product_categories_filter=categories,
+        product_categories_manage=list_product_categories(),
         product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter},
         product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products)},
     )
 
 
 
+
+
+@app.post("/admin/products/categories/update")
+@admin_required
+@page_access_required("admin_products")
+def admin_product_categories_update():
+    old_names = request.form.getlist("category_old")
+    new_names = request.form.getlist("category_name")
+    emojis = request.form.getlist("category_emoji")
+    updated = 0
+
+    with db_connect() as conn:
+        for old_name, new_name, emoji_value in zip(old_names, new_names, emojis):
+            old_clean = str(old_name or "").strip()
+            new_clean = str(new_name or "").strip()[:120]
+            if not old_clean:
+                continue
+            if not new_clean:
+                conn.rollback()
+                flash("Nenhuma categoria pode ficar sem nome.", "warning")
+                return redirect(url_for("admin_products"))
+            emoji_clean = clean_category_emoji(emoji_value, new_clean)
+            conn.execute(
+                """
+                UPDATE products
+                   SET category = ?, category_emoji = ?, updated_at = ?
+                 WHERE LOWER(TRIM(category)) = LOWER(TRIM(?))
+                """,
+                (new_clean, emoji_clean, now_iso(), old_clean),
+            )
+            updated += 1
+        conn.commit()
+
+    flash(f"Categorias atualizadas: {updated}.", "success")
+    return redirect(url_for("admin_products"))
 
 @app.get("/admin/products/export")
 @admin_required

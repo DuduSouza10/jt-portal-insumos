@@ -604,7 +604,26 @@
 "Valor unit.": "单价",
 "Valor unitário": "单价",
 "Solicitações pendentes": "待处理申请",
-"×": "×"
+"×": "×",
+  "Editar categorias": "编辑类别",
+  "Editar categorias existentes": "编辑现有类别",
+  "Altere o nome ou o ícone. A mudança será aplicada em todos os produtos dessa categoria.": "修改名称或图标。更改将应用于该类别的所有产品。",
+  "Nome da categoria": "类别名称",
+  "Salvar categorias": "保存类别",
+  "Categorias atualizadas": "类别已更新",
+  "Nenhuma categoria cadastrada ainda.": "尚未注册任何类别。",
+  "Número de telefone (com DDD)": "电话号码（含区号）",
+  "opcional": "可选",
+  "Deixe vazio para manter a atual": "留空以保留当前密码",
+  "Novo cadastro solicitado": "新的注册申请",
+  "Abrir cadastros": "打开注册列表",
+  "Ativar": "启用",
+  "Ativar produto": "启用产品",
+  "Inativar produto": "停用产品",
+  "Excluir produto": "删除产品",
+  "Excluir usuário": "删除用户",
+  "Recusar cadastro": "拒绝注册",
+
 };
 
   Object.assign(zh, {

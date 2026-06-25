@@ -30,7 +30,7 @@
       <input name="franchise_name" id="franchiseNameInput" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">
-      Número de telefone (com DDD)
+      Número de telefone (com DDD) <small class="muted">opcional</small>
       <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" placeholder="(00) 00000-0000" autocomplete="tel">
     </label>
     <label id="cnpjWrap" class="hidden">
@@ -78,7 +78,7 @@
     franchiseNameInput.disabled = !isFranchise;
     franchiseNameInput.required = isFranchise;
     franchiseNumberInput.disabled = !isFranchise;
-    franchiseNumberInput.required = isFranchise;
+    franchiseNumberInput.required = false;
     cnpjInput.disabled = !isFranchise;
 
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {

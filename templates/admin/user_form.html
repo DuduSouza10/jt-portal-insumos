@@ -34,7 +34,7 @@
       <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">
-      Número de telefone (com DDD)
+      Número de telefone (com DDD) <small class="muted">opcional</small>
       <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" value="{{ user.formatted_phone if user else '' }}" placeholder="(00) 00000-0000" autocomplete="tel">
     </label>
     <label id="cnpjWrap" class="hidden">
@@ -46,8 +46,8 @@
       <input name="username" type="text" value="{{ user.username if user else '' }}" placeholder="Ex.: mg_bhz" autocomplete="username" required>
     </label>
     <label>
-      Senha (acesso ao portal) {% if not is_new %}<small class="muted">deixe vazio para manter a atual</small>{% endif %}
-      <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Nova senha opcional' }}" {% if is_new %}required{% endif %}>
+      Senha (acesso ao portal)
+      <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Deixe vazio para manter a atual' }}" {% if is_new %}required{% endif %}>
     </label>
     <label>
       Status do cadastro (aprovação)
@@ -141,7 +141,7 @@
     franchiseNameInput.disabled = !isFranchise;
     franchiseNameInput.required = isFranchise;
     franchiseNumberInput.disabled = !isFranchise;
-    franchiseNumberInput.required = isFranchise;
+    franchiseNumberInput.required = false;
     cnpjInput.disabled = !isFranchise;
 
     document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {

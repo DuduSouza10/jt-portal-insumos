@@ -8789,3 +8789,208 @@ html[data-theme="light"] .product-active-toggle {
     width: 100%;
   }
 }
+
+/* v115 - categorias editáveis, ações por ícones e ajustes no cadastro de usuários */
+.icon-actions-cell,
+.actions-cell.icon-actions-cell {
+  white-space: nowrap !important;
+}
+
+.icon-action-btn {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border-radius: 13px !important;
+}
+
+.icon-action-btn img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+  filter: brightness(0) invert(1);
+  pointer-events: none;
+}
+
+.icon-action-btn[title="Recusar"] img,
+.icon-action-btn[title="Inativar"] img,
+.icon-action-btn[title="Ativar"] img {
+  width: 15px;
+  height: 15px;
+}
+
+.actions-cell .icon-action-btn.btn.tiny {
+  font-size: 0 !important;
+}
+
+.category-edit-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: none;
+  place-items: center;
+  padding: 24px;
+}
+
+.category-edit-modal.open {
+  display: grid;
+}
+
+.category-edit-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(14px);
+}
+
+.category-edit-card {
+  position: relative;
+  width: min(780px, 94vw);
+  max-height: 88vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+  border-radius: 28px;
+}
+
+.category-edit-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(230,0,18,.08), rgba(255,255,255,.02));
+}
+
+.category-edit-head h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 22px;
+  letter-spacing: -.03em;
+}
+
+.category-edit-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.category-edit-form {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.category-edit-list {
+  display: grid;
+  gap: 12px;
+  padding: 18px 22px;
+  overflow: auto;
+}
+
+.category-edit-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+}
+
+.category-edit-row label {
+  gap: 8px;
+}
+
+.category-edit-emoji input {
+  text-align: center;
+  font-size: 22px;
+  padding-inline: 10px;
+}
+
+.category-edit-name input,
+.category-edit-emoji input {
+  min-height: 50px;
+  border-radius: 16px;
+}
+
+.category-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px 22px 20px;
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,.025);
+}
+
+body.category-edit-modal-open {
+  overflow: hidden;
+}
+
+#userAccessForm label > input,
+#userAccessForm label > select {
+  min-height: 52px;
+}
+
+#userAccessForm label > small,
+[data-unit-filter-form] label > small {
+  display: inline;
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+html[data-theme="light"] .category-edit-head,
+html[data-theme="light"] .category-edit-row,
+html[data-theme="light"] .category-edit-actions {
+  background: rgba(255,255,255,.9);
+  border-color: rgba(17,24,39,.08);
+}
+
+@media (max-width: 620px) {
+  .category-edit-card {
+    width: 96vw;
+  }
+  .category-edit-row {
+    grid-template-columns: 1fr;
+  }
+  .category-edit-actions .btn {
+    width: 100%;
+  }
+}
+
+/* v115.1 - atalho de categorias na tela de produto */
+.product-form-card .category-picker {
+  grid-template-columns: 58px minmax(0, 1fr) auto auto;
+}
+
+.category-edit-existing-button {
+  min-height: 56px;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
+
+@media (max-width: 920px) {
+  .product-form-card .category-picker {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+  .product-form-card .category-new-button,
+  .product-form-card .category-edit-existing-button {
+    grid-column: span 1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .product-form-card .category-picker {
+    grid-template-columns: 1fr;
+  }
+}
