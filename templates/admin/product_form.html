@@ -39,24 +39,24 @@
           <input name="name" value="{{ product.name if product else '' }}" required placeholder="Ex.: Crachá com cordão">
         </label>
 
-        <div class="category-field field-card">
-          <label for="categorySearch">Categoria</label>
+        <div class="category-field field-card category-select-field">
+          <label for="categorySelect">Categoria</label>
           <input type="hidden" name="category" id="categoryValue" value="{{ product.category if product else '' }}">
           <input type="hidden" name="category_emoji" id="categoryEmojiValue" value="{{ product.category_emoji if product else '' }}">
-          <div class="category-picker">
+          <div class="category-picker category-picker-select">
             <span id="categoryEmojiPreview" class="category-emoji-preview" aria-hidden="true">{{ product.category_emoji if product else '📦' }}</span>
-            <div class="category-search-wrap">
-              <input
-                id="categorySearch"
-                type="search"
-                value="{{ product.category if product else '' }}"
-                placeholder="Pesquisar ou selecionar categoria..."
-                autocomplete="off"
-                aria-autocomplete="list"
-                aria-controls="categorySuggestions"
-                aria-expanded="false"
-              >
-              <div id="categorySuggestions" class="category-suggestions hidden" role="listbox"></div>
+            <div class="category-select-wrap">
+              <select id="categorySelect" required>
+                <option value="" disabled {% if not product or not product.category %}selected{% endif %}>Selecione uma categoria</option>
+                {% set current_category = product.category if product else '' %}
+                {% set known_names = product_categories|default([])|map(attribute='name')|list %}
+                {% if product and product.category and product.category not in known_names %}
+                <option value="{{ product.category }}" data-emoji="{{ product.category_emoji or '📦' }}" selected>{{ product.category_emoji or '📦' }} {{ product.category }}</option>
+                {% endif %}
+                {% for category in product_categories|default([]) %}
+                <option value="{{ category.name }}" data-emoji="{{ category.emoji }}" {% if product and product.category == category.name %}selected{% endif %}>{{ category.emoji }} {{ category.name }}</option>
+                {% endfor %}
+              </select>
             </div>
             <button id="openNewCategory" class="btn ghost category-new-button category-icon-button" type="button" aria-label="Nova categoria">
               <img src="{{ url_for('static', filename='img/action-plus.svg') }}" alt="">
@@ -74,7 +74,7 @@
             <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
             <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
           </div>
-          <small class="hint">O ícone escolhido será usado em todos os produtos dessa categoria.</small>
+          <small class="hint">Selecione uma categoria já cadastrada ou use o botão + para criar uma nova.</small>
         </div>
 
         <div class="product-image-field product-image-field-premium full">
@@ -312,11 +312,10 @@
 <script>
 (function () {
   const form = document.getElementById('productForm');
-  const search = document.getElementById('categorySearch');
+  const categorySelect = document.getElementById('categorySelect');
   const valueInput = document.getElementById('categoryValue');
   const emojiValueInput = document.getElementById('categoryEmojiValue');
   const emojiPreview = document.getElementById('categoryEmojiPreview');
-  const suggestions = document.getElementById('categorySuggestions');
   const openButton = document.getElementById('openNewCategory');
   const panel = document.getElementById('newCategoryPanel');
   const newInput = document.getElementById('newCategoryInput');
@@ -339,6 +338,43 @@
   const imagePlaceholder = document.getElementById('productImagePlaceholder');
   const removeImageCheckbox = document.getElementById('removeProductImage');
   let temporaryImageUrl = null;
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .trim();
+  }
+
+  function syncCategoryFields() {
+    if (!categorySelect || !valueInput || !emojiValueInput || !emojiPreview) return;
+    const selected = categorySelect.options[categorySelect.selectedIndex];
+    const value = selected && selected.value ? selected.value.trim() : '';
+    const emoji = selected ? (selected.dataset.emoji || '📦') : '📦';
+    valueInput.value = value;
+    emojiValueInput.value = value ? emoji : '';
+    emojiPreview.textContent = value ? emoji : '📦';
+  }
+
+  function addCategoryOption(category) {
+    if (!categorySelect || !category || !category.name) return;
+    const existing = Array.from(categorySelect.options).find((option) => normalize(option.value) === normalize(category.name));
+    if (existing) {
+      existing.dataset.emoji = category.emoji || '📦';
+      existing.textContent = `${category.emoji || '📦'} ${category.name}`;
+      categorySelect.value = existing.value;
+      syncCategoryFields();
+      return;
+    }
+    const option = document.createElement('option');
+    option.value = category.name;
+    option.dataset.emoji = category.emoji || '📦';
+    option.textContent = `${category.emoji || '📦'} ${category.name}`;
+    categorySelect.appendChild(option);
+    categorySelect.value = category.name;
+    syncCategoryFields();
+  }
 
   function syncKitFields() {
     if (!isKitProduct || !kitQuantityWrap || !kitQuantityInput) return;
@@ -396,21 +432,22 @@
     hideImagePreview();
   }
 
+  if (categorySelect) {
+    categorySelect.addEventListener('change', syncCategoryFields);
+    syncCategoryFields();
+  }
+
   if (imageInput) {
     imageInput.addEventListener('change', function () {
       if (removeImageCheckbox) removeImageCheckbox.checked = false;
       syncImagePreview();
     });
   }
-  if (removeImageCheckbox) {
-    removeImageCheckbox.addEventListener('change', syncImagePreview);
-  }
+  if (removeImageCheckbox) removeImageCheckbox.addEventListener('change', syncImagePreview);
   syncImagePreview();
 
   if (categoryModal) {
-    if (categoryModal.parentElement !== document.body) {
-      document.body.appendChild(categoryModal);
-    }
+    if (categoryModal.parentElement !== document.body) document.body.appendChild(categoryModal);
     function refreshCategoryModalLanguage() {
       if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
         window.JT_I18N.refresh(categoryModal);
@@ -459,135 +496,48 @@
     internalProduct.addEventListener('change', syncInternalVisibility);
     syncInternalVisibility();
   }
-  const currentCategory = valueInput ? valueInput.value.trim() : '';
-  const currentEmoji = emojiValueInput ? emojiValueInput.value.trim() : '';
 
-  if (currentCategory && !categories.some((item) => item.name.toLocaleLowerCase('pt-BR') === currentCategory.toLocaleLowerCase('pt-BR'))) {
-    categories.push({ name: currentCategory, emoji: currentEmoji || '📦' });
-  }
-
-  function normalize(value) {
-    return String(value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLocaleLowerCase('pt-BR')
-      .trim();
-  }
-
-  function escapeHtml(value) {
-    return String(value || '')
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-
-  function closeSuggestions() {
-    suggestions.classList.add('hidden');
-    search.setAttribute('aria-expanded', 'false');
-  }
-
-  function selectCategory(category) {
-    search.value = category.name;
-    valueInput.value = category.name;
-    emojiValueInput.value = category.emoji || '📦';
-    emojiPreview.textContent = category.emoji || '📦';
-    search.setCustomValidity('');
-    panel.classList.add('hidden');
-    closeSuggestions();
-  }
-
-  function matchingCategories(query) {
-    const normalizedQuery = normalize(query);
-    return categories
-      .filter((category) => !normalizedQuery || normalize(category.name).includes(normalizedQuery))
-      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
-      .slice(0, 12);
-  }
-
-  function renderSuggestions() {
-    const matches = matchingCategories(search.value);
-    if (!matches.length) {
-      suggestions.innerHTML = '<div class="category-suggestion-empty">Nenhuma categoria encontrada. Use “Nova categoria”.</div>';
-    } else {
-      suggestions.innerHTML = matches.map((category, index) => (
-        `<button type="button" class="category-suggestion" role="option" data-category-index="${index}"><span>${escapeHtml(category.emoji || '📦')}</span>${escapeHtml(category.name)}</button>`
-      )).join('');
-    }
-    suggestions.classList.remove('hidden');
-    search.setAttribute('aria-expanded', 'true');
-  }
-
-  search.addEventListener('focus', renderSuggestions);
-  search.addEventListener('input', function () {
-    const exact = categories.find((category) => normalize(category.name) === normalize(search.value));
-    valueInput.value = exact ? exact.name : '';
-    emojiValueInput.value = exact ? (exact.emoji || '📦') : '';
-    emojiPreview.textContent = exact ? (exact.emoji || '📦') : '＋';
-    search.setCustomValidity('');
-    renderSuggestions();
-  });
-  search.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeSuggestions();
-    if (event.key === 'Enter' && !suggestions.classList.contains('hidden')) {
-      const first = suggestions.querySelector('[data-category-index]');
-      if (first) {
-        event.preventDefault();
-        selectCategory(matchingCategories(search.value)[Number(first.dataset.categoryIndex || 0)]);
-      }
-    }
-  });
-
-  suggestions.addEventListener('click', function (event) {
-    const button = event.target.closest('[data-category-index]');
-    if (button) {
-      const match = matchingCategories(search.value)[Number(button.dataset.categoryIndex || 0)];
-      if (match) selectCategory(match);
-    }
-  });
-
-  openButton.addEventListener('click', function () {
-    panel.classList.remove('hidden');
-    newInput.value = search.value.trim();
-    newEmojiInput.value = '📦';
-    closeSuggestions();
-    newInput.focus();
-  });
-
-  confirmButton.addEventListener('click', function () {
-    const category = newInput.value.trim();
-    if (!category) {
+  if (openButton) {
+    openButton.addEventListener('click', function () {
+      panel.classList.remove('hidden');
+      newInput.value = '';
+      newEmojiInput.value = '📦';
       newInput.focus();
-      return;
-    }
-    const emoji = newEmojiInput.value.trim() || '📦';
-    const existing = categories.find((item) => normalize(item.name) === normalize(category));
-    const selected = existing || { name: category, emoji };
-    if (!existing) categories.push(selected);
-    selectCategory(selected);
-  });
+    });
+  }
 
-  cancelButton.addEventListener('click', function () {
-    panel.classList.add('hidden');
-    newInput.value = '';
-    newEmojiInput.value = '📦';
-    search.focus();
-  });
+  if (confirmButton) {
+    confirmButton.addEventListener('click', function () {
+      const category = newInput.value.trim();
+      if (!category) {
+        newInput.focus();
+        return;
+      }
+      const emoji = newEmojiInput.value.trim() || '📦';
+      const existing = categories.find((item) => normalize(item.name) === normalize(category));
+      const selected = existing || { name: category, emoji };
+      if (!existing) categories.push(selected);
+      addCategoryOption(selected);
+      panel.classList.add('hidden');
+      if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') window.JT_I18N.refresh(document.querySelector('.category-field') || document.body);
+    });
+  }
 
-  document.addEventListener('click', function (event) {
-    if (!event.target.closest('.category-field')) closeSuggestions();
-  });
+  if (cancelButton) {
+    cancelButton.addEventListener('click', function () {
+      panel.classList.add('hidden');
+      newInput.value = '';
+      newEmojiInput.value = '📦';
+    });
+  }
 
   form.addEventListener('submit', function (event) {
-    const typed = search.value.trim();
-    if (typed && !valueInput.value) {
+    syncCategoryFields();
+    if (!valueInput.value.trim()) {
       event.preventDefault();
-      search.setCustomValidity('Selecione uma categoria existente ou confirme a nova categoria.');
-      search.reportValidity();
+      if (categorySelect) categorySelect.reportValidity();
       return;
     }
-    search.setCustomValidity('');
   });
 })();
 </script>

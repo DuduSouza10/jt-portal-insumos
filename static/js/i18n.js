@@ -643,6 +643,10 @@
   "Camiseta Básica Personalizada | J&T": "J&T 定制基础 T 恤",
   "Camiseta Polo Personalizada J&T": "J&T 定制 Polo 衫",
   "Packtainer Plástico": "塑料 Packtainer",
+  "Packtainer plástico": "塑料 Packtainer",
+  "Packtainer plástica": "塑料 Packtainer",
+  "Manga pallet plástica": "塑料托盘缠绕膜",
+  "Manga pallet plástico": "塑料托盘缠绕膜",
   "Manga pallet Plástico": "塑料托盘缠绕膜",
   "Colete EPI Personalizado J&T": "J&T 定制防护背心",
   "Editar categorias existentes": "编辑现有类别",
@@ -1230,7 +1234,13 @@
       'CAMISETA BASICA PERSONALIZADA J T': 'J&T 定制基础 T 恤',
       'CAMISETA POLO PERSONALIZADA J T': 'J&T 定制 Polo 衫',
       'PACKTAINER PLASTICO': '塑料 Packtainer',
+      'PACKTAINER PLASTICA': '塑料 Packtainer',
+      'PACKTAINER PLÁSTICO': '塑料 Packtainer',
+      'PACKTAINER PLÁSTICA': '塑料 Packtainer',
       'MANGA PALLET PLASTICO': '塑料托盘缠绕膜',
+      'MANGA PALLET PLASTICA': '塑料托盘缠绕膜',
+      'MANGA PALLET PLÁSTICO': '塑料托盘缠绕膜',
+      'MANGA PALLET PLÁSTICA': '塑料托盘缠绕膜',
       'COLETE EPI PERSONALIZADO J T': 'J&T 定制防护背心',
       'PAPEL A4': 'A4 纸',
       'TONER': '硒鼓',
@@ -1262,7 +1272,13 @@
       ['ETIQUETA', '标签'],
       ['LACRES', '封条'],
       ['LACRE', '封条'],
+      ['PLASTICOS', '塑料'],
+      ['PLASTICAS', '塑料'],
       ['PLASTICO', '塑料'],
+      ['PLASTICA', '塑料'],
+      ['MANGA', '缠绕膜'],
+      ['PALLET', '托盘'],
+      ['PACKTAINER', 'Packtainer'],
       ['TERMICA', '热敏'],
       ['TERMICO', '热敏'],
       ['SEGURANCA', '安全'],
@@ -1270,7 +1286,17 @@
       ['CRACHA', '工牌'],
       ['CORDAO', '挂绳'],
       ['ROLO', '卷'],
-      ['UNIDADE', '单位']
+      ['UNIDADES', '单位'],
+      ['UNIDADE', '单位'],
+      ['CAMISETA', 'T恤'],
+      ['POLO', 'Polo'],
+      ['BASICA', '基础'],
+      ['PERSONALIZADA', '定制'],
+      ['COLETE', '背心'],
+      ['PAPEL', '纸'],
+      ['ADESIVA', '胶'],
+      ['ADESIVO', '胶'],
+      ['TERMICO', '热敏']
     ];
     let output = key;
     let changed = false;
@@ -1281,7 +1307,7 @@
         changed = true;
       }
     });
-    if (changed && !/[A-Z]{3,}/.test(output)) return prefix + output.replace(/\s+/g, ' ').trim();
+    if (changed) return prefix + output.replace(/\s+/g, ' ').trim();
     return null;
   }
 

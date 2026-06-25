@@ -9243,3 +9243,181 @@ table th,
     min-width: 0 !important;
   }
 }
+
+/* v118 - categorias só seleção, cards ajustados e tabelas totalmente centralizadas */
+.product-form-card {
+  max-width: 1160px !important;
+  padding: 26px !important;
+}
+
+.product-form-card .form-panel {
+  overflow: visible !important;
+}
+
+.product-form-card .form-panel-grid.two-cols-grid {
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
+  align-items: start;
+}
+
+.product-form-card .field-card,
+.product-kit-fieldset.field-card,
+.product-status-panel,
+.product-audience.premium-audience-panel {
+  min-height: auto !important;
+}
+
+.category-select-field {
+  position: relative;
+  z-index: 3;
+}
+
+.product-form-card .category-picker.category-picker-select {
+  grid-template-columns: 58px minmax(260px, 1fr) 56px 56px !important;
+  gap: 10px !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.category-select-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.category-select-wrap select,
+.product-form-card .category-select-wrap select {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 56px !important;
+  min-height: 56px !important;
+  border-radius: 18px !important;
+  font-weight: 950;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.product-form-card .category-emoji-preview {
+  flex: 0 0 58px !important;
+}
+
+.product-form-card .category-icon-button {
+  flex: 0 0 56px !important;
+}
+
+.product-form-card .new-category-panel {
+  grid-template-columns: 76px minmax(180px, 1fr) auto auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.product-form-card .product-image-editor-premium {
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+}
+
+.product-form-columns {
+  align-items: stretch;
+}
+
+.product-form-columns > .form-panel {
+  height: 100%;
+}
+
+.category-edit-modal .category-edit-card,
+#categoryEditModalInline .category-edit-card {
+  width: min(760px, calc(100vw - 36px)) !important;
+  max-width: calc(100vw - 36px) !important;
+  max-height: min(88vh, 760px) !important;
+  overflow: hidden !important;
+}
+
+.category-edit-form,
+.category-edit-list {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.category-edit-list {
+  overflow: auto !important;
+  padding-right: 4px;
+}
+
+.category-edit-row {
+  grid-template-columns: 88px minmax(0, 1fr) !important;
+  max-width: 100% !important;
+}
+
+.category-edit-row input {
+  min-width: 0 !important;
+}
+
+table th,
+table td,
+.table-card th,
+.table-card td,
+.products-admin-table th,
+.products-admin-table td,
+.users-table-card th,
+.users-table-card td,
+.request-products-table th,
+.request-products-table td,
+.request-products-table-wrap th,
+.request-products-table-wrap td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.admin-product-main,
+.request-product-main,
+.user-unit-cell,
+.user-main-cell,
+.stock-product-cell {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.admin-product-main > div,
+.request-product-main > div,
+.user-unit-cell > div,
+.user-main-cell > div {
+  text-align: center !important;
+}
+
+.actions-cell,
+.icon-actions-cell {
+  text-align: center !important;
+}
+
+.actions-cell > a,
+.actions-cell > form,
+.icon-actions-cell > a,
+.icon-actions-cell > form {
+  margin-left: 3px !important;
+  margin-right: 3px !important;
+}
+
+.status,
+.badge,
+.stock-pill,
+.audience-pill,
+.product-stock-cell strong {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+@media (max-width: 980px) {
+  .product-form-card .form-panel-grid.two-cols-grid,
+  .product-form-card .category-picker.category-picker-select,
+  .product-form-card .product-image-editor-premium,
+  .product-form-columns {
+    grid-template-columns: 1fr !important;
+  }
+  .product-form-card .category-emoji-preview,
+  .product-form-card .category-icon-button {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .product-form-card .new-category-panel {
+    grid-template-columns: 1fr !important;
+  }
+}
