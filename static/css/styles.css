@@ -7230,3 +7230,86 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
   .products-admin-table .product-stock-cell,
   .products-admin-table .product-stock-td { text-align: right !important; }
 }
+
+
+/* v101 - filtros e classificação da página de usuários */
+.user-filter-card {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(230,0,18,.025));
+  box-shadow: var(--shadow-soft);
+}
+
+.user-filter-main {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.35fr) minmax(145px, .7fr) minmax(145px, .7fr) minmax(190px, .9fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.user-filter-main label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted-2);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.user-filter-main input,
+.user-filter-main select {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 15px;
+}
+
+.user-filter-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.user-filter-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.user-filter-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.user-filter-summary strong {
+  color: var(--text);
+}
+
+@media (max-width: 1180px) {
+  .user-filter-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .user-filter-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 680px) {
+  .user-filter-main {
+    grid-template-columns: 1fr;
+  }
+  .user-filter-actions .btn {
+    width: 100%;
+  }
+}

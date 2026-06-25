@@ -4853,17 +4853,83 @@ def admin_dashboard():
 @admin_required
 @page_access_required("admin_users")
 def admin_users():
-    selected_status = request.args.get("status", "")
-    sql = "SELECT * FROM users"
+    selected_status = (request.args.get("status", "") or "").strip().lower()
+    if selected_status not in {"", "pending", "approved", "rejected"}:
+        selected_status = ""
+
+    selected_role = (request.args.get("role", "") or "").strip().lower()
+    if selected_role not in {"", "admin", "base", "franchise"}:
+        selected_role = ""
+
+    search_query = (request.args.get("q", "") or "").strip()
+    selected_sort = (request.args.get("sort", "newest") or "newest").strip().lower()
+    sort_map = {
+        "newest": "created_at DESC, id DESC",
+        "oldest": "created_at ASC, id ASC",
+        "responsible_asc": "responsible_name COLLATE NOCASE ASC, id DESC",
+        "responsible_desc": "responsible_name COLLATE NOCASE DESC, id DESC",
+        "username_asc": "username COLLATE NOCASE ASC, id DESC",
+        "username_desc": "username COLLATE NOCASE DESC, id DESC",
+        "role_asc": "role COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+        "unit_asc": "organization_name COLLATE NOCASE ASC, franchise_name COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+        "status_asc": "status COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+    }
+    order_clause = sort_map.get(selected_sort, sort_map["newest"])
+    if selected_sort not in sort_map:
+        selected_sort = "newest"
+
+    where_clauses: list[str] = []
     params: list[Any] = []
     if selected_status:
-        sql += " WHERE status = ?"
+        where_clauses.append("status = ?")
         params.append(selected_status)
-    sql += " ORDER BY created_at DESC"
+    if selected_role:
+        where_clauses.append("role = ?")
+        params.append(selected_role)
+    if search_query:
+        like = f"%{search_query}%"
+        where_clauses.append(
+            "(responsible_name LIKE ? OR username LIKE ? OR organization_name LIKE ? OR franchise_name LIKE ? OR franchise_number LIKE ? OR cnpj LIKE ?)"
+        )
+        params.extend([like, like, like, like, like, like])
+
+    sql = "SELECT * FROM users"
+    if where_clauses:
+        sql += " WHERE " + " AND ".join(where_clauses)
+    sql += f" ORDER BY {order_clause}"
+
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
+        total_users = conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
+        status_rows = conn.execute("SELECT status, COUNT(*) AS total FROM users GROUP BY status").fetchall()
+        role_rows = conn.execute("SELECT role, COUNT(*) AS total FROM users GROUP BY role").fetchall()
+
     users = [user for row in rows if (user := row_to_user(row)) is not None]
-    return render_template("admin/users.html", users=users, selected_status=selected_status)
+    status_counts = {row["status"]: int(row["total"] or 0) for row in status_rows}
+    role_counts = {row["role"]: int(row["total"] or 0) for row in role_rows}
+    user_counts = {
+        "shown": len(users),
+        "total": int(total_users or 0),
+        "pending": status_counts.get("pending", 0),
+        "approved": status_counts.get("approved", 0),
+        "rejected": status_counts.get("rejected", 0),
+        "admin": role_counts.get("admin", 0),
+        "base": role_counts.get("base", 0),
+        "franchise": role_counts.get("franchise", 0),
+    }
+    user_filters = {
+        "q": search_query,
+        "status": selected_status,
+        "role": selected_role,
+        "sort": selected_sort,
+    }
+    return render_template(
+        "admin/users.html",
+        users=users,
+        selected_status=selected_status,
+        user_filters=user_filters,
+        user_counts=user_counts,
+    )
 
 
 @app.get("/admin/users/model")

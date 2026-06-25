@@ -4,6 +4,20 @@
   const originalText = new WeakMap();
   let isApplying = false;
   const zh = {
+  "Pesquisar usuário": "搜索用户",
+  "Responsável, usuário, base/franquia, número ou CNPJ...": "负责人、用户名、基地/加盟店、编号或 CNPJ...",
+  "Filtrar tipo": "筛选类型",
+  "Mais recentes": "最新",
+  "Mais antigos": "最早",
+  "Responsável A-Z": "负责人 A-Z",
+  "Responsável Z-A": "负责人 Z-A",
+  "Usuário A-Z": "用户名 A-Z",
+  "Usuário Z-A": "用户名 Z-A",
+  "Base/Franquia A-Z": "基地/加盟店 A-Z",
+  "pendente(s)": "待处理",
+  "aprovado(s)": "已批准",
+  "recusado(s)": "已拒绝",
+  "Nenhum usuário encontrado com os filtros selecionados.": "未找到符合筛选条件的用户。",
   "Acompanhe os pedidos enviados e o status de aprovação.": "跟踪已提交的申请和审批状态。",
   "Controle geral de cadastros, solicitações, produtos e estoque.": "注册、申请、产品与库存的总体控制。",
   "Registre entradas de estoque, anexe nota fiscal quando houver e gere relatórios mensais.": "登记库存入库，在有发票时上传附件，并生成月度报告。",
