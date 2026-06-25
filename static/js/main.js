@@ -107,7 +107,7 @@ function bindAddProduct(container, product) {
   const button = container.querySelector('[data-add-product]');
   if (!qtyInput || !button) return;
 
-  const productName = product.name || '';
+  const productName = jtText(product.name || '');
   const minimum = Number(product.min_order_quantity || 1);
   button.addEventListener('click', () => {
     const quantity = parseInt(qtyInput.value, 10);
@@ -140,9 +140,9 @@ function renderProductCards() {
 
     const unit = product.unit_measure || 'un';
     const unitLabel = jtText(unit);
-    const productName = product.name || '';
-    const productCategory = product.category || '';
-    const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
+    const productName = jtText(product.name || '');
+    const productCategory = jtText(product.category || '');
+    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
     const priceBadge = product.show_price ? `<span class="badge red">${escapeHtml(product.price)} / ${escapeHtml(unitLabel)}</span>` : '';
     const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
     const kitBadge = isKitProduct(product) ? `<span class="badge">${jtText('Kit')}: ${escapeHtml(kitUnitText(product))}</span>` : '';
@@ -202,9 +202,9 @@ function renderProductTable() {
   const rows = products.map((product) => {
     const unit = product.unit_measure || 'un';
     const unitLabel = jtText(unit);
-    const productName = product.name || '';
-    const productCategory = product.category || 'Sem categoria';
-    const productDescription = product.description ? product.description : jtText('Sem descrição cadastrada.');
+    const productName = jtText(product.name || '');
+    const productCategory = jtText(product.category || 'Sem categoria');
+    const productDescription = product.description ? jtText(product.description) : jtText('Sem descrição cadastrada.');
     const minimum = Number(product.min_order_quantity || 1);
     const inputMinimum = isKitProduct(product) ? 1 : minimum;
     const kitText = isKitProduct(product) ? `${jtText('Kit')}: ${kitUnitText(product)}` : '-';
@@ -328,7 +328,7 @@ function renderCart() {
     const kitText = isKitProduct(item.product) ? ` • ${item.quantity} ${jtText('kits')} = ${requestedUnits} ${unitLabel}` : '';
     div.innerHTML = `
       <div>
-        <strong>${escapeHtml(item.product.name || '')}</strong>
+        <strong>${escapeHtml(jtText(item.product.name || ''))}</strong>
         <span>${item.product.show_price ? escapeHtml(item.product.price) : jtText('Valor oculto')} / ${escapeHtml(unitLabel)}${minimumText}${escapeHtml(kitText)}</span>
       </div>
       <input type="number" min="${inputMinimum}" value="${item.quantity}" aria-label="${escapeHtml(jtText(isKitProduct(item.product) ? 'Quantidade de kits' : 'Quantidade'))}">
@@ -345,12 +345,12 @@ function renderCart() {
       const requestedUnits = toRequestUnits(item.product, quantity);
       if (requestedUnits < minimum) {
         input.value = item.quantity;
-        setMessage(jtText(`A quantidade mínima para ${item.product.name} é ${minimum}.`), 'err');
+        setMessage(jtText(`A quantidade mínima para ${jtText(item.product.name || '')} é ${minimum}.`), 'err');
         return;
       }
       if (item.product.limit !== null && item.product.limit !== undefined && requestedUnits > item.product.limit) {
         input.value = item.quantity;
-        setMessage(jtText(`Limite de insumos excedido para ${item.product.name}. Limite permitido: ${item.product.limit}.`), 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${jtText(item.product.name || '')}. Limite permitido: ${item.product.limit}.`), 'err');
         return;
       }
       cart.set(item.product.id, { product: item.product, quantity });

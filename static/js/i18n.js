@@ -1152,6 +1152,139 @@
     return null;
   }
 
+
+
+  function normalizeCatalogKey(value) {
+    return String(value == null ? '' : value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\uFE0F]/g, '')
+      .replace(/[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu, ' ')
+      .replace(/[^A-Za-z0-9\s|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+  }
+
+  function leadingCatalogSymbol(value) {
+    const raw = String(value == null ? '' : value);
+    const match = raw.match(/^\s*([\u{1F000}-\u{1FAFF}\u2600-\u27BF]\uFE0F?\s*)+/u);
+    return match ? match[0].trim() + ' ' : '';
+  }
+
+  function translateCatalogLabel(value) {
+    const raw = String(value == null ? '' : value).trim();
+    if (!raw) return null;
+    const prefix = leadingCatalogSymbol(raw);
+    const key = normalizeCatalogKey(raw);
+    if (!key) return null;
+    const map = {
+      'ADMINISTRATIVO': '行政',
+      'ADMINISTRATIVA': '行政',
+      'ADMINISTRACAO': '行政',
+      'OPERACIONAL': '运营',
+      'OPERACIONAIS': '运营',
+      'INSUMOS OPERACIONAIS': '运营耗材',
+      'INSUMO OPERACIONAL': '运营耗材',
+      'INSUMOS ADMINISTRATIVOS': '行政耗材',
+      'INSUMO ADMINISTRATIVO': '行政耗材',
+      'UNIFORME': '制服',
+      'UNIFORMES': '制服',
+      'EMBALAGEM': '包装',
+      'EMBALAGENS': '包装',
+      'ETIQUETA': '标签',
+      'ETIQUETAS': '标签',
+      'LACRE': '封条',
+      'LACRES': '封条',
+      'MATERIAL GRAFICO': '印刷材料',
+      'MATERIAIS GRAFICOS': '印刷材料',
+      'EPI': '个人防护用品',
+      'EPIS': '个人防护用品',
+      'PAPELARIA': '文具',
+      'LIMPEZA': '清洁用品',
+      'INFORMATICA': '信息技术用品',
+      'UNIDADE': '单位',
+      'UNIDADES': '单位',
+      'ROLO': '卷',
+      'ROLOS': '卷',
+      'PACOTE': '包',
+      'PACOTES': '包',
+      'CAIXA': '箱',
+      'CAIXAS': '箱',
+      'UN': '个',
+      'CRACHA COM CORDAO': '工牌挂绳',
+      'CRACHA': '工牌',
+      'CORDAO': '挂绳',
+      'ETIQUETA TERMICA': '热敏标签',
+      'ETIQUETAS TERMICAS': '热敏标签',
+      'ETIQUETA TERMICA ROLO COM 500 UNIDADES': '500张/卷热敏标签',
+      'LACRE PLASTICO': '塑料封条',
+      'LACRES PLASTICOS': '塑料封条',
+      'ENVELOPE DE SEGURANCA P': '安全信封 P',
+      'ENVELOPE DE SEGURANCA M': '安全信封 M',
+      'ENVELOPE DE SEGURANCA G': '安全信封 G',
+      'ENVELOPE DE SEGURANCA': '安全信封',
+      'ENVELOPE MEDIO': '中号信封',
+      'ENVELOPE PEQUENO': '小号信封',
+      'CAMISETA BASICA PERSONALIZADA | J T': 'J&T 定制基础 T 恤',
+      'CAMISETA BASICA PERSONALIZADA J T': 'J&T 定制基础 T 恤',
+      'CAMISETA POLO PERSONALIZADA J T': 'J&T 定制 Polo 衫',
+      'PACKTAINER PLASTICO': '塑料 Packtainer',
+      'MANGA PALLET PLASTICO': '塑料托盘缠绕膜',
+      'COLETE EPI PERSONALIZADO J T': 'J&T 定制防护背心',
+      'PAPEL A4': 'A4 纸',
+      'TONER': '硒鼓',
+      'BOBINA': '卷纸',
+      'BLOCO DE ANOTACAO': '记事本',
+      'CANETA': '笔',
+      'FITA ADESIVA': '胶带',
+      'FITA LACRE': '封箱胶带',
+      'SACO DE ROTA': '路线袋',
+      'SACO': '袋子',
+      'CAIXA DE PAPELAO': '纸箱',
+      'CAIXA PAPELAO': '纸箱',
+      'PDA': 'PDA'
+    };
+    if (map[key]) return prefix + map[key];
+
+    const replacements = [
+      ['INSUMOS', '耗材'],
+      ['INSUMO', '耗材'],
+      ['OPERACIONAIS', '运营'],
+      ['OPERACIONAL', '运营'],
+      ['ADMINISTRATIVOS', '行政'],
+      ['ADMINISTRATIVO', '行政'],
+      ['UNIFORMES', '制服'],
+      ['UNIFORME', '制服'],
+      ['EMBALAGENS', '包装'],
+      ['EMBALAGEM', '包装'],
+      ['ETIQUETAS', '标签'],
+      ['ETIQUETA', '标签'],
+      ['LACRES', '封条'],
+      ['LACRE', '封条'],
+      ['PLASTICO', '塑料'],
+      ['TERMICA', '热敏'],
+      ['TERMICO', '热敏'],
+      ['SEGURANCA', '安全'],
+      ['ENVELOPE', '信封'],
+      ['CRACHA', '工牌'],
+      ['CORDAO', '挂绳'],
+      ['ROLO', '卷'],
+      ['UNIDADE', '单位']
+    ];
+    let output = key;
+    let changed = false;
+    replacements.forEach(function (pair) {
+      const re = new RegExp('(^|\\s)' + pair[0] + '(?=\\s|$)', 'g');
+      if (re.test(output)) {
+        output = output.replace(re, function (full, space) { return space + pair[1]; });
+        changed = true;
+      }
+    });
+    if (changed && !/[A-Z]{3,}/.test(output)) return prefix + output.replace(/\s+/g, ' ').trim();
+    return null;
+  }
+
   function isOperationalCode(value) {
     const raw = String(value || '').trim();
     if (!raw) return false;
@@ -1236,6 +1369,8 @@
     if (!core) return core;
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     if (zh[core]) return zh[core];
+    const catalogLabel = translateCatalogLabel(core);
+    if (catalogLabel) return catalogLabel;
     const roleOrOrg = translateOrgOrRole(core);
     if (roleOrOrg) return roleOrOrg;
     let match;
@@ -1532,6 +1667,12 @@
       '.user-unit-cell',
       '#userTableBody',
       '.product-tools',
+      '.products-admin-table',
+      '#productTableBody',
+      '.request-products-table-wrap',
+      '.product-card',
+      '.product-category',
+      '.cart-items',
       '.import-form',
       '.cart-panel',
       '.monthly-report-card',

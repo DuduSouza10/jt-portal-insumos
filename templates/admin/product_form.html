@@ -58,8 +58,12 @@
               >
               <div id="categorySuggestions" class="category-suggestions hidden" role="listbox"></div>
             </div>
-            <button id="openNewCategory" class="btn ghost category-new-button" type="button">+ Nova categoria</button>
-            <button id="openEditCategories" class="btn ghost category-edit-existing-button" type="button">Editar categorias</button>
+            <button id="openNewCategory" class="btn ghost category-new-button category-icon-button" type="button" aria-label="Nova categoria">
+              <img src="{{ url_for('static', filename='img/action-plus.svg') }}" alt="">
+            </button>
+            <button id="openEditCategories" class="btn ghost category-edit-existing-button category-icon-button" type="button" aria-label="Editar categorias">
+              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+            </button>
           </div>
           <div id="newCategoryPanel" class="new-category-panel hidden">
             <label class="new-category-emoji">

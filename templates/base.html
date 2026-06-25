@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=112">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=117">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -278,9 +278,62 @@
       });
     });
   </script>
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=112"></script>
-  <script src="{{ url_for('static', filename='js/theme.js') }}?v=112"></script>
-  <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=112"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=117"></script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}?v=117"></script>
+  <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=117"></script>
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const tooltip = document.createElement('div');
+      tooltip.className = 'action-cursor-tooltip';
+      tooltip.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(tooltip);
+
+      function textFor(target) {
+        const source = target && target.getAttribute('data-tooltip');
+        return window.jtText && source ? window.jtText(source) : (source || '');
+      }
+      function showTooltip(event, target) {
+        const label = textFor(target);
+        if (!label) return;
+        tooltip.textContent = label;
+        tooltip.classList.add('visible');
+        moveTooltip(event);
+      }
+      function moveTooltip(event) {
+        if (!tooltip.classList.contains('visible')) return;
+        tooltip.style.left = (event.clientX + 12) + 'px';
+        tooltip.style.top = (event.clientY + 14) + 'px';
+      }
+      function hideTooltip() {
+        tooltip.classList.remove('visible');
+      }
+
+      document.addEventListener('mouseover', function (event) {
+        const target = event.target.closest && event.target.closest('.icon-action-btn[data-tooltip]');
+        if (target) showTooltip(event, target);
+      });
+      document.addEventListener('mousemove', function (event) {
+        if (event.target.closest && event.target.closest('.icon-action-btn[data-tooltip]')) moveTooltip(event);
+      });
+      document.addEventListener('mouseout', function (event) {
+        const target = event.target.closest && event.target.closest('.icon-action-btn[data-tooltip]');
+        if (target && (!event.relatedTarget || !target.contains(event.relatedTarget))) hideTooltip();
+      });
+      document.addEventListener('focusin', function (event) {
+        const target = event.target.closest && event.target.closest('.icon-action-btn[data-tooltip]');
+        if (target) {
+          const rect = target.getBoundingClientRect();
+          tooltip.textContent = textFor(target);
+          tooltip.classList.add('visible');
+          tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+          tooltip.style.top = (rect.bottom + 10) + 'px';
+        }
+      });
+      document.addEventListener('focusout', function (event) {
+        if (event.target.closest && event.target.closest('.icon-action-btn[data-tooltip]')) hideTooltip();
+      });
+    });
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

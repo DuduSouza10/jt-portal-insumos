@@ -204,7 +204,7 @@
           </a>
           <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}') : '{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
             <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="{{ 'Inativar' if product.active else 'Ativar' }}" aria-label="{{ 'Inativar produto' if product.active else 'Ativar produto' }}">
-              <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
+              <img src="{{ url_for('static', filename=('img/action-inactive.svg' if product.active else 'img/action-correct.svg')) }}" alt="">
             </button>
           </form>
           <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.') : 'Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')">
