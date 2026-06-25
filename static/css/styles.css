@@ -7148,3 +7148,48 @@ html[data-theme="light"] .product-stock-display strong {
     justify-content: flex-end;
   }
 }
+
+/* v98 - estoque sem unidade na tabela de produtos + público interno */
+.products-admin-table .product-stock-cell {
+  text-align: center !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+.products-admin-table .product-stock-cell strong {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 34px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 12px !important;
+  color: var(--text-strong) !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+}
+
+html[data-theme="light"] .products-admin-table .product-stock-cell strong {
+  background: rgba(230,0,18,.055) !important;
+  border-color: rgba(230,0,18,.12) !important;
+}
+
+.audience-pill.internal {
+  background: rgba(230,0,18,.18) !important;
+  border-color: rgba(230,0,18,.34) !important;
+  color: #ffb3bb !important;
+}
+
+.product-audience .internal-product-option {
+  border-color: rgba(230,0,18,.28) !important;
+  background: rgba(230,0,18,.07) !important;
+}
+
+@media (max-width: 760px) {
+  .products-admin-table .product-stock-cell {
+    text-align: right !important;
+  }
+}

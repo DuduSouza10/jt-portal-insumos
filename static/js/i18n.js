@@ -4,6 +4,18 @@
   const originalText = new WeakMap();
   let isApplying = false;
   const zh = {
+  "Acompanhe os pedidos enviados e o status de aprovação.": "跟踪已提交的申请和审批状态。",
+  "Controle geral de cadastros, solicitações, produtos e estoque.": "注册、申请、产品与库存的总体控制。",
+  "Registre entradas de estoque, anexe nota fiscal quando houver e gere relatórios mensais.": "登记库存入库，在有发票时上传附件，并生成月度报告。",
+  "Cadastre insumos, valores, limites e parâmetros de estoque mínimo/máximo.": "登记耗材、价格、限制以及最低/最高库存参数。",
+  "Defina estoque, valor, limites, quantidade mínima por pedido e parâmetros de estoque.": "设置库存、价格、限制、每次申请最低数量以及库存参数。",
+  "Aprove, recuse ou exclua pedidos. O estoque é descontado somente na aprovação.": "批准、拒绝或删除申请；库存仅在批准时扣减。",
+  "Histórico de solicitações aprovadas e já descontadas do estoque.": "已批准并已从库存扣减的申请历史。",
+  "Painel de controle dos insumos, níveis mínimos e máximos, saúde do estoque, movimentações e relatórios por unidade.": "耗材控制面板，包含最低/最高库存、库存健康状态、库存变动和按单位报告。",
+  "Cadastre usuários manualmente, defina o tipo de acesso e confira as páginas liberadas.": "手动注册用户、设置访问类型并查看已开放页面。",
+  "Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.": "新增用户、导入电子表格、批准注册并编辑访问权限。",
+  "Cadastre ativos por base, regional, setor e gestor, com itens e patrimônio ou número de série.": "按基地、区域、部门和负责人登记资产，并记录项目、资产编号或序列号。",
+  "Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.": "搜索耗材、填写数量，并提交给管理人员审批。",
   "arquivos selecionados": "个文件已选择",
   "Selecionar outro": "选择其他文件",
   "Excluir arquivo": "删除文件",

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS products (
     catalog_archived INTEGER NOT NULL DEFAULT 0,
     visible_base INTEGER NOT NULL DEFAULT 1,
     visible_franchise INTEGER NOT NULL DEFAULT 1,
+    internal INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT
 );

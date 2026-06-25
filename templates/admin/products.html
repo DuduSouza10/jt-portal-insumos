@@ -122,9 +122,13 @@
         </td>
         <td data-label="Categoria"><span data-no-i18n>{{ product.category_emoji }} {{ product.category or '-' }}</span></td>
         <td data-label="Público">
-          {% if product.visible_base %}<span class="audience-pill">Base</span>{% endif %}
-          {% if product.visible_franchise %}<span class="audience-pill">Franquia</span>{% endif %}
-          {% if not product.visible_base and not product.visible_franchise %}<span class="muted">Somente admin</span>{% endif %}
+          {% if product.internal %}
+            <span class="audience-pill internal">Interno</span>
+          {% else %}
+            {% if product.visible_base %}<span class="audience-pill">Base</span>{% endif %}
+            {% if product.visible_franchise %}<span class="audience-pill">Franquia</span>{% endif %}
+            {% if not product.visible_base and not product.visible_franchise %}<span class="muted">Somente admin</span>{% endif %}
+          {% endif %}
         </td>
         <td data-label="Unidade">{{ product.unit_measure or 'un' }}</td>
         <td class="product-stock-td" data-label="Estoque">

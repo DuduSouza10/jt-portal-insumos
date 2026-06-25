@@ -460,6 +460,7 @@ class Product:
     catalog_archived: bool = False
     visible_base: bool = True
     visible_franchise: bool = True
+    internal: bool = False
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
 
@@ -821,6 +822,7 @@ def row_to_product(row: Any | None) -> Product | None:
         catalog_archived=bool(row["catalog_archived"]) if "catalog_archived" in row.keys() else False,
         visible_base=bool(row["visible_base"]) if "visible_base" in row.keys() else True,
         visible_franchise=bool(row["visible_franchise"]) if "visible_franchise" in row.keys() else True,
+        internal=bool(row["internal"]) if "internal" in row.keys() else False,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
     )
@@ -1058,6 +1060,7 @@ def init_db() -> None:
                 catalog_archived INTEGER NOT NULL DEFAULT 0,
                 visible_base INTEGER NOT NULL DEFAULT 1,
                 visible_franchise INTEGER NOT NULL DEFAULT 1,
+                internal INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1234,6 +1237,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN visible_base INTEGER NOT NULL DEFAULT 1")
         if "visible_franchise" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1")
+        if "internal" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN internal INTEGER NOT NULL DEFAULT 0")
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
@@ -1746,12 +1751,24 @@ def record_stock_movement(
     request_id: int | None = None,
     created_by_id: int | None = None,
 ) -> None:
+    created_at = now_iso()
     conn.execute(
         """
         INSERT INTO stock_movements (product_id, request_id, created_by_id, movement_type, quantity_delta, stock_before, stock_after, note, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (product_id, request_id, created_by_id, movement_type, quantity_delta, stock_before, stock_after, note, now_iso()),
+        (product_id, request_id, created_by_id, movement_type, quantity_delta, stock_before, stock_after, note, created_at),
+    )
+    notify_feishu_stock_movement(
+        conn,
+        product_id=product_id,
+        quantity_delta=quantity_delta,
+        stock_before=stock_before,
+        stock_after=stock_after,
+        movement_type=movement_type,
+        note=note,
+        created_by_id=created_by_id,
+        created_at=created_at,
     )
 
 
@@ -1784,7 +1801,9 @@ def user_role_label(role: str | None) -> str:
 
 
 def format_feishu_datetime(value: datetime | None = None) -> str:
-    return (value or datetime.utcnow()).strftime("%d/%m/%Y %H:%M")
+    base_value = value or datetime.utcnow()
+    # Datas gravadas no app ficam em UTC. Para o Feishu, exibe no horário de Brasília.
+    return (base_value - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") + " (Brasília)"
 
 
 def public_url_for(endpoint: str, **values: Any) -> str:
@@ -1952,6 +1971,49 @@ def notify_feishu_asset_created(
     send_feishu_card("Novo ativo cadastrado", lines, "Abrir ativo", link_url)
 
 
+
+
+def notify_feishu_stock_movement(
+    conn: Any,
+    *,
+    product_id: int,
+    quantity_delta: int,
+    stock_before: int,
+    stock_after: int,
+    movement_type: str,
+    note: str = "",
+    created_by_id: int | None = None,
+    created_at: str | None = None,
+) -> None:
+    if not has_request_context() or not quantity_delta:
+        return
+    try:
+        product_row = conn.execute("SELECT name, unit_measure FROM products WHERE id = ?", (product_id,)).fetchone()
+        product_name = product_row["name"] if product_row else f"Produto #{product_id}"
+        unit_measure = (product_row["unit_measure"] if product_row and "unit_measure" in product_row.keys() else "") or "un"
+        responsible = "Sistema"
+        if created_by_id:
+            user_row = conn.execute("SELECT responsible_name, username FROM users WHERE id = ?", (created_by_id,)).fetchone()
+            if user_row:
+                responsible = user_row["responsible_name"] or user_row["username"] or f"Usuário #{created_by_id}"
+        direction = "Entrada" if quantity_delta > 0 else "Saída"
+        qty_prefix = "+" if quantity_delta > 0 else ""
+        qty_text = f"{qty_prefix}{quantity_delta} {unit_measure}".strip()
+        movement_dt = parse_dt(created_at) if created_at else datetime.utcnow()
+        lines = [
+            feishu_line("Responsável", responsible),
+            feishu_line("Produto", product_name),
+            feishu_line("Movimentação", direction),
+            feishu_line("Quantidade", qty_text),
+            feishu_line("Estoque", f"{stock_before} → {stock_after}"),
+            feishu_line("Tipo", movement_type_label(movement_type)),
+            feishu_line("Data", format_feishu_datetime(movement_dt)),
+        ]
+        if note:
+            lines.append(feishu_line("Observação", note))
+        send_feishu_card("Movimentação de estoque", lines, "Abrir entrada de materiais", public_url_for("admin_material_entries"))
+    except Exception:
+        app.logger.exception("Falha ao preparar notificacao Feishu da movimentacao de estoque")
 
 
 def normalize_header(value: Any) -> str:
@@ -2177,6 +2239,8 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             return [], "Um dos insumos selecionados não está disponível."
         if not user.is_admin and product.stock_quantity <= 0:
             return [], f"{product.name} está sem estoque no momento."
+        if not user.is_admin and product.internal:
+            return [], f"{product.name} é um produto interno e não está disponível para solicitação."
         if user.role == "base" and not product.visible_base:
             return [], f"{product.name} não está disponível para bases."
         if user.role == "franchise" and not product.visible_franchise:
@@ -2217,17 +2281,21 @@ def fill_product_from_form(product: Product) -> Product:
     product.min_stock = parse_optional_int(request.form.get("min_stock"))
     product.max_stock = parse_optional_int(request.form.get("max_stock"))
     product.active = request.form.get("active") == "on"
+    product.internal = request.form.get("internal") == "on"
     product.visible_base = request.form.get("visible_base") == "on"
     product.visible_franchise = request.form.get("visible_franchise") == "on"
+    if product.internal:
+        product.visible_base = False
+        product.visible_franchise = False
     return product
 
 
 def list_product_categories(user: User | None = None) -> list[dict[str, str]]:
     visibility_clause = ""
     if user is not None and user.role == "base":
-        visibility_clause = " AND visible_base = 1 AND active = 1 AND stock_quantity > 0"
+        visibility_clause = " AND visible_base = 1 AND COALESCE(internal, 0) = 0 AND active = 1 AND stock_quantity > 0"
     elif user is not None and user.role == "franchise":
-        visibility_clause = " AND visible_franchise = 1 AND active = 1 AND stock_quantity > 0"
+        visibility_clause = " AND visible_franchise = 1 AND COALESCE(internal, 0) = 0 AND active = 1 AND stock_quantity > 0"
     with db_connect() as conn:
         rows = conn.execute(
             f"""
@@ -2272,6 +2340,7 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "show_price": show_price,
         "visible_base": product.visible_base,
         "visible_franchise": product.visible_franchise,
+        "internal": product.internal,
     }
 
 
@@ -3704,6 +3773,7 @@ def ensure_product_import_columns(conn: Any) -> None:
         ("catalog_archived", "ALTER TABLE products ADD COLUMN catalog_archived INTEGER NOT NULL DEFAULT 0"),
         ("visible_base", "ALTER TABLE products ADD COLUMN visible_base INTEGER NOT NULL DEFAULT 1"),
         ("visible_franchise", "ALTER TABLE products ADD COLUMN visible_franchise INTEGER NOT NULL DEFAULT 1"),
+        ("internal", "ALTER TABLE products ADD COLUMN internal INTEGER NOT NULL DEFAULT 0"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -4589,7 +4659,7 @@ def api_products():
     sql = "SELECT * FROM products WHERE active = 1 AND catalog_archived = 0"
     params: list[Any] = []
     if not user.is_admin:
-        sql += " AND stock_quantity > 0"
+        sql += " AND stock_quantity > 0 AND COALESCE(internal, 0) = 0"
     if user.role == "base":
         sql += " AND visible_base = 1"
     elif user.role == "franchise":
@@ -4621,6 +4691,8 @@ def product_image(product_id: int):
     if product is None or not product.image_key:
         abort(404)
     user = require_current_user()
+    if not user.is_admin and product.internal:
+        abort(404)
     if user.role == "base" and not product.visible_base:
         abort(404)
     if user.role == "franchise" and not product.visible_franchise:
@@ -5403,9 +5475,9 @@ def admin_product_new():
                     name, category, category_emoji, image_name, image_key, image_content_type,
                     unit_measure, description, stock_quantity,
                     price_cents, limit_base, limit_franchise, min_order_quantity,
-                    min_stock, max_stock, active, visible_base, visible_franchise, created_at
+                    min_stock, max_stock, active, visible_base, visible_franchise, internal, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
@@ -5426,6 +5498,7 @@ def admin_product_new():
                     1 if product.active else 0,
                     1 if product.visible_base else 0,
                     1 if product.visible_franchise else 0,
+                    1 if product.internal else 0,
                     now_iso(),
                 ),
             )
@@ -5477,7 +5550,7 @@ def admin_product_edit(product_id: int):
                     image_content_type = ?, unit_measure = ?, description = ?,
                     stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
                     min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
-                    visible_base = ?, visible_franchise = ?, updated_at = ?
+                    visible_base = ?, visible_franchise = ?, internal = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -5499,6 +5572,7 @@ def admin_product_edit(product_id: int):
                     1 if product.active else 0,
                     1 if product.visible_base else 0,
                     1 if product.visible_franchise else 0,
+                    1 if product.internal else 0,
                     now_iso(),
                     product_id,
                 ),

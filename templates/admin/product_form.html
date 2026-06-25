@@ -110,16 +110,20 @@
       Produto ativo para solicitação
     </label>
     <fieldset class="product-audience full">
-      <legend>Exibir produto para</legend>
+      <legend>Público do produto</legend>
+      <label class="checkbox-line internal-product-option">
+        <input type="checkbox" name="internal" id="internalProduct" {% if product and product.internal %}checked{% endif %}>
+        Interno
+      </label>
       <label class="checkbox-line">
-        <input type="checkbox" name="visible_base" {% if not product or product.visible_base %}checked{% endif %}>
+        <input type="checkbox" name="visible_base" id="visibleBase" {% if not product or product.visible_base %}checked{% endif %}>
         Base
       </label>
       <label class="checkbox-line">
-        <input type="checkbox" name="visible_franchise" {% if not product or product.visible_franchise %}checked{% endif %}>
+        <input type="checkbox" name="visible_franchise" id="visibleFranchise" {% if not product or product.visible_franchise %}checked{% endif %}>
         Franquia
       </label>
-      <small class="hint">O produto aparecerá apenas para os tipos de usuário selecionados.</small>
+      <small class="hint">Marque Interno para produtos usados somente pela empresa. Produtos internos não aparecem para bases/franquias.</small>
     </fieldset>
     <div class="full form-actions">
       <button class="btn primary" type="submit">Salvar produto</button>
@@ -144,6 +148,25 @@
   const confirmButton = document.getElementById('confirmNewCategory');
   const cancelButton = document.getElementById('cancelNewCategory');
   const categories = {{ product_categories|default([])|tojson }};
+  const internalProduct = document.getElementById('internalProduct');
+  const visibleBase = document.getElementById('visibleBase');
+  const visibleFranchise = document.getElementById('visibleFranchise');
+  function syncInternalVisibility() {
+    if (!internalProduct || !visibleBase || !visibleFranchise) return;
+    if (internalProduct.checked) {
+      visibleBase.checked = false;
+      visibleFranchise.checked = false;
+      visibleBase.disabled = true;
+      visibleFranchise.disabled = true;
+    } else {
+      visibleBase.disabled = false;
+      visibleFranchise.disabled = false;
+    }
+  }
+  if (internalProduct) {
+    internalProduct.addEventListener('change', syncInternalVisibility);
+    syncInternalVisibility();
+  }
   const currentCategory = valueInput ? valueInput.value.trim() : '';
   const currentEmoji = emojiValueInput ? emojiValueInput.value.trim() : '';
 
