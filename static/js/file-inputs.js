@@ -14,46 +14,45 @@
     input.dataset.fileEnhanced = '1';
     input.classList.add('enhanced-file-input');
 
-    const panel = document.createElement('div');
-    panel.className = 'file-input-control hidden';
-    panel.setAttribute('aria-live', 'polite');
+    const picker = document.createElement('div');
+    picker.className = 'file-picker-shell';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-live', 'polite');
 
     const selected = document.createElement('span');
-    selected.className = 'file-input-name';
+    selected.className = 'file-picker-name';
 
     const actions = document.createElement('span');
-    actions.className = 'file-input-actions';
+    actions.className = 'file-picker-actions';
 
-    const changeBtn = document.createElement('button');
-    changeBtn.type = 'button';
-    changeBtn.className = 'btn tiny ghost file-change-btn';
-    changeBtn.textContent = t('Selecionar outro');
+    const chooseBtn = document.createElement('button');
+    chooseBtn.type = 'button';
+    chooseBtn.className = 'file-picker-button';
 
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
-    clearBtn.className = 'btn tiny ghost danger file-clear-btn';
-    clearBtn.textContent = t('Excluir arquivo');
+    clearBtn.className = 'file-picker-clear';
+    clearBtn.setAttribute('aria-label', t('Excluir arquivo'));
+    clearBtn.textContent = '×';
 
-    actions.appendChild(changeBtn);
     actions.appendChild(clearBtn);
-    panel.appendChild(selected);
-    panel.appendChild(actions);
-    input.insertAdjacentElement('afterend', panel);
+    actions.appendChild(chooseBtn);
+    picker.appendChild(selected);
+    picker.appendChild(actions);
+    input.insertAdjacentElement('afterend', picker);
 
     function update() {
       const name = fileLabel(input);
-      if (name) {
-        selected.textContent = t('Arquivo selecionado') + ': ' + name;
-        panel.classList.remove('hidden');
-      } else {
-        selected.textContent = '';
-        panel.classList.add('hidden');
-      }
-      changeBtn.textContent = t('Selecionar outro');
-      clearBtn.textContent = t('Excluir arquivo');
+      const hasFile = Boolean(name);
+      selected.textContent = hasFile ? name : t('Nenhum arquivo selecionado');
+      chooseBtn.textContent = hasFile ? t('Selecionar outro') : t('Selecionar arquivo');
+      clearBtn.setAttribute('aria-label', t('Excluir arquivo'));
+      clearBtn.title = t('Excluir arquivo');
+      clearBtn.hidden = !hasFile;
+      picker.classList.toggle('has-file', hasFile);
     }
 
-    changeBtn.addEventListener('click', function () {
+    chooseBtn.addEventListener('click', function () {
       input.click();
     });
 
@@ -61,11 +60,15 @@
       input.value = '';
       input.dispatchEvent(new Event('change', { bubbles: true }));
       update();
-      input.focus({ preventScroll: true });
+    });
+
+    picker.addEventListener('click', function (event) {
+      if (event.target === picker || event.target === selected) input.click();
     });
 
     input.addEventListener('change', update);
     document.addEventListener('jt:language-change', update);
+    window.addEventListener('jt-language-change', update);
     update();
   }
 
@@ -76,5 +79,6 @@
   document.addEventListener('DOMContentLoaded', enhanceAll);
   window.addEventListener('load', enhanceAll);
   document.addEventListener('jt:language-change', enhanceAll);
+  window.addEventListener('jt-language-change', enhanceAll);
   window.JT_FILE_INPUTS = { refresh: enhanceAll };
 })();

@@ -34,6 +34,8 @@
   "Selecionar outro": "选择其他文件",
   "Excluir arquivo": "删除文件",
   "Arquivo selecionado": "已选择文件",
+  "Selecionar arquivo": "选择文件",
+  "Nenhum arquivo selecionado": "未选择文件",
   "Login • Portal de Insumos J&T": "登录 • J&T 耗材门户网站",
   "Cadastro • Portal de Insumos J&T": "注册 • J&T 耗材门户网站",
   "Acesso ao Portal": "登录门户网站",

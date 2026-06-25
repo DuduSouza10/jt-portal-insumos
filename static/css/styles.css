@@ -7721,3 +7721,237 @@ body .report-actions .btn:hover {
     justify-content: center;
   }
 }
+
+
+/* v109 - upload customizado e importação de produtos redesenhada */
+input.enhanced-file-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  border: 0 !important;
+  pointer-events: none !important;
+}
+
+.file-picker-shell {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 17px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.045);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.file-picker-shell:hover,
+.file-picker-shell.has-file {
+  border-color: rgba(230,0,18,.46);
+  background: rgba(230,0,18,.065);
+  box-shadow: 0 0 0 3px rgba(230,0,18,.06), inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.file-picker-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.3;
+}
+
+.file-picker-shell.has-file .file-picker-name {
+  color: var(--text-strong);
+}
+
+.file-picker-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.file-picker-button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 13px;
+  padding: 0 15px;
+  background: linear-gradient(135deg, #460006 0%, #70000b 52%, #970010 100%);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 950;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(95,0,12,.28);
+  transition: background .18s ease, color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.file-picker-button:hover {
+  background: #fff;
+  color: #b50013;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(0,0,0,.24);
+}
+
+.file-picker-clear {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 11px;
+  background: rgba(255,255,255,.055);
+  color: var(--text-strong);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-picker-clear:hover {
+  background: rgba(230,0,18,.16);
+  border-color: rgba(230,0,18,.38);
+  color: #fff;
+}
+
+.file-input-control {
+  display: none !important;
+}
+
+html[data-theme="light"] .file-picker-shell {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(17,24,39,.12);
+}
+
+html[data-theme="light"] .file-picker-shell:hover,
+html[data-theme="light"] .file-picker-shell.has-file {
+  background: rgba(230,0,18,.045);
+  border-color: rgba(181,0,19,.32);
+}
+
+.product-import-form {
+  display: grid !important;
+  grid-template-columns: minmax(280px, .95fr) minmax(560px, 1.45fr) auto !important;
+  align-items: end !important;
+  gap: 14px !important;
+  padding: 18px !important;
+  margin: 20px 0 20px !important;
+  border-radius: 24px !important;
+  border: 1px solid rgba(255,255,255,.09) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.018)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035), 0 18px 34px rgba(0,0,0,.18) !important;
+}
+
+.product-import-form > label {
+  display: grid !important;
+  gap: 10px !important;
+  align-self: end !important;
+  min-width: 0 !important;
+  color: var(--muted-2) !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+}
+
+.product-import-form .import-mode-fieldset {
+  align-self: stretch !important;
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.product-import-form .import-mode-fieldset legend {
+  margin: 0 0 7px !important;
+  color: var(--muted-2) !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+}
+
+.product-import-form .import-mode-option {
+  min-height: 82px !important;
+  padding: 13px 14px !important;
+  border-radius: 17px !important;
+  background: rgba(255,255,255,.035) !important;
+  border-color: rgba(255,255,255,.10) !important;
+}
+
+.product-import-form .import-mode-option:has(input:checked) {
+  border-color: rgba(230,0,18,.58) !important;
+  background: linear-gradient(135deg, rgba(230,0,18,.15), rgba(230,0,18,.045)) !important;
+  box-shadow: 0 0 0 3px rgba(230,0,18,.075) !important;
+}
+
+.product-import-form .import-mode-option strong {
+  font-size: 13.5px !important;
+}
+
+.product-import-form .import-mode-option small {
+  margin-top: 5px !important;
+  font-size: 11.2px !important;
+  line-height: 1.35 !important;
+}
+
+.product-import-form > .btn {
+  min-height: 52px !important;
+  align-self: end !important;
+  border-radius: 16px !important;
+  padding-inline: 20px !important;
+  white-space: nowrap !important;
+}
+
+.product-import-form > small {
+  grid-column: 1 / -1 !important;
+  margin-top: 2px !important;
+  padding: 12px 14px !important;
+  border-radius: 16px !important;
+  background: rgba(255,255,255,.035) !important;
+  border: 1px solid rgba(255,255,255,.07) !important;
+  color: var(--muted-2) !important;
+  font-size: 12.2px !important;
+  line-height: 1.45 !important;
+}
+
+html[data-theme="light"] .product-import-form,
+html[data-theme="light"] .product-import-form > small,
+html[data-theme="light"] .product-import-form .import-mode-option {
+  border-color: rgba(17,24,39,.10) !important;
+  background: rgba(255,255,255,.78) !important;
+}
+
+@media (max-width: 1280px) {
+  .product-import-form {
+    grid-template-columns: 1fr !important;
+  }
+  .product-import-form > .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .file-picker-shell {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    padding: 12px;
+  }
+  .file-picker-actions {
+    justify-content: stretch;
+  }
+  .file-picker-button {
+    width: 100%;
+  }
+  .product-import-form .import-mode-fieldset {
+    grid-template-columns: 1fr !important;
+  }
+}
