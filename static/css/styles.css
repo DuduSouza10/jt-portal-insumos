@@ -7409,3 +7409,46 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
   color: #b50013 !important;
   border-color: rgba(181,0,19,.26) !important;
 }
+
+
+/* v106 - correção: botões só ficam brancos no hover/ativo */
+.nav-header .top-nav > a:not(:hover):not(.active),
+.nav-header .nav-dropdown:not(:hover):not(.open):not(.active) > .nav-drop-toggle,
+.nav-header .logout:not(:hover),
+.nav-header .public-actions .btn:not(:hover):not(.active) {
+  background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,.12) !important;
+  box-shadow: 0 8px 18px rgba(80,0,8,.20) !important;
+}
+
+.nav-header .top-nav > a:not(:hover):not(.active) *,
+.nav-header .nav-dropdown:not(:hover):not(.open):not(.active) > .nav-drop-toggle *,
+.nav-header .logout:not(:hover) *,
+.nav-header .public-actions .btn:not(:hover):not(.active) * {
+  color: #ffffff !important;
+}
+
+.nav-header .top-nav > a:hover,
+.nav-header .top-nav > a.active,
+.nav-header .nav-dropdown:hover > .nav-drop-toggle,
+.nav-header .nav-dropdown.open > .nav-drop-toggle,
+.nav-header .nav-dropdown.active > .nav-drop-toggle,
+.nav-header .logout:hover,
+.nav-header .public-actions .btn:hover,
+.nav-header .public-actions .btn.active {
+  background: #ffffff !important;
+  color: #b50013 !important;
+  border-color: rgba(181,0,19,.32) !important;
+  box-shadow: 0 10px 24px rgba(230,0,18,.18) !important;
+}
+
+.nav-header .nav-dropdown:focus-within:not(:hover):not(.open):not(.active) > .nav-drop-toggle {
+  background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  color: #ffffff !important;
+}
+
+.nav-header .nav-drop-menu a:not(:hover):not(.active) {
+  background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  color: #ffffff !important;
+}
