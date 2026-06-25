@@ -320,7 +320,73 @@ VAG -MG
 VCS -MG
 VPS -MG
 BDC-MG
-JDF-MG"""
+JDF-MG
+ARA-SP
+ARU 02-SP
+ARU-SP
+AVR-SP
+BAU 02-SP
+BAU-SP
+BBD-SP
+BGI-SP
+BTC-SP
+CPE-SP
+DCN SP
+F AND-SP
+F ASI-SP
+F AUR-SP
+F BAT-SP
+F BDB-SP
+F BRB-SP
+F CTD-SP
+F GNS-SP
+F GPC-SP
+F GRC-SP
+F GRR-SP
+F IBG-SP
+F ITAP-SP
+F ITV 02-SP
+F JAU-SP
+F JLS-SP
+F JSB-SP
+F LCP-SP
+F LNS-SP
+F MAT-SP
+F MII-SP
+F MRS-SP
+F MTT-SP
+F NVH-SP
+F ORLN-SP
+F OSW-SP
+F OUR-SP
+F PFT-SP
+F PNP-SP
+F PTR-SP
+F QSC 03-SP
+F RAO 02-SP
+F RPD-SP
+F SBV 02-SP
+F SBV-SP
+F SJB-SP
+F STF-SP
+F TPA-SP
+F TQA-SP
+F VTP-SP
+FERN-SP
+FRC 02-SP
+FRC-SP
+JBT-SP
+MII-SP
+PPB-SP
+PRSS-SP
+RAO 02-SP
+RAO 03-SP
+RAO-SP
+SCL-SP
+SJP 02-SP
+SJP-SP
+VGS-SP
+"""
 def _unit_sort_key(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").strip()).upper()
 
@@ -879,10 +945,10 @@ def normalize_asset_regional(value: str) -> str:
 
 
 def asset_regional_for_base(base: str) -> str:
-    normalized = (base or "").strip().upper()
-    if "-MG" in normalized:
+    normalized = re.sub(r"\s+", " ", (base or "").strip().upper())
+    if "-MG" in normalized or normalized.endswith(" MG"):
         return "MG"
-    if "-SP" in normalized:
+    if "-SP" in normalized or normalized.endswith(" SP"):
         return "SPN"
     return ""
 
