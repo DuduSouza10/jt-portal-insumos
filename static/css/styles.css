@@ -7193,3 +7193,40 @@ html[data-theme="light"] .products-admin-table .product-stock-cell strong {
     text-align: right !important;
   }
 }
+
+
+/* v100 - estoque sem unidade na tabela de produtos */
+.products-admin-table td[data-label="Estoque"] small,
+.products-admin-table td[data-label="Estoque"] span:not(.stock-pill) {
+  display: none !important;
+}
+.products-admin-table .product-stock-cell,
+.products-admin-table .product-stock-td {
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+.products-admin-table .product-stock-cell strong,
+.products-admin-table .product-stock-td strong {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 34px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 12px !important;
+  color: var(--text-strong) !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+}
+html[data-theme="light"] .products-admin-table .product-stock-cell strong,
+html[data-theme="light"] .products-admin-table .product-stock-td strong {
+  background: rgba(230,0,18,.055) !important;
+  border-color: rgba(230,0,18,.12) !important;
+}
+@media (max-width: 760px) {
+  .products-admin-table .product-stock-cell,
+  .products-admin-table .product-stock-td { text-align: right !important; }
+}
