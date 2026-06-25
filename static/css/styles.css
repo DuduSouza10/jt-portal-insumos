@@ -6950,10 +6950,7 @@ html[data-theme="light"] .settings-toggle.bunny-settings-toggle:hover {
 }
 
 .settings-toggle.bunny-settings-toggle:hover .settings-bunny-icon {
-  filter:
-    brightness(0) saturate(100%)
-    invert(19%) sepia(100%) saturate(6825%) hue-rotate(348deg) brightness(102%) contrast(113%)
-    drop-shadow(0 0 6px rgba(230,0,18,.35)) !important;
+  filter: brightness(0) invert(1) drop-shadow(0 0 6px rgba(255,255,255,.35)) !important;
 }
 
 .settings-toggle.bunny-settings-toggle:active,
