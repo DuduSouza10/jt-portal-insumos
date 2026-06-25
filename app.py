@@ -5308,58 +5308,32 @@ def admin_products():
     search = (request.args.get("q") or "").strip()
     status_filter = (request.args.get("status") or "all").strip().lower()
     sort_filter = (request.args.get("sort") or "default").strip().lower()
-
-    where_clauses: list[str] = ["catalog_archived = 0"]
-    params: list[Any] = []
-
-    if search:
-        like = f"%{search.lower()}%"
-        where_clauses.append(
-            "("
-            "lower(COALESCE(name, '')) LIKE ? OR "
-            "lower(COALESCE(category, '')) LIKE ? OR "
-            "lower(COALESCE(description, '')) LIKE ? OR "
-            "lower(COALESCE(unit_measure, '')) LIKE ?"
-            ")"
-        )
-        params.extend([like, like, like, like])
-
-    if status_filter == "active":
-        where_clauses.append("active = 1")
-    elif status_filter == "inactive":
-        where_clauses.append("active = 0")
-    else:
+    category_filter = (request.args.get("category") or "").strip()
+    if status_filter not in {"all", "active", "inactive"}:
         status_filter = "all"
-
-    sort_map = {
-        "default": "active DESC, category ASC, name ASC",
-        "category": "category ASC, name ASC",
-        "category_desc": "category DESC, name ASC",
-        "value_asc": "price_cents ASC, name ASC",
-        "value_desc": "price_cents DESC, name ASC",
-        "stock_asc": "stock_quantity ASC, name ASC",
-        "stock_desc": "stock_quantity DESC, name ASC",
-    }
-    order_by = sort_map.get(sort_filter)
-    if order_by is None:
+    if sort_filter not in {"default", "category", "category_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
         sort_filter = "default"
-        order_by = sort_map[sort_filter]
 
-    sql = "SELECT * FROM products"
-    if where_clauses:
-        sql += " WHERE " + " AND ".join(where_clauses)
-    sql += " ORDER BY " + order_by
-
+    # Carrega o catálogo completo para os filtros funcionarem instantaneamente no navegador,
+    # sem depender de reload ou nova consulta no servidor.
+    sql = """
+        SELECT *
+          FROM products
+         WHERE catalog_archived = 0
+         ORDER BY active DESC, category ASC, name ASC
+    """
     with db_connect() as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+        rows = conn.execute(sql).fetchall()
         total_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"]
         active_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 1").fetchone()["total"]
         inactive_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 0").fetchone()["total"]
     products = [product for row in rows if (product := row_to_product(row)) is not None]
+    categories = sorted({(product.category or "").strip() for product in products if (product.category or "").strip()}, key=lambda value: value.casefold())
     return render_template(
         "admin/products.html",
         products=products,
-        product_filters={"q": search, "status": status_filter, "sort": sort_filter},
+        product_categories_filter=categories,
+        product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter},
         product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products)},
     )
 

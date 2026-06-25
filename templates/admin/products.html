@@ -13,7 +13,7 @@
     </div>
   </div>
 
-  <form class="product-filter-card" method="get" action="{{ url_for('admin_products') }}">
+  <form id="productLiveFilterForm" class="product-filter-card" method="get" action="{{ url_for('admin_products') }}">
     <div class="product-filter-main">
       <label class="product-filter-search">
         Pesquisar produto
@@ -21,15 +21,24 @@
       </label>
       <label>
         Filtrar status
-        <select name="status">
+        <select id="productStatusFilter" name="status">
           <option value="all" {{ 'selected' if product_filters.status == 'all' else '' }}>Todos</option>
           <option value="active" {{ 'selected' if product_filters.status == 'active' else '' }}>Ativos</option>
           <option value="inactive" {{ 'selected' if product_filters.status == 'inactive' else '' }}>Inativos</option>
         </select>
       </label>
       <label>
+        Filtrar categoria
+        <select id="productCategoryFilter" name="category">
+          <option value="">Todas</option>
+          {% for category in product_categories_filter|default([]) %}
+          <option value="{{ category }}" data-no-i18n {{ 'selected' if product_filters.category == category else '' }}>{{ category }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
         Classificar por
-        <select name="sort">
+        <select id="productSortFilter" name="sort">
           <option value="default" {{ 'selected' if product_filters.sort == 'default' else '' }}>Padrão</option>
           <option value="category" {{ 'selected' if product_filters.sort == 'category' else '' }}>Categoria A-Z</option>
           <option value="category_desc" {{ 'selected' if product_filters.sort == 'category_desc' else '' }}>Categoria Z-A</option>
@@ -40,15 +49,15 @@
         </select>
       </label>
       <div class="product-filter-actions">
-        <button class="btn primary" type="submit">Aplicar filtros</button>
-        <a class="btn ghost" href="{{ url_for('admin_products') }}">Limpar filtros</a>
+        <button class="btn primary" type="button" id="productApplyFilterButton">Aplicar filtros</button>
+        <button class="btn ghost" type="button" id="productClearFiltersButton">Limpar filtros</button>
       </div>
     </div>
     <div class="product-filter-summary">
       <span><strong id="productShownCount">{{ product_counts.shown }}</strong> exibido(s)</span>
-      <span><strong>{{ product_counts.total }}</strong> total</span>
-      <span><strong>{{ product_counts.active }}</strong> ativo(s)</span>
-      <span><strong>{{ product_counts.inactive }}</strong> inativo(s)</span>
+      <span><strong id="productTotalCount">{{ product_counts.total }}</strong> total</span>
+      <span><strong id="productActiveCount">{{ product_counts.active }}</strong> ativo(s)</span>
+      <span><strong id="productInactiveCount">{{ product_counts.inactive }}</strong> inativo(s)</span>
     </div>
   </form>
 
@@ -109,7 +118,17 @@
     </thead>
     <tbody id="productTableBody">
       {% for product in products %}
-      <tr data-product-row>
+      <tr
+        data-product-row
+        data-product-id="{{ product.id }}"
+        data-name="{{ product.name|e }}"
+        data-category="{{ (product.category or '')|e }}"
+        data-status="{{ 'active' if product.active else 'inactive' }}"
+        data-stock="{{ product.stock_quantity or 0 }}"
+        data-price="{{ product.price_cents or 0 }}"
+        data-unit="{{ (product.unit_measure or 'un')|e }}"
+        data-search="{{ (product.name ~ ' ' ~ (product.category or '') ~ ' ' ~ (product.description or '') ~ ' ' ~ (product.unit_measure or 'un'))|e }}"
+      >
         <td data-label="Produto">
           <div class="admin-product-main">
             {% if product.image_key %}
@@ -208,11 +227,22 @@
 })();
 
 (function () {
-  const input = document.getElementById('productLiveSearch');
+  const form = document.getElementById('productLiveFilterForm');
+  const search = document.getElementById('productLiveSearch');
+  const statusFilter = document.getElementById('productStatusFilter');
+  const categoryFilter = document.getElementById('productCategoryFilter');
+  const sortFilter = document.getElementById('productSortFilter');
+  const clearButton = document.getElementById('productClearFiltersButton');
+  const applyButton = document.getElementById('productApplyFilterButton');
+  const tbody = document.getElementById('productTableBody');
   const rows = Array.from(document.querySelectorAll('[data-product-row]'));
   const counter = document.getElementById('productShownCount');
+  const totalCounter = document.getElementById('productTotalCount');
+  const activeCounter = document.getElementById('productActiveCount');
+  const inactiveCounter = document.getElementById('productInactiveCount');
   const emptyRow = document.getElementById('productLiveEmpty');
-  if (!input || !rows.length) return;
+
+  if (!form || !tbody || !rows.length) return;
 
   function normalize(value) {
     return String(value || '')
@@ -223,21 +253,108 @@
       .trim();
   }
 
-  function filterProducts() {
-    const terms = normalize(input.value).split(' ').filter(Boolean);
-    let visible = 0;
-    rows.forEach(function (row) {
-      const searchable = normalize(row.textContent);
-      const matches = terms.every((term) => searchable.includes(term));
-      row.classList.toggle('product-live-hidden', !matches);
-      if (matches) visible += 1;
-    });
-    if (counter) counter.textContent = String(visible);
-    if (emptyRow) emptyRow.classList.toggle('hidden', visible > 0);
+  function numeric(row, key) {
+    const value = Number(row.dataset[key] || 0);
+    return Number.isFinite(value) ? value : 0;
   }
 
-  input.addEventListener('input', filterProducts);
-  filterProducts();
+  function text(row, key) {
+    return normalize(row.dataset[key] || '');
+  }
+
+  function idOf(row) {
+    const value = parseInt(row.dataset.productId || '0', 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function compareText(left, right, key, direction = 1) {
+    const result = text(left, key).localeCompare(text(right, key), 'pt-BR', { numeric: true, sensitivity: 'base' });
+    return result * direction || text(left, 'name').localeCompare(text(right, 'name'), 'pt-BR', { numeric: true, sensitivity: 'base' }) || (idOf(left) - idOf(right));
+  }
+
+  function sortedRows() {
+    const mode = sortFilter ? sortFilter.value : 'default';
+    return rows.slice().sort(function (left, right) {
+      switch (mode) {
+        case 'category': return compareText(left, right, 'category', 1);
+        case 'category_desc': return compareText(left, right, 'category', -1);
+        case 'value_asc': return numeric(left, 'price') - numeric(right, 'price') || compareText(left, right, 'name', 1);
+        case 'value_desc': return numeric(right, 'price') - numeric(left, 'price') || compareText(left, right, 'name', 1);
+        case 'stock_asc': return numeric(left, 'stock') - numeric(right, 'stock') || compareText(left, right, 'name', 1);
+        case 'stock_desc': return numeric(right, 'stock') - numeric(left, 'stock') || compareText(left, right, 'name', 1);
+        case 'default':
+        default:
+          return (text(right, 'status') === 'active' ? 1 : 0) - (text(left, 'status') === 'active' ? 1 : 0) || compareText(left, right, 'category', 1);
+      }
+    });
+  }
+
+  function setText(element, value) {
+    if (element) element.textContent = String(value);
+  }
+
+  function applyFilters() {
+    const status = statusFilter ? statusFilter.value : 'all';
+    const category = categoryFilter ? normalize(categoryFilter.value) : '';
+    const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
+    let shown = 0;
+    let active = 0;
+    let inactive = 0;
+
+    sortedRows().forEach(function (row) {
+      const rowStatus = row.dataset.status || '';
+      const rowCategory = normalize(row.dataset.category || '');
+      const searchable = normalize(row.dataset.search || row.textContent || '');
+      const matchesStatus = !status || status === 'all' || rowStatus === status;
+      const matchesCategory = !category || rowCategory === category;
+      const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
+      const visible = matchesStatus && matchesCategory && matchesSearch;
+
+      row.classList.toggle('product-live-hidden', !visible);
+      tbody.appendChild(row);
+
+      if (visible) {
+        shown += 1;
+        if (rowStatus === 'active') active += 1;
+        if (rowStatus === 'inactive') inactive += 1;
+      }
+    });
+
+    if (emptyRow) {
+      emptyRow.classList.toggle('hidden', shown > 0);
+      tbody.appendChild(emptyRow);
+    }
+
+    setText(counter, shown);
+    setText(totalCounter, shown);
+    setText(activeCounter, active);
+    setText(inactiveCounter, inactive);
+
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.requestAnimationFrame(function () { window.JT_I18N.refresh(tbody); });
+    }
+  }
+
+  function clearFilters() {
+    if (search) search.value = '';
+    if (statusFilter) statusFilter.value = 'all';
+    if (categoryFilter) categoryFilter.value = '';
+    if (sortFilter) sortFilter.value = 'default';
+    applyFilters();
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    applyFilters();
+  });
+  if (search) search.addEventListener('input', applyFilters);
+  [statusFilter, categoryFilter, sortFilter].forEach(function (select) {
+    if (select) select.addEventListener('change', applyFilters);
+  });
+  if (applyButton) applyButton.addEventListener('click', applyFilters);
+  if (clearButton) clearButton.addEventListener('click', clearFilters);
+
+  applyFilters();
 })();
 </script>
 {% endblock %}

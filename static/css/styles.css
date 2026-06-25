@@ -7329,3 +7329,16 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
 .user-filter-actions {
   align-items: end;
 }
+
+
+/* v104 - filtros instantâneos na página de produtos */
+.product-filter-card .product-filter-actions .btn {
+  min-height: 50px;
+}
+.product-filter-card select,
+.product-filter-card input[type="search"] {
+  min-height: 50px;
+}
+.product-live-hidden {
+  display: none !important;
+}
