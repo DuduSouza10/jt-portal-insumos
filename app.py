@@ -4878,24 +4878,10 @@ def admin_users():
     if selected_sort not in sort_map:
         selected_sort = "newest"
 
-    where_clauses: list[str] = []
+    # v102: a página de usuários carrega todos os registros e aplica busca/filtros/classificação
+    # instantaneamente no navegador, sem submit e sem recarregar a rota.
     params: list[Any] = []
-    if selected_status:
-        where_clauses.append("status = ?")
-        params.append(selected_status)
-    if selected_role:
-        where_clauses.append("role = ?")
-        params.append(selected_role)
-    if search_query:
-        like = f"%{search_query}%"
-        where_clauses.append(
-            "(responsible_name LIKE ? OR username LIKE ? OR organization_name LIKE ? OR franchise_name LIKE ? OR franchise_number LIKE ? OR cnpj LIKE ?)"
-        )
-        params.extend([like, like, like, like, like, like])
-
     sql = "SELECT * FROM users"
-    if where_clauses:
-        sql += " WHERE " + " AND ".join(where_clauses)
     sql += f" ORDER BY {order_clause}"
 
     with db_connect() as conn:

@@ -1,15 +1,178 @@
 {% extends 'base.html' %}
-{% block title %}Usuários • Portal de Insumos J&T{% endblock %}
+{% block title %}Usuários • Portal de Insumos J&T
+<script>
+(function () {
+  const form = document.getElementById('userLiveFilterForm');
+  const search = document.getElementById('userLiveSearch');
+  const statusFilter = document.getElementById('userStatusFilter');
+  const roleFilter = document.getElementById('userRoleFilter');
+  const sortFilter = document.getElementById('userSortFilter');
+  const clearButton = document.getElementById('userClearFiltersButton');
+  const applyButton = document.getElementById('userApplyFilterButton');
+  const tbody = document.getElementById('userTableBody');
+  const rows = Array.from(document.querySelectorAll('[data-user-row]'));
+  const tabs = Array.from(document.querySelectorAll('[data-user-status-tab]'));
+  const emptyRow = document.getElementById('userLiveEmpty');
+
+  if (!form || !tbody || !rows.length) return;
+
+  const counters = {
+    shown: document.getElementById('userShownCount'),
+    total: document.getElementById('userTotalCount'),
+    pending: document.getElementById('userPendingCount'),
+    approved: document.getElementById('userApprovedCount'),
+    rejected: document.getElementById('userRejectedCount'),
+    admin: document.getElementById('userAdminCount'),
+    base: document.getElementById('userBaseCount'),
+    franchise: document.getElementById('userFranchiseCount')
+  };
+
+  function normalize(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function textOf(row, key) {
+    return normalize(row.dataset[key] || '');
+  }
+
+  function dateOf(row) {
+    const value = row.dataset.created || '';
+    const stamp = Date.parse(value);
+    return Number.isFinite(stamp) ? stamp : 0;
+  }
+
+  function idOf(row) {
+    const value = parseInt(row.dataset.userId || '0', 10);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function compareText(left, right, key, direction = 1) {
+    const result = textOf(left, key).localeCompare(textOf(right, key), 'pt-BR', { numeric: true, sensitivity: 'base' });
+    return result * direction || (idOf(right) - idOf(left));
+  }
+
+  function sortedRows() {
+    const mode = sortFilter ? sortFilter.value : 'newest';
+    return rows.slice().sort(function (left, right) {
+      switch (mode) {
+        case 'oldest': return dateOf(left) - dateOf(right) || idOf(left) - idOf(right);
+        case 'responsible_asc': return compareText(left, right, 'responsible', 1);
+        case 'responsible_desc': return compareText(left, right, 'responsible', -1);
+        case 'username_asc': return compareText(left, right, 'username', 1);
+        case 'username_desc': return compareText(left, right, 'username', -1);
+        case 'role_asc': return compareText(left, right, 'role', 1);
+        case 'unit_asc': return compareText(left, right, 'unit', 1);
+        case 'status_asc': return compareText(left, right, 'status', 1);
+        case 'newest':
+        default: return dateOf(right) - dateOf(left) || idOf(right) - idOf(left);
+      }
+    });
+  }
+
+  function setCounter(name, value) {
+    if (counters[name]) counters[name].textContent = String(value);
+  }
+
+  function syncTabs(status) {
+    tabs.forEach(function (tab) {
+      const active = (tab.dataset.userStatusTab || '') === (status || '');
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  function applyFilters() {
+    const status = statusFilter ? statusFilter.value : '';
+    const role = roleFilter ? roleFilter.value : '';
+    const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
+    const counts = { shown: 0, pending: 0, approved: 0, rejected: 0, admin: 0, base: 0, franchise: 0 };
+    const ordered = sortedRows();
+
+    ordered.forEach(function (row) {
+      const rowStatus = row.dataset.status || '';
+      const rowRole = row.dataset.role || '';
+      const searchable = normalize(row.dataset.search || row.textContent || '');
+      const matchesStatus = !status || rowStatus === status;
+      const matchesRole = !role || rowRole === role;
+      const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
+      const visible = matchesStatus && matchesRole && matchesSearch;
+
+      row.classList.toggle('user-live-hidden', !visible);
+      tbody.appendChild(row);
+
+      if (visible) {
+        counts.shown += 1;
+        if (counts[rowStatus] !== undefined) counts[rowStatus] += 1;
+        if (counts[rowRole] !== undefined) counts[rowRole] += 1;
+      }
+    });
+
+    if (emptyRow) {
+      emptyRow.classList.toggle('hidden', counts.shown > 0);
+      tbody.appendChild(emptyRow);
+    }
+
+    setCounter('shown', counts.shown);
+    setCounter('total', rows.length);
+    setCounter('pending', counts.pending);
+    setCounter('approved', counts.approved);
+    setCounter('rejected', counts.rejected);
+    setCounter('admin', counts.admin);
+    setCounter('base', counts.base);
+    setCounter('franchise', counts.franchise);
+    syncTabs(status);
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    applyFilters();
+  });
+
+  [search, statusFilter, roleFilter, sortFilter].forEach(function (control) {
+    if (!control) return;
+    control.addEventListener('input', applyFilters);
+    control.addEventListener('change', applyFilters);
+  });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      if (statusFilter) statusFilter.value = tab.dataset.userStatusTab || '';
+      applyFilters();
+    });
+  });
+
+  if (applyButton) applyButton.addEventListener('click', applyFilters);
+  if (clearButton) {
+    clearButton.addEventListener('click', function () {
+      if (search) search.value = '';
+      if (statusFilter) statusFilter.value = '';
+      if (roleFilter) roleFilter.value = '';
+      if (sortFilter) sortFilter.value = 'newest';
+      applyFilters();
+      if (search) search.focus();
+    });
+  }
+
+  applyFilters();
+})();
+</script>
+
+{% endblock %}
 {% block page_title %}Cadastro de usuários{% endblock %}
 {% block page_subtitle %}Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.{% endblock %}
 {% block content %}
 <div class="card table-card users-table-card">
   <div class="section-head user-tools-head">
-    <div class="tabs">
-      <a class="tab {{ 'active' if selected_status == '' else '' }}" href="{{ url_for('admin_users') }}">Todos</a>
-      <a class="tab {{ 'active' if selected_status == 'pending' else '' }}" href="{{ url_for('admin_users', status='pending') }}">Pendentes</a>
-      <a class="tab {{ 'active' if selected_status == 'approved' else '' }}" href="{{ url_for('admin_users', status='approved') }}">Aprovados</a>
-      <a class="tab {{ 'active' if selected_status == 'rejected' else '' }}" href="{{ url_for('admin_users', status='rejected') }}">Recusados</a>
+    <div class="tabs user-status-tabs" data-user-status-tabs>
+      <button class="tab {{ 'active' if selected_status == '' else '' }}" type="button" data-user-status-tab="">Todos</button>
+      <button class="tab {{ 'active' if selected_status == 'pending' else '' }}" type="button" data-user-status-tab="pending">Pendentes</button>
+      <button class="tab {{ 'active' if selected_status == 'approved' else '' }}" type="button" data-user-status-tab="approved">Aprovados</button>
+      <button class="tab {{ 'active' if selected_status == 'rejected' else '' }}" type="button" data-user-status-tab="rejected">Recusados</button>
     </div>
     <div class="user-tools">
       <a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>
@@ -17,15 +180,15 @@
     </div>
   </div>
 
-  <form class="user-filter-card" method="get" action="{{ url_for('admin_users') }}">
+  <form id="userLiveFilterForm" class="user-filter-card" method="get" action="{{ url_for('admin_users') }}">
     <div class="user-filter-main">
       <label class="user-filter-search">
         Pesquisar usuário
-        <input type="search" name="q" value="{{ user_filters.q if user_filters else '' }}" placeholder="Responsável, usuário, base/franquia, número ou CNPJ..." autocomplete="off">
+        <input id="userLiveSearch" type="search" name="q" value="{{ user_filters.q if user_filters else '' }}" placeholder="Responsável, usuário, base/franquia, número ou CNPJ..." autocomplete="off">
       </label>
       <label>
         Filtrar status
-        <select name="status">
+        <select id="userStatusFilter" name="status">
           <option value="" {{ 'selected' if not user_filters.status else '' }}>Todos</option>
           <option value="pending" {{ 'selected' if user_filters.status == 'pending' else '' }}>Pendentes</option>
           <option value="approved" {{ 'selected' if user_filters.status == 'approved' else '' }}>Aprovados</option>
@@ -34,7 +197,7 @@
       </label>
       <label>
         Filtrar tipo
-        <select name="role">
+        <select id="userRoleFilter" name="role">
           <option value="" {{ 'selected' if not user_filters.role else '' }}>Todos</option>
           <option value="admin" {{ 'selected' if user_filters.role == 'admin' else '' }}>Administrador</option>
           <option value="base" {{ 'selected' if user_filters.role == 'base' else '' }}>Base</option>
@@ -43,7 +206,7 @@
       </label>
       <label>
         Classificar por
-        <select name="sort">
+        <select id="userSortFilter" name="sort">
           <option value="newest" {{ 'selected' if user_filters.sort == 'newest' else '' }}>Mais recentes</option>
           <option value="oldest" {{ 'selected' if user_filters.sort == 'oldest' else '' }}>Mais antigos</option>
           <option value="responsible_asc" {{ 'selected' if user_filters.sort == 'responsible_asc' else '' }}>Responsável A-Z</option>
@@ -56,19 +219,19 @@
         </select>
       </label>
       <div class="user-filter-actions">
-        <button class="btn primary" type="submit">Aplicar filtros</button>
-        <a class="btn ghost" href="{{ url_for('admin_users') }}">Limpar filtros</a>
+        <button class="btn primary" type="button" id="userApplyFilterButton">Aplicar filtros</button>
+        <button class="btn ghost" type="button" id="userClearFiltersButton">Limpar filtros</button>
       </div>
     </div>
     <div class="user-filter-summary">
-      <span><strong>{{ user_counts.shown }}</strong> exibido(s)</span>
-      <span><strong>{{ user_counts.total }}</strong> total</span>
-      <span><strong>{{ user_counts.pending }}</strong> pendente(s)</span>
-      <span><strong>{{ user_counts.approved }}</strong> aprovado(s)</span>
-      <span><strong>{{ user_counts.rejected }}</strong> recusado(s)</span>
-      <span><strong>{{ user_counts.admin }}</strong> admin</span>
-      <span><strong>{{ user_counts.base }}</strong> base</span>
-      <span><strong>{{ user_counts.franchise }}</strong> franquia</span>
+      <span><strong id="userShownCount">{{ user_counts.shown }}</strong> exibido(s)</span>
+      <span><strong id="userTotalCount">{{ user_counts.total }}</strong> total</span>
+      <span><strong id="userPendingCount">{{ user_counts.pending }}</strong> pendente(s)</span>
+      <span><strong id="userApprovedCount">{{ user_counts.approved }}</strong> aprovado(s)</span>
+      <span><strong id="userRejectedCount">{{ user_counts.rejected }}</strong> recusado(s)</span>
+      <span><strong id="userAdminCount">{{ user_counts.admin }}</strong> admin</span>
+      <span><strong id="userBaseCount">{{ user_counts.base }}</strong> base</span>
+      <span><strong id="userFranchiseCount">{{ user_counts.franchise }}</strong> franquia</span>
     </div>
   </form>
 
@@ -87,9 +250,19 @@
         <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Base/Franquia</th><th>Número</th><th>CNPJ</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="userTableBody">
       {% for user in users %}
-      <tr>
+      <tr
+        data-user-row
+        data-user-id="{{ user.id }}"
+        data-status="{{ user.status }}"
+        data-role="{{ user.role }}"
+        data-created="{{ user.created_at.isoformat() if user.created_at else '' }}"
+        data-responsible="{{ user.responsible_name|e }}"
+        data-username="{{ user.username|e }}"
+        data-unit="{{ (user.franchise_name or user.organization_name)|e }}"
+        data-search="{{ (user.responsible_name ~ ' ' ~ user.username ~ ' ' ~ user.organization_name ~ ' ' ~ user.franchise_name ~ ' ' ~ user.franchise_number ~ ' ' ~ user.cnpj ~ ' ' ~ user.formatted_cnpj)|e }}"
+      >
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ 'Admin' if user.role == 'admin' else ('Base' if user.role == 'base' else 'Franquia') }}</td>
@@ -139,7 +312,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
+      <tr id="userLiveEmpty"><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
     </tbody>
   </table>

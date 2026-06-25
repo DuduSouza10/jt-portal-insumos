@@ -7313,3 +7313,19 @@ html[data-theme="light"] .products-admin-table .product-stock-td strong {
     width: 100%;
   }
 }
+
+
+/* v102 - filtros de usuários em tempo real */
+.user-status-tabs .tab {
+  border: 0;
+  cursor: pointer;
+}
+.user-live-hidden {
+  display: none !important;
+}
+#userApplyFilterButton {
+  display: none !important;
+}
+.user-filter-actions {
+  align-items: end;
+}
