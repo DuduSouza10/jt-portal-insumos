@@ -4,7 +4,7 @@
 {% block page_subtitle %}Cadastre usuários manualmente, defina o tipo de acesso e confira as páginas liberadas.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form>
+  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}">
     <label>
       Nome do responsável (quem usará o acesso)
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
@@ -34,7 +34,7 @@
     </label>
     {% endif %}
     <label id="baseNameWrap">
-      {{ 'Setor / nome da base' if current_is_dev() else 'Nome da base (unidade J&T)' }}
+      {{ 'Setor' if current_is_dev() else 'Nome da base (unidade J&T)' }}
       {% if current_is_dev() %}
         <input name="organization_name" id="organizationSelect" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: BHZ 01, Administrativo, SAC">
       {% else %}
@@ -50,7 +50,7 @@
       {% endif %}
     </label>
     <label id="franchiseNameWrap" class="hidden">
-      {{ 'Setor / nome da franquia' if current_is_dev() else 'Nome da franquia (nome exibido no portal)' }}
+      {{ 'Setor' if current_is_dev() else 'Nome da franquia (nome exibido no portal)' }}
       <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">
@@ -132,8 +132,10 @@
 {% block scripts %}
 <script>
 (function () {
+  const form = document.getElementById('userAccessForm');
   const modal = document.getElementById('permissionModal');
   const roleSelect = document.getElementById('roleSelect');
+  const editorIsDev = form && form.dataset.currentDev === '1';
   const openButton = document.querySelector('[data-open-permission-modal]');
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
   const baseWrap = document.getElementById('baseNameWrap');
@@ -158,13 +160,16 @@
     if (devPasswordWrap) devPasswordWrap.classList.toggle('hidden', !(isDev || newDevPasswordInput));
     if (devPasswordInput) devPasswordInput.required = isDev;
 
-    baseWrap.classList.toggle('hidden', !isBase);
+    const showSetorField = editorIsDev && !isFranchise;
+    const showBaseField = isBase || showSetorField;
+
+    baseWrap.classList.toggle('hidden', !showBaseField);
     franchiseNameWrap.classList.toggle('hidden', !isFranchise);
     franchiseNumberWrap.classList.toggle('hidden', !isFranchise);
     cnpjWrap.classList.toggle('hidden', !isFranchise);
 
-    baseSelect.disabled = !isBase;
-    baseSelect.required = isBase;
+    baseSelect.disabled = !showBaseField;
+    baseSelect.required = showBaseField;
     franchiseNameInput.disabled = !isFranchise;
     franchiseNameInput.required = isFranchise;
     franchiseNumberInput.disabled = !isFranchise;

@@ -1639,7 +1639,7 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
         limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), 120, 25, 300)
     sql = """
         SELECT id, user_id, status, user_note, admin_note, people_count,
-               created_at, approved_at, approved_by_id, pdf_key
+               created_at, reviewed_at, reviewed_by_id
           FROM supply_requests
     """
     params: list[Any] = []
