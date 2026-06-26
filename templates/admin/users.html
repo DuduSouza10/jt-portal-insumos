@@ -19,7 +19,7 @@
   </div>
 
   <form id="userLiveFilterForm" class="user-filter-card" method="get" data-server-filters="1" action="{{ url_for('admin_users') }}">
-    <input type="hidden" name="limit" value="{{ user_filters.limit if user_filters else 120 }}">
+    <input type="hidden" id="userPageInput" name="page" value="{{ user_filters.page if user_filters else 1 }}">
     <div class="user-filter-main">
       <label class="user-filter-search">
         Pesquisar usuário
@@ -56,6 +56,14 @@
           <option value="role_asc" {{ 'selected' if user_filters.sort == 'role_asc' else '' }}>Tipo de acesso</option>
           <option value="unit_asc" {{ 'selected' if user_filters.sort == 'unit_asc' else '' }}>Setor A-Z</option>
           <option value="status_asc" {{ 'selected' if user_filters.sort == 'status_asc' else '' }}>Status</option>
+        </select>
+      </label>
+      <label>
+        Linhas por página
+        <select id="userLimitFilter" name="limit">
+          {% for option in user_pagination.page_size_options %}
+            <option value="{{ option }}" {{ 'selected' if option == user_pagination.limit else '' }}>{{ option }}</option>
+          {% endfor %}
         </select>
       </label>
       <div class="user-filter-actions">
@@ -187,6 +195,40 @@
       <tr id="userLiveEmpty" class="hidden"><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
     </tbody>
   </table>
+
+  <div class="user-pagination-panel" aria-label="Paginação de usuários">
+    <div class="user-pagination-info">
+      Exibindo {{ user_pagination.start }}–{{ user_pagination.end }} de {{ user_pagination.total }} usuários
+      <span>• Página {{ user_pagination.page }} de {{ user_pagination.total_pages }}</span>
+    </div>
+    <nav class="user-pagination" aria-label="Alternar página de usuários">
+      {% if user_pagination.has_prev %}
+        <a class="page-btn" href="{{ user_pagination.first_url }}">Primeira</a>
+        <a class="page-btn" href="{{ user_pagination.prev_url }}">Anterior</a>
+      {% else %}
+        <span class="page-btn disabled">Primeira</span>
+        <span class="page-btn disabled">Anterior</span>
+      {% endif %}
+
+      {% for item in user_pagination.page_links %}
+        {% if item.ellipsis %}
+          <span class="page-ellipsis">...</span>
+        {% elif item.active %}
+          <span class="page-btn active" aria-current="page">{{ item.number }}</span>
+        {% else %}
+          <a class="page-btn" href="{{ item.url }}">{{ item.number }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if user_pagination.has_next %}
+        <a class="page-btn" href="{{ user_pagination.next_url }}">Próxima</a>
+        <a class="page-btn" href="{{ user_pagination.last_url }}">Última</a>
+      {% else %}
+        <span class="page-btn disabled">Próxima</span>
+        <span class="page-btn disabled">Última</span>
+      {% endif %}
+    </nav>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -197,6 +239,8 @@
   const statusFilter = document.getElementById('userStatusFilter');
   const roleFilter = document.getElementById('userRoleFilter');
   const sortFilter = document.getElementById('userSortFilter');
+  const limitFilter = document.getElementById('userLimitFilter');
+  const pageInput = document.getElementById('userPageInput');
   const clearButton = document.getElementById('userClearFiltersButton');
   const applyButton = document.getElementById('userApplyFilterButton');
   const tbody = document.getElementById('userTableBody');
@@ -329,8 +373,9 @@
     if (statusFilter && statusFilter.value) params.set('status', statusFilter.value);
     if (roleFilter && roleFilter.value) params.set('role', roleFilter.value);
     if (sortFilter && sortFilter.value) params.set('sort', sortFilter.value);
-    const limitControl = form ? form.querySelector('input[name="limit"]') : null;
+    const limitControl = limitFilter || (form ? form.querySelector('[name="limit"]') : null);
     if (limitControl && limitControl.value) params.set('limit', limitControl.value);
+    if (pageInput && pageInput.value) params.set('page', pageInput.value);
     const baseUrl = {{ url_for('admin_users_export')|tojson }};
     exportCurrentButton.href = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
   }
@@ -344,7 +389,8 @@
   }
 
   if (serverFilters) {
-    function submitServerFilters() {
+    function submitServerFilters(resetPage = true) {
+      if (resetPage && pageInput) pageInput.value = '1';
       updateExportLink();
       if (form.requestSubmit) form.requestSubmit();
       else form.submit();
@@ -354,7 +400,7 @@
       updateExportLink();
     });
 
-    [statusFilter, roleFilter, sortFilter].forEach(function (control) {
+    [statusFilter, roleFilter, sortFilter, limitFilter].forEach(function (control) {
       if (!control) return;
       control.addEventListener('change', submitServerFilters);
     });
@@ -363,7 +409,7 @@
       search.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
           event.preventDefault();
-          submitServerFilters();
+          submitServerFilters(true);
         }
       });
     }

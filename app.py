@@ -5372,6 +5372,7 @@ def admin_dashboard():
 
 
 
+
 @app.route("/admin/users")
 @admin_required
 @page_access_required("admin_users")
@@ -5401,9 +5402,8 @@ def admin_users():
     if selected_sort not in sort_map:
         selected_sort = "responsible_asc"
 
-    per_page = list_page_limit(default=120, maximum=300)
+    per_page = list_page_limit(default=120, maximum=500)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
-    offset = (page - 1) * per_page
 
     clauses: list[str] = []
     params: list[Any] = []
@@ -5441,13 +5441,17 @@ def admin_users():
     """
 
     with db_connect() as conn:
+        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM users{where_sql}", params).fetchone()
+        total_users = int((total_row["total"] if total_row else 0) or 0)
+        total_pages = max(1, (total_users + per_page - 1) // per_page)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * per_page
         rows = conn.execute(sql, [*params, per_page, offset]).fetchall()
         if exact_counts_enabled():
-            total_users = conn.execute(f"SELECT COUNT(*) AS total FROM users{where_sql}", params).fetchone()["total"]
             status_rows = conn.execute(f"SELECT status, COUNT(*) AS total FROM users{where_sql} GROUP BY status", params).fetchall()
             role_rows = conn.execute(f"SELECT role, COUNT(*) AS total FROM users{where_sql} GROUP BY role", params).fetchall()
         else:
-            total_users = len(rows)
             status_rows = []
             role_rows = []
 
@@ -5461,6 +5465,54 @@ def admin_users():
         for user in users:
             status_counts[user.status] = status_counts.get(user.status, 0) + 1
             role_counts[user.role] = role_counts.get(user.role, 0) + 1
+
+    page_size_options = [25, 50, 100, 120, 200, 300, 500]
+    if per_page not in page_size_options:
+        page_size_options.append(per_page)
+        page_size_options.sort()
+
+    def page_url(target_page: int, target_limit: int | None = None) -> str:
+        args: dict[str, Any] = {"page": max(1, target_page), "limit": target_limit or per_page}
+        if search_query:
+            args["q"] = search_query
+        if selected_status:
+            args["status"] = selected_status
+        if selected_role:
+            args["role"] = selected_role
+        if selected_sort:
+            args["sort"] = selected_sort
+        return url_for("admin_users", **args)
+
+    visible_page_numbers: set[int] = {1, total_pages}
+    for number in range(page - 2, page + 3):
+        if 1 <= number <= total_pages:
+            visible_page_numbers.add(number)
+    page_links: list[dict[str, Any]] = []
+    previous_number = 0
+    for number in sorted(visible_page_numbers):
+        if previous_number and number - previous_number > 1:
+            page_links.append({"ellipsis": True})
+        page_links.append({"number": number, "active": number == page, "url": page_url(number)})
+        previous_number = number
+
+    start_item = offset + 1 if total_users else 0
+    end_item = min(offset + len(users), total_users)
+    user_pagination = {
+        "page": page,
+        "limit": per_page,
+        "total": total_users,
+        "total_pages": total_pages,
+        "start": start_item,
+        "end": end_item,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "first_url": page_url(1),
+        "prev_url": page_url(max(1, page - 1)),
+        "next_url": page_url(min(total_pages, page + 1)),
+        "last_url": page_url(total_pages),
+        "page_links": page_links,
+        "page_size_options": page_size_options,
+    }
 
     user_counts = {
         "shown": len(users),
@@ -5490,6 +5542,7 @@ def admin_users():
         selected_status=selected_status,
         user_filters=user_filters,
         user_counts=user_counts,
+        user_pagination=user_pagination,
     )
 
 
@@ -5573,7 +5626,9 @@ def admin_users_export():
         "status_asc": "status COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
     }
     order_clause = sort_map.get(selected_sort, sort_map["responsible_asc"])
-    export_limit = bounded_int(request.args.get("limit"), int(os.getenv("D1_EXPORT_LIMIT", "500")), 50, 2000)
+    export_limit = bounded_int(request.args.get("limit"), int(os.getenv("D1_EXPORT_LIMIT", "500")), 25, 2000)
+    export_page = bounded_int(request.args.get("page"), 1, 1, 100000)
+    export_offset = (export_page - 1) * export_limit
 
     clauses: list[str] = []
     params: list[Any] = []
@@ -5609,9 +5664,9 @@ def admin_users_export():
               FROM users
               {where_sql}
              ORDER BY {order_clause}
-             LIMIT ?
+             LIMIT ? OFFSET ?
             """,
-            [*params, export_limit],
+            [*params, export_limit, export_offset],
         ).fetchall()
     users = [user for row in rows if (user := row_to_user(row)) is not None]
 
