@@ -12023,3 +12023,155 @@ body .export-language-modal .btn.ghost:not(.icon-action-btn):not(.category-icon-
   background: inherit !important;
   background-image: inherit !important;
 }
+
+/* v152 - regra final de contraste dos botoes.
+   Fundo branco sempre usa texto preto; fundo vermelho sempre usa texto branco.
+   Nas opcoes de importacao o texto nao troca para vermelho no hover. */
+:root {
+  --jt-button-black: #111111;
+  --jt-button-white: #ffffff;
+  --jt-button-red-bg: linear-gradient(135deg, var(--red), var(--red-3));
+}
+
+body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+}
+
+body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.danger):not(.success):not(.active):not(:hover):not(:focus-visible):not(:active) * {
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active),
+body :where(.btn.danger, .delete-button):is(:hover, :focus-visible, :active),
+body :where(.btn.danger, .delete-button),
+html[data-theme="light"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active),
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active) {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+}
+
+body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active) *,
+body :where(.btn.danger, .delete-button) *,
+html[data-theme="light"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active) *,
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) :where(.btn, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.success):is(:hover, :focus-visible, :active, .active) * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+body .import-form label.import-mode-option:not(:has(input:checked)),
+body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] body .import-form label.import-mode-option:not(:has(input:checked)),
+html[data-theme="light"] body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active),
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)),
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  border-color: rgba(230, 0, 18, .26) !important;
+  box-shadow: 0 12px 24px rgba(17, 24, 39, .06) !important;
+}
+
+body .import-form label.import-mode-option:not(:has(input:checked)),
+body .import-form label.import-mode-option:not(:has(input:checked)) *,
+body .import-form label.import-mode-option:not(:has(input:checked)) span,
+body .import-form label.import-mode-option:not(:has(input:checked)) strong,
+body .import-form label.import-mode-option:not(:has(input:checked)) small,
+body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) *,
+html[data-theme="light"] body .import-form label.import-mode-option:not(:has(input:checked)) *,
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)) * {
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+body .import-form label.import-mode-option:has(input:checked),
+body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] body .import-form label.import-mode-option:has(input:checked),
+html[data-theme="light"] body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active),
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked),
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active) {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  box-shadow: 0 16px 30px rgba(230, 0, 18, .18) !important;
+}
+
+body .import-form label.import-mode-option:has(input:checked),
+body .import-form label.import-mode-option:has(input:checked) *,
+body .import-form label.import-mode-option:has(input:checked) span,
+body .import-form label.import-mode-option:has(input:checked) strong,
+body .import-form label.import-mode-option:has(input:checked) small,
+body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active) *,
+html[data-theme="light"] body .import-form label.import-mode-option:has(input:checked) *,
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked) * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+body .import-form label.import-mode-option:not(:has(input:checked)) input[type="radio"],
+html[data-theme="light"] body .import-form label.import-mode-option:not(:has(input:checked)) input[type="radio"],
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)) input[type="radio"] {
+  border-color: rgba(17, 17, 17, .36) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body .import-form label.import-mode-option:not(:has(input:checked)) input[type="radio"]::before {
+  background: var(--jt-button-black) !important;
+}
+
+html[data-theme="light"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):not(.active):not(:hover):not(:focus-visible):not(:active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+}
+
+html[data-theme="light"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):not(.active):not(:hover):not(:focus-visible):not(:active) * {
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):is(.active, :hover, :focus-visible, :active),
+html[data-theme="light"] body .nav-header .nav-dropdown:is(.active, .open, :hover, :focus-within) > .nav-drop-toggle {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+}
+
+html[data-theme="light"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="light"] body .nav-header .nav-dropdown:is(.active, .open, :hover, :focus-within) > .nav-drop-toggle * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
