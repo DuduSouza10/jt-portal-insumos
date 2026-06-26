@@ -34,19 +34,23 @@
     </label>
     {% endif %}
     <label id="baseNameWrap">
-      Nome da base (unidade J&T)
-      <select name="organization_name" id="organizationSelect">
-        <option value="" disabled {% if not user or user.role != 'base' %}selected{% endif %}>Selecione a base</option>
-        {% if user and user.role == 'base' and user.organization_name and user.organization_name not in base_unit_options %}
-          <option value="{{ user.organization_name }}" selected>{{ user.organization_name }}</option>
-        {% endif %}
-        {% for unit in base_unit_options %}
-          <option value="{{ unit }}" {% if user and user.role == 'base' and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
-        {% endfor %}
-      </select>
+      {{ 'Setor / nome da base' if current_is_dev() else 'Nome da base (unidade J&T)' }}
+      {% if current_is_dev() %}
+        <input name="organization_name" id="organizationSelect" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: BHZ 01, Administrativo, SAC">
+      {% else %}
+        <select name="organization_name" id="organizationSelect">
+          <option value="" disabled {% if not user or user.role != 'base' %}selected{% endif %}>Selecione a base</option>
+          {% if user and user.role == 'base' and user.organization_name and user.organization_name not in base_unit_options %}
+            <option value="{{ user.organization_name }}" selected>{{ user.organization_name }}</option>
+          {% endif %}
+          {% for unit in base_unit_options %}
+            <option value="{{ unit }}" {% if user and user.role == 'base' and user.organization_name == unit %}selected{% endif %}>{{ unit }}</option>
+          {% endfor %}
+        </select>
+      {% endif %}
     </label>
     <label id="franchiseNameWrap" class="hidden">
-      Nome da franquia (nome exibido no portal)
+      {{ 'Setor / nome da franquia' if current_is_dev() else 'Nome da franquia (nome exibido no portal)' }}
       <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
     </label>
     <label id="franchiseNumberWrap" class="hidden">

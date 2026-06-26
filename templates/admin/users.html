@@ -23,7 +23,7 @@
     <div class="user-filter-main">
       <label class="user-filter-search">
         Pesquisar usuário
-        <input id="userLiveSearch" type="search" name="q" value="{{ user_filters.q if user_filters else '' }}" placeholder="Responsável, usuário, base/franquia, número ou CNPJ..." autocomplete="off">
+        <input id="userLiveSearch" type="search" name="q" value="{{ user_filters.q if user_filters else '' }}" placeholder="Responsável, usuário, setor, número ou CNPJ..." autocomplete="off">
       </label>
       <label>
         Filtrar status
@@ -54,7 +54,7 @@
           <option value="username_asc" {{ 'selected' if user_filters.sort == 'username_asc' else '' }}>Usuário A-Z</option>
           <option value="username_desc" {{ 'selected' if user_filters.sort == 'username_desc' else '' }}>Usuário Z-A</option>
           <option value="role_asc" {{ 'selected' if user_filters.sort == 'role_asc' else '' }}>Tipo de acesso</option>
-          <option value="unit_asc" {{ 'selected' if user_filters.sort == 'unit_asc' else '' }}>Base/Franquia A-Z</option>
+          <option value="unit_asc" {{ 'selected' if user_filters.sort == 'unit_asc' else '' }}>Setor A-Z</option>
           <option value="status_asc" {{ 'selected' if user_filters.sort == 'status_asc' else '' }}>Status</option>
         </select>
       </label>
@@ -105,7 +105,7 @@
   <table>
     <thead>
       <tr>
-        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Base/Franquia</th><th>Telefone</th><th>CNPJ</th><th>Status</th><th>Ações</th>
+        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Setor</th><th>Telefone</th><th>CNPJ</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="userTableBody">
@@ -124,7 +124,7 @@
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ user_role_label(user.role) }}</td>
-        <td class="user-unit-cell" data-label="Base/Franquia">
+        <td class="user-unit-cell" data-label="Setor">
           {% if user.role == 'franchise' %}
             <strong>{{ user.franchise_name or user.organization_name }}</strong>
           {% else %}

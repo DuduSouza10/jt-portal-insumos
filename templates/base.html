@@ -79,7 +79,7 @@
           <div class="user-pill compact user-pill-simple">
             <span>
               <strong>{{ current_user.responsible_name }}</strong>
-              <small>{{ 'Admin' if current_user.role == 'admin' else ('Base' if current_user.role == 'base' else 'Franquia') }} • {{ current_user.organization_name }}</small>
+              <small>{{ user_role_label(current_user.role) }} • {{ current_user.organization_name }}</small>
             </span>
           </div>
           <a class="logout" href="{{ url_for('logout') }}">Sair</a>

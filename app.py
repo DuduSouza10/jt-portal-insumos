@@ -873,7 +873,8 @@ def validate_user_profile_fields(
         return franchise_clean, franchise_clean, phone_digits, cnpj_digits
 
     if role in {"admin", "dev"}:
-        return ADMIN_ORGANIZATION_NAME, "", "", ""
+        setor = organization[:160] if organization else ADMIN_ORGANIZATION_NAME
+        return setor, "", phone_digits, cnpj_digits
 
     raise ValueError("Tipo de acesso inválido.")
 
@@ -2206,7 +2207,7 @@ def notify_feishu_supply_request_created(supply_request: SupplyRequest, link_url
     lines = [
         feishu_line("Solicitacao", f"#{supply_request.id}"),
         feishu_line("Pedido por", requester_name),
-        feishu_line("Base/Franquia", requester_org),
+        feishu_line("Setor", requester_org),
         feishu_line("Tipo", requester_role),
         feishu_line("Status", "Pendente"),
         feishu_line("Data", format_feishu_datetime()),
@@ -2224,7 +2225,7 @@ def notify_feishu_user_registration_requested(user: User, link_url: str) -> None
         feishu_line("Responsável", user.responsible_name),
         feishu_line("Usuário", user.username),
         feishu_line("Tipo", user_role_label(user.role)),
-        feishu_line("Base/Franquia", org_label),
+        feishu_line("Setor", org_label),
         feishu_line("Telefone", user.formatted_phone or "-"),
         feishu_line("CNPJ", user.formatted_cnpj or "-"),
         feishu_line("Status", "Pendente"),
@@ -3250,7 +3251,7 @@ def build_supply_requests_period_report_pdf(
 
             detail_rows = [
                 [Paragraph(f"Solicitação #{req.id}", styles["ReportCellBold"]), Paragraph(pdf_clean_text(status_name(req.status)), styles["ReportCellBold"]), Paragraph(req.created_at.strftime("%d/%m/%Y %H:%M"), styles["ReportCellBold"])],
-                [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Base/Franquia", styles["ReportLabel"]), Paragraph(requester_role_label, styles["ReportLabel"])],
+                [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Setor", styles["ReportLabel"]), Paragraph(requester_role_label, styles["ReportLabel"])],
                 [p(f"{requester_name} ({requester_username})"), p(requester_org), p(requester_role_value)],
                 [Paragraph("Itens", styles["ReportLabel"]), Paragraph("Observações", styles["ReportLabel"]), Paragraph("Total", styles["ReportLabel"])],
                 [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_text_parts), styles["ReportSmall"]), Paragraph(notes_html, styles["ReportSmall"]), p(format_brl(req.total_cents), "ReportCellBold")],
@@ -3405,7 +3406,7 @@ def build_assets_period_report_pdf(
                 item_parts.append("Sem itens")
             detail_rows = [
                 [p(f"Ativo #{asset.id}", "AssetReportCellBold"), p(asset.name, "AssetReportCellBold"), p(asset.created_at.strftime("%d/%m/%Y %H:%M"), "AssetReportCellBold")],
-                [p("Base/Franquia", "AssetReportLabel"), p("Setor", "AssetReportLabel"), p("Gestor", "AssetReportLabel")],
+                [p("Setor", "AssetReportLabel"), p("Setor", "AssetReportLabel"), p("Gestor", "AssetReportLabel")],
                 [p(asset.base), p(asset.sector), p(asset.manager)],
                 [p("Itens vinculados", "AssetReportLabel"), p("Regional", "AssetReportLabel"), p("Total do ativo", "AssetReportLabel")],
                 [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_parts), styles["AssetReportSmall"]), p(asset.regional), p(str(sum(max(0, int(item.quantity or 0)) for item in asset.items)), "AssetReportCellBold")],
@@ -4281,8 +4282,8 @@ USER_IMPORT_HEADER_ALIASES = {
     "password": ["Senha", "Senha inicial", "Password"],
     "role": ["Tipo de acesso", "Perfil", "Tipo", "Acesso"],
     "status": ["Status do cadastro", "Status", "Situação", "Situacao"],
-    "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia", "Base/Franquia", "Unidade / Franquia", "Unidade/Franquia", "Organização", "Organizacao", "Base ou franquia"],
-    "franchise_name": ["Nome da franquia", "Franquia", "Base/Franquia", "Unidade / Franquia", "Unidade/Franquia", "Nome da base/franquia", "Base ou franquia"],
+    "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia", "Setor", "Unidade / Franquia", "Unidade/Franquia", "Organização", "Organizacao", "Base ou franquia"],
+    "franchise_name": ["Nome da franquia", "Franquia", "Setor", "Unidade / Franquia", "Unidade/Franquia", "Nome da base/franquia", "Base ou franquia"],
     "franchise_number": ["Telefone", "Número de telefone", "Numero de telefone", "Telefone da franquia", "Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
     "cnpj": ["CNPJ", "CNPJ da franquia"],
 }
@@ -5621,7 +5622,7 @@ def admin_users_export():
         "Responsável",
         "Usuário",
         "Tipo de acesso",
-        "Base/Franquia",
+        "Setor",
         "Telefone",
         "CNPJ",
         "Status",
@@ -5860,6 +5861,7 @@ def admin_user_new():
                 franchise_name=request.form.get("franchise_name", ""),
                 franchise_number=request.form.get("franchise_number", ""),
                 cnpj=request.form.get("cnpj", ""),
+                strict_base=not current.is_dev,
             )
         except ValueError as exc:
             flash(str(exc), "danger")
@@ -5960,6 +5962,7 @@ def admin_user_edit(user_id: int):
                 franchise_name=request.form.get("franchise_name", ""),
                 franchise_number=request.form.get("franchise_number", ""),
                 cnpj=request.form.get("cnpj", ""),
+                strict_base=not current.is_dev,
             )
         except ValueError as exc:
             flash(str(exc), "danger")
