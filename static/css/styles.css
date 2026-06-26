@@ -9833,3 +9833,168 @@ table td,
 .dev-password-wrap {
   display: none !important;
 }
+
+/* v140 - correção visual: botões vermelhos sempre legíveis e cards sem grade ao fundo */
+:root {
+  --surface-card-solid: rgba(15, 15, 16, .985);
+  --surface-card-solid-strong: rgba(10, 10, 11, .99);
+  --surface-chip-solid: rgba(23, 23, 24, .98);
+}
+html[data-theme="light"] {
+  --surface-card-solid: rgba(255, 255, 255, .985);
+  --surface-card-solid-strong: rgba(255, 255, 255, .995);
+  --surface-chip-solid: rgba(255, 255, 255, .98);
+}
+
+/* Suaviza a grade geral para ela não aparecer como quadradinhos dentro/atrás dos cards. */
+body::before {
+  opacity: .12 !important;
+}
+html[data-theme="light"] body::before {
+  opacity: .10 !important;
+}
+
+.card,
+.table-card,
+.auth-card,
+.wide-card,
+.stat-card,
+.hero-card,
+.cart-panel,
+.search-card,
+.request-side,
+.stock-panel,
+.stock-board,
+.stock-movements-card,
+.asset-stats .stat-card,
+.monthly-report-card,
+.permission-card,
+.export-language-card,
+.dev-access-card {
+  background: linear-gradient(180deg, var(--surface-card-solid-strong), var(--surface-card-solid)) !important;
+  background-color: var(--surface-card-solid) !important;
+  background-clip: padding-box !important;
+  isolation: isolate !important;
+}
+
+.product-filter-summary span,
+.user-filter-summary span,
+.product-pagination-panel,
+.user-pagination-panel,
+.product-pagination .page-btn,
+.user-pagination .page-btn,
+.asset-item-pill,
+.stock-pill,
+.audience-pill,
+.badge,
+.status,
+.stock-mini-card,
+.stock-priority-item,
+.stock-product-card,
+.products-table-wrap,
+.import-form,
+.user-import-form,
+.access-permission-summary {
+  background-color: var(--surface-chip-solid) !important;
+  background-image: none !important;
+  background-clip: padding-box !important;
+}
+
+.product-card,
+.portal-layout .product-card,
+.stock-product-card,
+.stock-priority-item {
+  background: linear-gradient(180deg, var(--surface-card-solid), color-mix(in srgb, var(--surface-card-solid) 94%, var(--red) 6%)) !important;
+  background-color: var(--surface-card-solid) !important;
+}
+
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .portal-layout .product-card,
+html[data-theme="light"] .stock-product-card,
+html[data-theme="light"] .stock-priority-item {
+  background: linear-gradient(180deg, #ffffff, #fff8f9) !important;
+  background-color: #ffffff !important;
+}
+
+/* Garante contraste: qualquer botão vermelho/ativo fica com texto branco, inclusive spans, ícones e textos internos. */
+.btn.primary,
+.btn.danger,
+.btn.success,
+.settings-toggle,
+.nav-header .top-nav > a.active,
+.nav-header .top-nav > a:hover,
+.nav-header .nav-dropdown.active > .nav-drop-toggle,
+.nav-header .nav-dropdown:hover > .nav-drop-toggle,
+.nav-header .nav-dropdown:focus-within > .nav-drop-toggle,
+.nav-header .nav-dropdown.open > .nav-drop-toggle,
+.nav-header .nav-drop-menu a:hover,
+.nav-header .nav-drop-menu a.active,
+.product-pagination .page-btn.active,
+.user-pagination .page-btn.active,
+.permission-close:hover,
+.export-language-option.primary,
+.stock-product-card.critical b,
+.stock-priority-item.critical b,
+.stock-product-card.good b,
+.stock-priority-item.good b {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.btn.primary *,
+.btn.danger *,
+.btn.success *,
+.settings-toggle *,
+.nav-header .top-nav > a.active *,
+.nav-header .top-nav > a:hover *,
+.nav-header .nav-dropdown.active > .nav-drop-toggle *,
+.nav-header .nav-dropdown:hover > .nav-drop-toggle *,
+.nav-header .nav-dropdown:focus-within > .nav-drop-toggle *,
+.nav-header .nav-dropdown.open > .nav-drop-toggle *,
+.nav-header .nav-drop-menu a:hover *,
+.nav-header .nav-drop-menu a.active *,
+.product-pagination .page-btn.active *,
+.user-pagination .page-btn.active *,
+.export-language-option.primary *,
+.stock-product-card.critical b *,
+.stock-priority-item.critical b *,
+.stock-product-card.good b *,
+.stock-priority-item.good b * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões vermelhos sem classe primary também ficam legíveis quando recebem fundo vermelho via estilo antigo. */
+.btn[style*="--red"],
+.btn[style*="e60012"],
+.btn[style*="linear-gradient"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+.btn[style*="--red"] *,
+.btn[style*="e60012"] *,
+.btn[style*="linear-gradient"] * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* Remove pseudo-elementos decorativos que criavam blocos/quadradinhos atrás de alguns cards. */
+.user-filter-summary span::before,
+.user-filter-summary span::after,
+.product-filter-summary span::before,
+.product-filter-summary span::after,
+.product-pagination-panel::before,
+.product-pagination-panel::after,
+.user-pagination-panel::before,
+.user-pagination-panel::after,
+.stat-card::before,
+.stat-card::after,
+.card::before,
+.card::after,
+.table-card::before,
+.table-card::after {
+  display: none !important;
+  content: none !important;
+}

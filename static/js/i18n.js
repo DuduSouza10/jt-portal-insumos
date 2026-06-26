@@ -1965,14 +1965,85 @@
     }
   }
 
+
+  function restoreKnownSectorToPortuguese(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return raw;
+    const reverse = {
+      '行政': 'Administrativo',
+      '管理部门': 'Administração',
+      '行政经理': 'Gerente ADM',
+      '运营经理': 'Gerente Operacional',
+      '行政助理': 'Assistente ADM',
+      '高级行政分析师': 'ANL ADM SR',
+      '中级行政分析师': 'ANL ADM PL',
+      '初级行政分析师': 'ANL ADM JR',
+      '行政分析师': 'ANL ADM',
+      '运营': 'Operacional',
+      '质量部门': 'Qualidade',
+      '质量控制': 'Controle de Qualidade',
+      '质量分析师': 'Analista de Qualidade',
+      '质量主管': 'Supervisor de Qualidade',
+      '质量协调员': 'Coordenador de Qualidade',
+      '质量经理': 'Gerente de Qualidade',
+      '客户服务': 'SAC',
+      '客户体验': 'CX',
+      '客服': 'Atendimento',
+      '财务': 'Financeiro',
+      '税务': 'Fiscal',
+      '人力资源': 'RH',
+      '信息技术': 'TI',
+      '技术部门': 'Tecnologia',
+      '商务部门': 'Comercial',
+      '物流': 'Logística',
+      '运输': 'Transporte',
+      '路线': 'Rota',
+      '发货部门': 'Expedição',
+      '收货部门': 'Recebimento',
+      '采购': 'Compras',
+      '供应部门': 'Suprimentos',
+      '维护部门': 'Manutenção',
+      '资产管理': 'Patrimônio',
+      '市场营销': 'Marketing',
+      '法务': 'Jurídico',
+      '管理控制': 'Controladoria',
+      '计划部门': 'Planejamento',
+      '后台支持': 'Backoffice',
+      '总经理': 'Diretor Geral',
+      '执行董事': 'Diretor Executivo',
+      '总监': 'Diretor',
+      '董事会': 'Diretoria',
+      '管理层': 'Gerência',
+      '管理': 'Gestão',
+      '操作员': 'Operador',
+      '助理': 'Auxiliar',
+      '组长': 'Líder',
+      '领导层': 'Liderança',
+      '开发人员': 'Dev',
+      '管理员': 'Administrador',
+      '基地': 'Base',
+      '加盟店': 'Franquia'
+    };
+    if (reverse[raw]) return reverse[raw];
+
+    const roleSector = raw.match(/^(管理员|基地|加盟店|开发人员|开发者)\s*•\s*(.+)$/);
+    if (roleSector) {
+      const role = reverse[roleSector[1]] || (roleSector[1] === '开发者' ? 'Dev' : roleSector[1]);
+      const sector = reverse[roleSector[2]] || roleSector[2];
+      return role + ' • ' + sector;
+    }
+    return raw;
+  }
+
   function applySectorTranslations() {
     const selector = '.user-unit-cell, [data-i18n-sector], .user-pill-simple small';
     document.querySelectorAll(selector).forEach(function (el) {
       if (!el || shouldSkipElement(el)) return;
       const key = 'data-i18n-sector-original';
       if (!el.hasAttribute(key)) el.setAttribute(key, String(el.textContent || '').trim());
-      const original = el.getAttribute(key) || '';
+      let original = restoreKnownSectorToPortuguese(el.getAttribute(key) || '');
       if (!original) return;
+      if ((el.getAttribute(key) || '') !== original) el.setAttribute(key, original);
       if (currentLanguage() !== 'zh-CN') {
         if (String(el.textContent || '').trim() !== original) el.textContent = original;
         return;

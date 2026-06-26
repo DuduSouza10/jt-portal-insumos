@@ -132,7 +132,7 @@
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ user_role_label(user.role) }}</td>
-        <td class="user-unit-cell" data-i18n-sector data-label="Setor">
+        <td class="user-unit-cell" data-i18n-sector data-i18n-sector-original="{{ (user.franchise_name or user.organization_name)|e }}" data-label="Setor">
           {% if user.role == 'franchise' %}
             <strong>{{ user.franchise_name or user.organization_name }}</strong>
           {% else %}

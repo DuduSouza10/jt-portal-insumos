@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=138">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=140">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -79,7 +79,7 @@
           <div class="user-pill compact user-pill-simple">
             <span>
               <strong>{{ current_user.responsible_name }}</strong>
-              <small>{{ user_role_label(current_user.role) }} • {{ current_user.organization_name }}</small>
+              <small data-i18n-sector data-i18n-sector-original="{{ user_role_label(current_user.role) }} • {{ current_user.organization_name|e }}">{{ user_role_label(current_user.role) }} • {{ current_user.organization_name }}</small>
             </span>
           </div>
           <a class="logout" href="{{ url_for('logout') }}">Sair</a>
@@ -278,7 +278,7 @@
       });
     });
   </script>
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=138"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=140"></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}?v=136"></script>
   <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=136"></script>
   <script>
