@@ -646,6 +646,10 @@ def low_row_read_mode() -> bool:
     return using_cloudflare_d1()
 
 
+DEFAULT_TABLE_PAGE_SIZE = 25
+TABLE_PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 300, 500]
+
+
 def bounded_int(value: Any, default: int, minimum: int = 1, maximum: int = 500) -> int:
     try:
         parsed = int(value)
@@ -654,7 +658,7 @@ def bounded_int(value: Any, default: int, minimum: int = 1, maximum: int = 500) 
     return max(minimum, min(maximum, parsed))
 
 
-def list_page_limit(default: int = 25, maximum: int = 300) -> int:
+def list_page_limit(default: int = DEFAULT_TABLE_PAGE_SIZE, maximum: int = 300) -> int:
     """Limite das tabelas administrativas.
 
     O padrão visual precisa ser 25 linhas para evitar leituras grandes no D1.
@@ -667,7 +671,7 @@ def list_page_limit(default: int = 25, maximum: int = 300) -> int:
     return bounded_int(raw_limit, default, 25, maximum)
 
 
-def api_page_limit(default: int = 25, maximum: int = 250) -> int:
+def api_page_limit(default: int = DEFAULT_TABLE_PAGE_SIZE, maximum: int = 250) -> int:
     """Limite padrão menor nas APIs para preservar Rows read do Cloudflare D1."""
     raw_limit = request.args.get("limit")
     if raw_limit is None or str(raw_limit).strip() == "":
@@ -1647,7 +1651,7 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
 
 def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
     if limit is None and low_row_read_mode():
-        limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), 120, 25, 300)
+        limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), DEFAULT_TABLE_PAGE_SIZE, DEFAULT_TABLE_PAGE_SIZE, 300)
     sql = """
         SELECT id, user_id, status, user_note, admin_note, people_count,
                created_at, reviewed_at, reviewed_by_id
@@ -5413,7 +5417,7 @@ def admin_users():
     if selected_sort not in sort_map:
         selected_sort = "responsible_asc"
 
-    per_page = list_page_limit(default=25, maximum=500)
+    per_page = list_page_limit(default=DEFAULT_TABLE_PAGE_SIZE, maximum=500)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
 
     clauses: list[str] = []
@@ -5477,7 +5481,7 @@ def admin_users():
             status_counts[user.status] = status_counts.get(user.status, 0) + 1
             role_counts[user.role] = role_counts.get(user.role, 0) + 1
 
-    page_size_options = [25, 50, 100, 120, 200, 300, 500]
+    page_size_options = list(TABLE_PAGE_SIZE_OPTIONS)
     if per_page not in page_size_options:
         page_size_options.append(per_page)
         page_size_options.sort()
@@ -6179,7 +6183,7 @@ def admin_products():
     if sort_filter not in {"default", "category", "category_desc", "name", "name_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
         sort_filter = "default"
 
-    per_page = list_page_limit(default=25, maximum=500)
+    per_page = list_page_limit(default=DEFAULT_TABLE_PAGE_SIZE, maximum=500)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
 
     clauses = ["catalog_archived = 0"]
@@ -6241,7 +6245,7 @@ def admin_products():
     category_items = list_product_categories()
     categories = [item["name"] for item in category_items]
 
-    page_size_options = [25, 50, 100, 120, 200, 300, 500]
+    page_size_options = list(TABLE_PAGE_SIZE_OPTIONS)
     if per_page not in page_size_options:
         page_size_options.append(per_page)
         page_size_options.sort()
@@ -6798,7 +6802,7 @@ def admin_material_entries():
             app.logger.exception("Falha ao registrar entrada de materiais")
             flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
         return redirect(url_for("admin_material_entries"))
-    entries = list_material_entries(limit=120)
+    entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE)
     return render_template("admin/material_entries.html", entries=entries)
 
 
@@ -7211,8 +7215,9 @@ def admin_stock():
               LEFT JOIN supply_requests sr ON sr.id = sm.request_id
               LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
              ORDER BY sm.created_at DESC, sm.id DESC
-             LIMIT 200
-            """
+             LIMIT ?
+            """,
+            (DEFAULT_TABLE_PAGE_SIZE,),
         ).fetchall()
         if exact_counts_enabled():
             totals = {
