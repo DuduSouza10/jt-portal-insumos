@@ -58,6 +58,15 @@
   "Usuário A-Z": "用户名 A-Z",
   "Usuário Z-A": "用户名 Z-A",
   "Setor A-Z": "部门 A-Z",
+  "exibido": "已显示",
+  "exibidos": "已显示",
+  "total": "总数",
+  "pendente": "待处理",
+  "pendentes": "待处理",
+  "aprovado": "已批准",
+  "aprovados": "已批准",
+  "recusado": "已拒绝",
+  "recusados": "已拒绝",
   "pendente(s)": "待处理",
   "aprovado(s)": "已批准",
   "recusado(s)": "已拒绝",
@@ -100,6 +109,10 @@
   "Ex.: mg_bhz": "例如：mg_bhz",
   "Voltar ao login": "返回登录",
   "Cargo": "职位",
+  "Diretor Geral": "总经理",
+  "Diretora Geral": "总经理",
+  "Diretor": "总监",
+  "Diretora": "总监",
   "Digite o cargo da pessoa": "请输入此人的职位",
   "Portal de Insumos J&T": "J&T 耗材门户网站",
   "Portal de Insumos": "耗材门户网站",
@@ -140,6 +153,13 @@
   "Responsável": "负责人",
   "Unidade / Franquia": "单位 / 加盟店",
   "Tipo de acesso": "存取类型",
+  "Acesso Dev": "Dev权限",
+  "Confirmar senha Dev": "确认Dev密码",
+  "Informe a senha Dev somente para transformar este usuário em Dev.": "仅在将该用户更改为Dev时输入Dev密码。",
+  "Senha Dev": "Dev密码",
+  "Digite a senha Dev": "请输入Dev密码",
+  "Informe a senha Dev para continuar.": "请输入Dev密码以继续。",
+  "Confirmar": "确认",
 
   "Setor / nome da base": "部门 / 基地名称",
   "Setor / nome da franquia": "部门 / 加盟店名称",
@@ -1592,6 +1612,12 @@
       'PLANEJAMENTO': '计划部门',
       'BACKOFFICE': '后台支持',
       'BACK OFFICE': '后台支持',
+      'DIRETOR GERAL': '总经理',
+      'DIRETORA GERAL': '总经理',
+      'DIRETOR EXECUTIVO': '执行董事',
+      'DIRETORA EXECUTIVA': '执行董事',
+      'DIRETOR': '总监',
+      'DIRETORA': '总监',
       'DIRETORIA': '董事会',
       'GERENCIA': '管理层',
       'GESTAO': '管理',
@@ -1616,6 +1642,7 @@
     const hasJr = parts.some(function (p) { return ['JR', 'JUNIOR'].indexOf(p) !== -1; });
     const level = hasSr ? '高级' : (hasPl ? '中级' : (hasJr ? '初级' : ''));
     const area = hasQuality ? '质量' : (hasAdmin ? '行政' : (hasOps ? '运营' : (hasFinance ? '财务' : (hasFiscal ? '税务' : (hasRh ? '人力资源' : (hasTi ? '信息技术' : ''))))));
+    if (parts.indexOf('DIRETOR') !== -1 || parts.indexOf('DIRETORA') !== -1) return normalized.indexOf('GERAL') !== -1 ? '总经理' : ((area || '') + '总监');
     if (parts.indexOf('GERENTE') !== -1 || parts.indexOf('GERENCIA') !== -1) return (area || '') + '经理';
     if (parts.indexOf('ASSISTENTE') !== -1 || parts.indexOf('AUXILIAR') !== -1) return (area || '') + '助理';
     if (parts.indexOf('ANL') !== -1 || parts.indexOf('ANALISTA') !== -1) return level + (area || '') + '分析师';

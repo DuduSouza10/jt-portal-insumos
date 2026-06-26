@@ -9804,3 +9804,32 @@ table td,
     flex: 1 1 auto;
   }
 }
+
+/* v137 - senha Dev somente em modal ao promover usuário para Dev */
+.dev-access-card {
+  width: min(520px, calc(100vw - 32px)) !important;
+  max-height: none !important;
+  grid-template-rows: auto auto auto auto !important;
+  gap: 16px !important;
+}
+.dev-access-card .permission-card-head h2 {
+  font-size: clamp(24px, 4vw, 34px) !important;
+}
+.dev-access-password-field {
+  display: grid !important;
+  gap: 8px !important;
+  color: var(--text-strong) !important;
+  font-weight: 900 !important;
+}
+.dev-access-password-field input {
+  width: 100% !important;
+}
+.dev-access-error {
+  margin: -4px 0 0 !important;
+  color: var(--red-2) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+.dev-password-wrap {
+  display: none !important;
+}

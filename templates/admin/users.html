@@ -433,10 +433,34 @@
       });
     }
 
+    function serverCounterValues() {
+      const values = {};
+      Object.keys(counters).forEach(function (key) {
+        const node = counters[key];
+        values[key] = node ? Number(String(node.textContent || '0').replace(/\D+/g, '') || 0) : 0;
+      });
+      return values;
+    }
+
+    function refreshServerCounterLabels() {
+      updateCounterLabels(serverCounterValues());
+    }
+
     updateExportLink();
     syncTabs(statusFilter ? statusFilter.value : '');
+    refreshServerCounterLabels();
+    window.addEventListener('jt-language-change', function () {
+      refreshServerCounterLabels();
+      if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+        window.setTimeout(function () { window.JT_I18N.refresh(document.querySelector('.user-filter-summary') || document.body); }, 20);
+      }
+    });
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
-      window.setTimeout(function () { window.JT_I18N.refresh(tbody); }, 20);
+      window.setTimeout(function () {
+        refreshServerCounterLabels();
+        window.JT_I18N.refresh(document.querySelector('.user-filter-summary') || tbody);
+      }, 20);
+      window.setTimeout(refreshServerCounterLabels, 320);
     }
     return;
   }

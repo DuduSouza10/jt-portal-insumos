@@ -20,19 +20,8 @@
         {% if 'dev' in role_options or (user and user.role == 'dev') %}<option value="dev" {% if user and user.role == 'dev' %}selected{% endif %}>Dev</option>{% endif %}
       </select>
       {% if role_locked %}<input type="hidden" name="role" value="{{ user.role }}">{% endif %}
+      <input name="dev_password" id="devPasswordInput" type="hidden" value="">
     </label>
-    {% if current_can_manage_dev_roles() or current_can_bootstrap_dev_role() %}
-    <label id="devPasswordWrap" class="dev-password-wrap {% if (not user or user.role != 'dev') and not current_can_edit_dev_password() %}hidden{% endif %}">
-      {{ 'Senha Dev atual (para aplicar acesso Dev ou alterar senha)' if current_can_edit_dev_password() else 'Senha Dev (para aplicar acesso Dev)' }}
-      <input name="dev_password" id="devPasswordInput" type="password" placeholder="Digite a senha Dev quando selecionar o tipo Dev ou alterar a senha">
-    </label>
-    {% endif %}
-    {% if current_can_edit_dev_password() %}
-    <label id="newDevPasswordWrap" class="dev-password-wrap">
-      Nova senha Dev (opcional)
-      <input name="new_dev_password" id="newDevPasswordInput" type="password" placeholder="Preencha somente se quiser alterar a senha Dev">
-    </label>
-    {% endif %}
     <label id="baseNameWrap">
       {{ 'Setor' if current_is_dev() else 'Nome da base (unidade J&T)' }}
       {% if current_is_dev() %}
@@ -84,6 +73,29 @@
         <span>Base e franquia usam Solicitar insumos e Minhas solicitações. Administradores recebem todas as páginas.</span>
       </div>
       <button class="btn ghost" type="button" data-open-permission-modal>Ver páginas</button>
+    </div>
+
+    <div id="devPasswordModal" class="permission-modal dev-access-modal" aria-hidden="true">
+      <div class="permission-backdrop" data-cancel-dev-password></div>
+      <section class="permission-card dev-access-card card" role="dialog" aria-modal="true" aria-labelledby="devPasswordTitle">
+        <div class="permission-card-head">
+          <div>
+            <span class="eyebrow">Acesso Dev</span>
+            <h2 id="devPasswordTitle">Confirmar senha Dev</h2>
+            <p>Informe a senha Dev somente para transformar este usuário em Dev.</p>
+          </div>
+          <button class="permission-close" type="button" data-cancel-dev-password aria-label="Fechar">×</button>
+        </div>
+        <label class="dev-access-password-field">
+          Senha Dev
+          <input id="devPasswordModalInput" type="password" placeholder="Digite a senha Dev" autocomplete="off">
+        </label>
+        <p id="devPasswordModalError" class="dev-access-error hidden">Informe a senha Dev para continuar.</p>
+        <div class="permission-actions">
+          <button class="btn ghost" type="button" data-cancel-dev-password>Cancelar</button>
+          <button class="btn primary" type="button" data-confirm-dev-password>Confirmar</button>
+        </div>
+      </section>
     </div>
 
     <div id="permissionModal" class="permission-modal" aria-hidden="true">
@@ -146,9 +158,14 @@
   const franchiseNumberInput = document.getElementById('franchiseNumberInput');
   const cnpjWrap = document.getElementById('cnpjWrap');
   const cnpjInput = document.getElementById('cnpjInput');
-  const devPasswordWrap = document.getElementById('devPasswordWrap');
   const devPasswordInput = document.getElementById('devPasswordInput');
-  const newDevPasswordInput = document.getElementById('newDevPasswordInput');
+  const devPasswordModal = document.getElementById('devPasswordModal');
+  const devPasswordModalInput = document.getElementById('devPasswordModalInput');
+  const devPasswordModalError = document.getElementById('devPasswordModalError');
+  const devPasswordConfirmButton = document.querySelector('[data-confirm-dev-password]');
+  const devPasswordCancelButtons = document.querySelectorAll('[data-cancel-dev-password]');
+  const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
+  let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
 
   function syncRole() {
     const role = roleSelect ? roleSelect.value : 'base';
@@ -156,9 +173,6 @@
     const isFranchise = role === 'franchise';
     const isAdmin = role === 'admin' || role === 'dev';
     const isDev = role === 'dev';
-
-    if (devPasswordWrap) devPasswordWrap.classList.toggle('hidden', !(isDev || newDevPasswordInput));
-    if (devPasswordInput) devPasswordInput.required = isDev;
 
     const showSetorField = editorIsDev && !isFranchise;
     const showBaseField = isBase || showSetorField;
@@ -202,6 +216,49 @@
   if (modal && modal.parentElement !== document.body) {
     document.body.appendChild(modal);
   }
+  if (devPasswordModal && devPasswordModal.parentElement !== document.body) {
+    document.body.appendChild(devPasswordModal);
+  }
+
+  function openDevPasswordModal(fallbackRole) {
+    if (!devPasswordModal) return;
+    devPasswordFallbackRole = fallbackRole || devPasswordFallbackRole || 'base';
+    devPasswordModal.classList.add('open');
+    devPasswordModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('permission-modal-open');
+    if (devPasswordModalInput) {
+      devPasswordModalInput.value = '';
+      setTimeout(function () { devPasswordModalInput.focus(); }, 40);
+    }
+    if (devPasswordModalError) devPasswordModalError.classList.add('hidden');
+  }
+
+  function closeDevPasswordModal(keepRole) {
+    if (!devPasswordModal) return;
+    devPasswordModal.classList.remove('open');
+    devPasswordModal.setAttribute('aria-hidden', 'true');
+    if (!modal || !modal.classList.contains('open')) {
+      document.body.classList.remove('permission-modal-open');
+    }
+    if (!keepRole && roleSelect) {
+      roleSelect.value = devPasswordFallbackRole || 'base';
+      if (devPasswordInput) devPasswordInput.value = '';
+      syncRole();
+    }
+  }
+
+  function confirmDevPasswordModal() {
+    const value = devPasswordModalInput ? devPasswordModalInput.value.trim() : '';
+    if (!value) {
+      if (devPasswordModalError) devPasswordModalError.classList.remove('hidden');
+      if (devPasswordModalInput) devPasswordModalInput.focus();
+      return;
+    }
+    if (devPasswordInput) devPasswordInput.value = value;
+    closeDevPasswordModal(true);
+    syncRole();
+  }
+
   function openModal() {
     if (!modal) return;
     modal.classList.add('open');
@@ -249,9 +306,44 @@
 
   if (openButton) openButton.addEventListener('click', openModal);
   closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
-  if (roleSelect) roleSelect.addEventListener('change', syncRole);
+  if (devPasswordConfirmButton) devPasswordConfirmButton.addEventListener('click', confirmDevPasswordModal);
+  devPasswordCancelButtons.forEach(function (button) {
+    button.addEventListener('click', function () { closeDevPasswordModal(false); });
+  });
+  if (devPasswordModalInput) {
+    devPasswordModalInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        confirmDevPasswordModal();
+      }
+    });
+  }
+  if (roleSelect) {
+    roleSelect.addEventListener('focus', function () {
+      if (roleSelect.value !== 'dev') devPasswordFallbackRole = roleSelect.value;
+    });
+    roleSelect.addEventListener('change', function () {
+      const selectedRole = roleSelect.value;
+      if (selectedRole === 'dev' && initialRole !== 'dev' && (!devPasswordInput || !devPasswordInput.value)) {
+        openDevPasswordModal(devPasswordFallbackRole || 'base');
+        syncRole();
+        return;
+      }
+      if (selectedRole !== 'dev') {
+        devPasswordFallbackRole = selectedRole;
+        if (devPasswordInput) devPasswordInput.value = '';
+      }
+      syncRole();
+    });
+  }
   document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeModal();
+    if (event.key === 'Escape') {
+      if (devPasswordModal && devPasswordModal.classList.contains('open')) {
+        closeDevPasswordModal(false);
+      } else {
+        closeModal();
+      }
+    }
   });
   syncRole();
 })();
