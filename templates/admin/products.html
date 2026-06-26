@@ -15,7 +15,7 @@
   </div>
 
   <form id="productLiveFilterForm" class="product-filter-card" method="get" data-server-filters="1" action="{{ url_for('admin_products') }}">
-    <input type="hidden" name="limit" value="{{ product_filters.limit if product_filters else 120 }}">
+    <input type="hidden" id="productPageInput" name="page" value="{{ product_filters.page if product_filters else 1 }}">
     <div class="product-filter-main">
       <label class="product-filter-search product-filter-field field-search">
         Pesquisar produto
@@ -42,12 +42,22 @@
         Classificar por
         <select id="productSortFilter" name="sort">
           <option value="default" {{ 'selected' if product_filters.sort == 'default' else '' }}>Padrão</option>
+          <option value="name" {{ 'selected' if product_filters.sort == 'name' else '' }}>Produto A-Z</option>
+          <option value="name_desc" {{ 'selected' if product_filters.sort == 'name_desc' else '' }}>Produto Z-A</option>
           <option value="category" {{ 'selected' if product_filters.sort == 'category' else '' }}>Categoria A-Z</option>
           <option value="category_desc" {{ 'selected' if product_filters.sort == 'category_desc' else '' }}>Categoria Z-A</option>
           <option value="value_desc" {{ 'selected' if product_filters.sort == 'value_desc' else '' }}>Maior valor</option>
           <option value="value_asc" {{ 'selected' if product_filters.sort == 'value_asc' else '' }}>Menor valor</option>
           <option value="stock_desc" {{ 'selected' if product_filters.sort == 'stock_desc' else '' }}>Maior estoque</option>
           <option value="stock_asc" {{ 'selected' if product_filters.sort == 'stock_asc' else '' }}>Menor estoque</option>
+        </select>
+      </label>
+      <label class="product-filter-field field-limit">
+        Linhas por página
+        <select id="productLimitFilter" name="limit">
+          {% for option in product_pagination.page_size_options %}
+            <option value="{{ option }}" {{ 'selected' if option == product_pagination.limit else '' }}>{{ option }}</option>
+          {% endfor %}
         </select>
       </label>
       <div class="product-filter-actions field-actions">
@@ -75,11 +85,11 @@
         <button class="permission-close" type="button" data-close-export-modal aria-label="Fechar">×</button>
       </div>
       <div class="export-language-actions">
-        <a class="export-language-option btn ghost" href="{{ url_for('admin_products_export', lang='pt') }}">
+        <a class="export-language-option btn ghost" href="{{ url_for('admin_products_export', lang='pt') }}" data-product-export-lang="pt">
           <strong>Português</strong>
           <small>Cabeçalhos e dados em português.</small>
         </a>
-        <a class="export-language-option btn primary" href="{{ url_for('admin_products_export', lang='zh') }}">
+        <a class="export-language-option btn primary" href="{{ url_for('admin_products_export', lang='zh') }}" data-product-export-lang="zh">
           <strong>Chinês simplificado</strong>
           <small>Cabeçalhos e dados conhecidos em chinês simplificado.</small>
         </a>
@@ -224,6 +234,40 @@
     </tbody>
   </table>
   </div>
+
+  <div class="product-pagination-panel" aria-label="Paginação de produtos">
+    <div class="product-pagination-info">
+      Exibindo {{ product_pagination.start }}–{{ product_pagination.end }} de {{ product_pagination.total }} produtos
+      <span>• Página {{ product_pagination.page }} de {{ product_pagination.total_pages }}</span>
+    </div>
+    <nav class="product-pagination" aria-label="Alternar página de produtos">
+      {% if product_pagination.has_prev %}
+        <a class="page-btn" href="{{ product_pagination.first_url }}">Primeira</a>
+        <a class="page-btn" href="{{ product_pagination.prev_url }}">Anterior</a>
+      {% else %}
+        <span class="page-btn disabled">Primeira</span>
+        <span class="page-btn disabled">Anterior</span>
+      {% endif %}
+
+      {% for item in product_pagination.page_links %}
+        {% if item.ellipsis %}
+          <span class="page-ellipsis">...</span>
+        {% elif item.active %}
+          <span class="page-btn active" aria-current="page">{{ item.number }}</span>
+        {% else %}
+          <a class="page-btn" href="{{ item.url }}">{{ item.number }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if product_pagination.has_next %}
+        <a class="page-btn" href="{{ product_pagination.next_url }}">Próxima</a>
+        <a class="page-btn" href="{{ product_pagination.last_url }}">Última</a>
+      {% else %}
+        <span class="page-btn disabled">Próxima</span>
+        <span class="page-btn disabled">Última</span>
+      {% endif %}
+    </nav>
+  </div>
 </div>
 
 <script>
@@ -304,6 +348,23 @@
     modal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('export-modal-open');
   }
+  function updateProductExportLinks() {
+    const filterForm = document.getElementById('productLiveFilterForm');
+    const baseUrl = {{ url_for('admin_products_export')|tojson }};
+    document.querySelectorAll('[data-product-export-lang]').forEach(function (link) {
+      const params = new URLSearchParams();
+      params.set('lang', link.dataset.productExportLang || 'pt');
+      if (filterForm) {
+        const formData = new FormData(filterForm);
+        ['q', 'status', 'category', 'sort', 'limit', 'page'].forEach(function (key) {
+          const value = String(formData.get(key) || '').trim();
+          if (value && !(key === 'status' && value === 'all')) params.set(key, value);
+        });
+      }
+      link.href = `${baseUrl}?${params.toString()}`;
+    });
+  }
+  openButton.addEventListener('click', updateProductExportLinks);
   openButton.addEventListener('click', openModal);
   closeButtons.forEach((button) => button.addEventListener('click', closeModal));
   document.addEventListener('keydown', (event) => {
@@ -320,6 +381,8 @@
   const statusFilter = document.getElementById('productStatusFilter');
   const categoryFilter = document.getElementById('productCategoryFilter');
   const sortFilter = document.getElementById('productSortFilter');
+  const limitFilter = document.getElementById('productLimitFilter');
+  const pageInput = document.getElementById('productPageInput');
   const clearButton = document.getElementById('productClearFiltersButton');
   const applyButton = document.getElementById('productApplyFilterButton');
   const tbody = document.getElementById('productTableBody');
@@ -331,7 +394,7 @@
   const emptyRow = document.getElementById('productLiveEmpty');
   const serverFilters = form && form.dataset.serverFilters === '1';
 
-  if (!form || !tbody || !rows.length) return;
+  if (!form || !tbody) return;
 
   function normalize(value) {
     return String(value || '')
@@ -365,6 +428,8 @@
     const mode = sortFilter ? sortFilter.value : 'default';
     return rows.slice().sort(function (left, right) {
       switch (mode) {
+        case 'name': return compareText(left, right, 'name', 1);
+        case 'name_desc': return compareText(left, right, 'name', -1);
         case 'category': return compareText(left, right, 'category', 1);
         case 'category_desc': return compareText(left, right, 'category', -1);
         case 'value_asc': return numeric(left, 'price') - numeric(right, 'price') || compareText(left, right, 'name', 1);
@@ -383,14 +448,15 @@
   }
 
   if (serverFilters) {
-    function submitServerFilters() {
+    function submitServerFilters(resetPage = true) {
+      if (resetPage && pageInput) pageInput.value = '1';
       if (form.requestSubmit) form.requestSubmit();
       else form.submit();
     }
 
     form.addEventListener('submit', function () {});
-    [statusFilter, categoryFilter, sortFilter].forEach(function (select) {
-      if (select) select.addEventListener('change', submitServerFilters);
+    [statusFilter, categoryFilter, sortFilter, limitFilter].forEach(function (select) {
+      if (select) select.addEventListener('change', function () { submitServerFilters(true); });
     });
     if (search) {
       search.addEventListener('keydown', function (event) {
@@ -407,6 +473,7 @@
         if (statusFilter) statusFilter.value = 'all';
         if (categoryFilter) categoryFilter.value = '';
         if (sortFilter) sortFilter.value = 'default';
+        if (limitFilter) limitFilter.value = '25';
         submitServerFilters();
       });
     }
@@ -463,6 +530,7 @@
     if (statusFilter) statusFilter.value = 'all';
     if (categoryFilter) categoryFilter.value = '';
     if (sortFilter) sortFilter.value = 'default';
+    if (limitFilter) limitFilter.value = '25';
     applyFilters();
   }
 

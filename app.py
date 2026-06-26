@@ -654,14 +654,25 @@ def bounded_int(value: Any, default: int, minimum: int = 1, maximum: int = 500) 
     return max(minimum, min(maximum, parsed))
 
 
-def list_page_limit(default: int = 120, maximum: int = 300) -> int:
-    env_default = bounded_int(os.getenv("D1_LIST_PAGE_SIZE"), default, 25, maximum)
-    return bounded_int(request.args.get("limit"), env_default, 25, maximum)
+def list_page_limit(default: int = 25, maximum: int = 300) -> int:
+    """Limite das tabelas administrativas.
+
+    O padrão visual precisa ser 25 linhas para evitar leituras grandes no D1.
+    Variáveis antigas como D1_LIST_PAGE_SIZE não devem voltar a tela para 120
+    quando o usuário não escolheu uma quantidade manualmente.
+    """
+    raw_limit = request.args.get("limit")
+    if raw_limit is None or str(raw_limit).strip() == "":
+        return bounded_int(default, 25, 25, maximum)
+    return bounded_int(raw_limit, default, 25, maximum)
 
 
-def api_page_limit(default: int = 120, maximum: int = 250) -> int:
-    env_default = bounded_int(os.getenv("D1_API_PAGE_SIZE"), default, 25, maximum)
-    return bounded_int(request.args.get("limit"), env_default, 25, maximum)
+def api_page_limit(default: int = 25, maximum: int = 250) -> int:
+    """Limite padrão menor nas APIs para preservar Rows read do Cloudflare D1."""
+    raw_limit = request.args.get("limit")
+    if raw_limit is None or str(raw_limit).strip() == "":
+        return bounded_int(default, 25, 25, maximum)
+    return bounded_int(raw_limit, default, 25, maximum)
 
 
 def exact_counts_enabled() -> bool:
@@ -5402,7 +5413,7 @@ def admin_users():
     if selected_sort not in sort_map:
         selected_sort = "responsible_asc"
 
-    per_page = list_page_limit(default=120, maximum=500)
+    per_page = list_page_limit(default=25, maximum=500)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
 
     clauses: list[str] = []
@@ -6165,12 +6176,11 @@ def admin_products():
     category_filter = (request.args.get("category") or "").strip()
     if status_filter not in {"all", "active", "inactive"}:
         status_filter = "all"
-    if sort_filter not in {"default", "category", "category_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
+    if sort_filter not in {"default", "category", "category_desc", "name", "name_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
         sort_filter = "default"
 
-    per_page = list_page_limit(default=120, maximum=300)
+    per_page = list_page_limit(default=25, maximum=500)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
-    offset = (page - 1) * per_page
 
     clauses = ["catalog_archived = 0"]
     params: list[Any] = []
@@ -6188,6 +6198,8 @@ def admin_products():
 
     sort_map = {
         "default": "active DESC, category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+        "name": "name COLLATE NOCASE ASC, id DESC",
+        "name_desc": "name COLLATE NOCASE DESC, id DESC",
         "category": "category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
         "category_desc": "category COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
         "value_asc": "price_cents ASC, name COLLATE NOCASE ASC",
@@ -6196,29 +6208,87 @@ def admin_products():
         "stock_desc": "stock_quantity DESC, name COLLATE NOCASE ASC",
     }
     where_sql = " WHERE " + " AND ".join(clauses)
-    sql = f"""
-        SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
-               unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-               limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
-               active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
-          FROM products
-          {where_sql}
-         ORDER BY {sort_map.get(sort_filter, sort_map["default"])}
-         LIMIT ? OFFSET ?
-    """
+
     with db_connect() as conn:
-        rows = conn.execute(sql, [*params, per_page, offset]).fetchall()
+        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql}", params).fetchone()
+        total_products = int((total_row["total"] if total_row else 0) or 0)
+        total_pages = max(1, (total_products + per_page - 1) // per_page)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * per_page
+        rows = conn.execute(
+            f"""
+            SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
+                   unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+              FROM products
+              {where_sql}
+             ORDER BY {sort_map.get(sort_filter, sort_map["default"])}
+             LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
+        ).fetchall()
+
         if exact_counts_enabled():
-            total_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql}", params).fetchone()["total"]
-            active_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 1", params).fetchone()["total"]
-            inactive_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 0", params).fetchone()["total"]
+            active_products = int(conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 1", params).fetchone()["total"] or 0)
+            inactive_products = int(conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 0", params).fetchone()["total"] or 0)
         else:
-            total_products = len(rows)
             active_products = sum(1 for row in rows if int(row["active"] or 0) == 1)
             inactive_products = sum(1 for row in rows if int(row["active"] or 0) == 0)
+
     products = [product for row in rows if (product := row_to_product(row)) is not None]
     category_items = list_product_categories()
     categories = [item["name"] for item in category_items]
+
+    page_size_options = [25, 50, 100, 120, 200, 300, 500]
+    if per_page not in page_size_options:
+        page_size_options.append(per_page)
+        page_size_options.sort()
+
+    def page_url(target_page: int, target_limit: int | None = None) -> str:
+        args: dict[str, Any] = {"page": max(1, target_page), "limit": target_limit or per_page}
+        if search:
+            args["q"] = search
+        if status_filter and status_filter != "all":
+            args["status"] = status_filter
+        if sort_filter:
+            args["sort"] = sort_filter
+        if category_filter:
+            args["category"] = category_filter
+        return url_for("admin_products", **args)
+
+    visible_page_numbers: set[int] = {1, total_pages}
+    for number in range(page - 2, page + 3):
+        if 1 <= number <= total_pages:
+            visible_page_numbers.add(number)
+    page_links: list[dict[str, Any]] = []
+    previous_number = 0
+    for number in sorted(visible_page_numbers):
+        if previous_number and number - previous_number > 1:
+            page_links.append({"ellipsis": True})
+        page_links.append({"number": number, "active": number == page, "url": page_url(number)})
+        previous_number = number
+
+    start_item = offset + 1 if total_products else 0
+    end_item = min(offset + len(products), total_products)
+    product_pagination = {
+        "page": page,
+        "limit": per_page,
+        "total": total_products,
+        "total_pages": total_pages,
+        "start": start_item,
+        "end": end_item,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "first_url": page_url(1),
+        "prev_url": page_url(max(1, page - 1)),
+        "next_url": page_url(min(total_pages, page + 1)),
+        "last_url": page_url(total_pages),
+        "page_links": page_links,
+        "page_size_options": page_size_options,
+    }
+
     return render_template(
         "admin/products.html",
         products=products,
@@ -6226,7 +6296,9 @@ def admin_products():
         product_categories_manage=category_items,
         product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter, "limit": per_page, "page": page},
         product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products), "page": page, "limit": per_page, "low_read": low_row_read_mode()},
+        product_pagination=product_pagination,
     )
+
 
 
 
@@ -6274,15 +6346,64 @@ def admin_product_categories_update():
 @admin_required
 @page_access_required("admin_products")
 def admin_products_export():
-    with db_connect() as conn:
-        rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 ORDER BY active DESC, category ASC, name ASC").fetchall()
-    products = [product for row in rows if (product := row_to_product(row)) is not None]
-
     export_language = (request.args.get("lang") or "pt").strip().lower()
     if export_language in {"zh", "zh-cn", "zh-hans", "zh-tw", "mandarin", "mandarim", "chinese", "simplified"}:
         export_language = "zh"
     else:
         export_language = "pt"
+
+    search = (request.args.get("q") or "").strip()
+    status_filter = (request.args.get("status") or "all").strip().lower()
+    sort_filter = (request.args.get("sort") or "default").strip().lower()
+    category_filter = (request.args.get("category") or "").strip()
+    if status_filter not in {"all", "active", "inactive"}:
+        status_filter = "all"
+    if sort_filter not in {"default", "category", "category_desc", "name", "name_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
+        sort_filter = "default"
+
+    clauses = ["catalog_archived = 0"]
+    params: list[Any] = []
+    if status_filter == "active":
+        clauses.append("active = 1")
+    elif status_filter == "inactive":
+        clauses.append("active = 0")
+    if category_filter:
+        clauses.append("LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))")
+        params.append(category_filter)
+    if search:
+        like = like_term(search)
+        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)")
+        params.extend([like, like, like, like])
+
+    sort_map = {
+        "default": "active DESC, category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+        "name": "name COLLATE NOCASE ASC, id DESC",
+        "name_desc": "name COLLATE NOCASE DESC, id DESC",
+        "category": "category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+        "category_desc": "category COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+        "value_asc": "price_cents ASC, name COLLATE NOCASE ASC",
+        "value_desc": "price_cents DESC, name COLLATE NOCASE ASC",
+        "stock_asc": "stock_quantity ASC, name COLLATE NOCASE ASC",
+        "stock_desc": "stock_quantity DESC, name COLLATE NOCASE ASC",
+    }
+    where_sql = " WHERE " + " AND ".join(clauses)
+
+    has_page_args = "limit" in request.args or "page" in request.args
+    limit_sql = ""
+    query_params: list[Any] = list(params)
+    if has_page_args:
+        export_limit = bounded_int(request.args.get("limit"), int(os.getenv("D1_EXPORT_LIMIT", "500")), 25, 2000)
+        export_page = bounded_int(request.args.get("page"), 1, 1, 100000)
+        export_offset = (export_page - 1) * export_limit
+        limit_sql = " LIMIT ? OFFSET ?"
+        query_params.extend([export_limit, export_offset])
+
+    with db_connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM products{where_sql} ORDER BY {sort_map.get(sort_filter, sort_map['default'])}{limit_sql}",
+            query_params,
+        ).fetchall()
+    products = [product for row in rows if (product := row_to_product(row)) is not None]
 
     workbook = Workbook()
     worksheet = workbook.active
@@ -6321,7 +6442,7 @@ def admin_products_export():
         storage_key("exports", filename),
         buffer,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        {"type": "products_export"},
+        {"type": "products_export", "mode": "current_page" if has_page_args else "all"},
     )
     buffer.seek(0)
     return send_file(buffer, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=filename)

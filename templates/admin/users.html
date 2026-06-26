@@ -132,7 +132,7 @@
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ user_role_label(user.role) }}</td>
-        <td class="user-unit-cell" data-label="Setor">
+        <td class="user-unit-cell" data-i18n-sector data-label="Setor">
           {% if user.role == 'franchise' %}
             <strong>{{ user.franchise_name or user.organization_name }}</strong>
           {% else %}
@@ -428,6 +428,7 @@
         if (statusFilter) statusFilter.value = '';
         if (roleFilter) roleFilter.value = '';
         if (sortFilter) sortFilter.value = 'responsible_asc';
+        if (limitFilter) limitFilter.value = '25';
         submitServerFilters();
       });
     }
@@ -523,6 +524,7 @@
       if (statusFilter) statusFilter.value = '';
       if (roleFilter) roleFilter.value = '';
       if (sortFilter) sortFilter.value = 'responsible_asc';
+      if (limitFilter) limitFilter.value = '25';
       applyFilters();
       if (search) search.focus();
     });

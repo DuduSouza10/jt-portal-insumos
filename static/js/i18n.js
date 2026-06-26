@@ -250,6 +250,8 @@
   "Inativos": "停用",
   "Classificar por": "排序方式",
   "Padrão": "默认",
+  "Produto A-Z": "产品 A-Z",
+  "Produto Z-A": "产品 Z-A",
   "Categoria A-Z": "类别 A-Z",
   "Categoria Z-A": "类别 Z-A",
   "Maior valor": "价格从高到低",
@@ -483,6 +485,9 @@
   "Última": "末页",
   "Alternar página de usuários": "切换用户页面",
   "Paginação de usuários": "用户分页",
+  "produtos": "产品",
+  "Alternar página de produtos": "切换产品页面",
+  "Paginação de produtos": "产品分页",
   "Usuário": "用户",
   "Editar acesso": "编辑存取",
   "Aprovar": "批准",
@@ -1474,10 +1479,32 @@
     const raw = String(value || '').trim();
     if (!raw) return false;
     const compact = raw.replace(/[–—]/g, '-');
-    if (/^(?:F\s+)?[A-Z]{2,5}(?:\s+\d{1,3})?-[A-Z]{2}$/u.test(compact)) return true;
+    if (/^(?:F\s+)?[A-Z]{2,6}(?:\s*\d{1,3})?-[A-Z]{2}$/u.test(compact)) return true;
     if (/^[A-Z]{2,6}\s+\d{1,3}-[A-Z]{2}$/u.test(compact)) return true;
     if (/^[A-Z]{2,6}-[A-Z]{2}$/u.test(compact)) return true;
     return false;
+  }
+
+  function translateRoleLabel(value) {
+    const normalized = String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[.]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+    const map = {
+      'ADMIN': '管理员',
+      'ADMINISTRADOR': '管理员',
+      'ADMINISTRADORA': '管理员',
+      'BASE': '基地',
+      'FRANQUIA': '加盟店',
+      'DEV': '开发人员',
+      'DEVELOPER': '开发人员',
+      'DESENVOLVEDOR': '开发人员',
+      'DESENVOLVEDORA': '开发人员'
+    };
+    return map[normalized] || null;
   }
 
   function translateOrgOrRole(value) {
@@ -1526,33 +1553,106 @@
       'DESENVOLVEDOR PL': '中级开发人员',
       'DESENVOLVEDOR SR': '高级开发人员',
       'OPERACIONAL': '运营',
+      'OPERACIONAIS': '运营',
+      'OPERACOES': '运营',
       'COORDENADOR OPERACIONAL': '运营协调员',
-      'SUPERVISOR OPERACIONAL': '运营主管'
+      'SUPERVISOR OPERACIONAL': '运营主管',
+      'QUALIDADE': '质量部门',
+      'CONTROLE DE QUALIDADE': '质量控制',
+      'ANALISTA DE QUALIDADE': '质量分析师',
+      'SUPERVISOR DE QUALIDADE': '质量主管',
+      'COORDENADOR DE QUALIDADE': '质量协调员',
+      'GERENTE DE QUALIDADE': '质量经理',
+      'SAC': '客户服务',
+      'CX': '客户体验',
+      'CUSTOMER EXPERIENCE': '客户体验',
+      'ATENDIMENTO': '客服',
+      'FINANCEIRO': '财务',
+      'FISCAL': '税务',
+      'RH': '人力资源',
+      'RECURSOS HUMANOS': '人力资源',
+      'TI': '信息技术',
+      'TECNOLOGIA': '技术部门',
+      'TECNOLOGIA DA INFORMACAO': '信息技术',
+      'COMERCIAL': '商务部门',
+      'LOGISTICA': '物流',
+      'TRANSPORTE': '运输',
+      'TRANSPORTES': '运输',
+      'ROTA': '路线',
+      'ROTAS': '路线',
+      'EXPEDICAO': '发货部门',
+      'RECEBIMENTO': '收货部门',
+      'COMPRAS': '采购',
+      'SUPRIMENTOS': '供应部门',
+      'MANUTENCAO': '维护部门',
+      'PATRIMONIO': '资产管理',
+      'MARKETING': '市场营销',
+      'JURIDICO': '法务',
+      'CONTROLADORIA': '管理控制',
+      'PLANEJAMENTO': '计划部门',
+      'BACKOFFICE': '后台支持',
+      'BACK OFFICE': '后台支持',
+      'DIRETORIA': '董事会',
+      'GERENCIA': '管理层',
+      'GESTAO': '管理',
+      'OPERADOR': '操作员',
+      'OPERADORA': '操作员',
+      'AUXILIAR': '助理',
+      'LIDER': '组长',
+      'LIDERANCA': '领导层'
     };
     if (exact[normalized]) return exact[normalized];
 
-    const parts = normalized.split(' ').filter(Boolean);
+    const parts = normalized.split(/\s+|\/|-/).filter(Boolean);
     const hasAdmin = parts.some(function (p) { return ['ADM', 'ADMINISTRATIVO', 'ADMINISTRATIVA', 'ADMINISTRACAO'].indexOf(p) !== -1; });
-    const hasOps = parts.indexOf('OPERACIONAL') !== -1 || parts.indexOf('OPERACOES') !== -1;
-    const hasSr = parts.some(function (p) { return ['SR', 'SENIOR', 'SENIOR'].indexOf(p) !== -1; });
+    const hasOps = parts.some(function (p) { return ['OPERACIONAL', 'OPERACIONAIS', 'OPERACOES', 'OPERACAO'].indexOf(p) !== -1; });
+    const hasQuality = parts.some(function (p) { return ['QUALIDADE', 'QUALITY'].indexOf(p) !== -1; });
+    const hasFinance = parts.some(function (p) { return ['FINANCEIRO', 'FINANCEIRA', 'FINANCAS'].indexOf(p) !== -1; });
+    const hasFiscal = parts.indexOf('FISCAL') !== -1;
+    const hasRh = parts.indexOf('RH') !== -1 || normalized.indexOf('RECURSOS HUMANOS') !== -1;
+    const hasTi = parts.indexOf('TI') !== -1 || normalized.indexOf('TECNOLOGIA') !== -1;
+    const hasSr = parts.some(function (p) { return ['SR', 'SENIOR'].indexOf(p) !== -1; });
     const hasPl = parts.some(function (p) { return ['PL', 'PLENO', 'PLENA'].indexOf(p) !== -1; });
     const hasJr = parts.some(function (p) { return ['JR', 'JUNIOR'].indexOf(p) !== -1; });
     const level = hasSr ? '高级' : (hasPl ? '中级' : (hasJr ? '初级' : ''));
-    const area = hasAdmin ? '行政' : (hasOps ? '运营' : '');
-    if (parts.indexOf('GERENTE') !== -1) return (area || '') + '经理';
+    const area = hasQuality ? '质量' : (hasAdmin ? '行政' : (hasOps ? '运营' : (hasFinance ? '财务' : (hasFiscal ? '税务' : (hasRh ? '人力资源' : (hasTi ? '信息技术' : ''))))));
+    if (parts.indexOf('GERENTE') !== -1 || parts.indexOf('GERENCIA') !== -1) return (area || '') + '经理';
     if (parts.indexOf('ASSISTENTE') !== -1 || parts.indexOf('AUXILIAR') !== -1) return (area || '') + '助理';
     if (parts.indexOf('ANL') !== -1 || parts.indexOf('ANALISTA') !== -1) return level + (area || '') + '分析师';
     if (parts.indexOf('COORDENADOR') !== -1 || parts.indexOf('COORDENADORA') !== -1) return (area || '') + '协调员';
     if (parts.indexOf('SUPERVISOR') !== -1 || parts.indexOf('SUPERVISORA') !== -1) return (area || '') + '主管';
-    if (parts.indexOf('DEV') !== -1 || parts.indexOf('DEVELOPER') !== -1 || parts.indexOf('DESENVOLVEDOR') !== -1) return level + '开发人员';
-    if (hasAdmin && parts.length <= 2) return '行政';
-    if (hasOps && parts.length <= 2) return '运营';
+    if (parts.indexOf('OPERADOR') !== -1 || parts.indexOf('OPERADORA') !== -1) return (area || '运营') + '操作员';
+    if (parts.indexOf('LIDER') !== -1 || parts.indexOf('LIDERANCA') !== -1) return (area || '') + '组长';
+    if (parts.indexOf('DEV') !== -1 || parts.indexOf('DEVELOPER') !== -1 || parts.indexOf('DESENVOLVEDOR') !== -1 || parts.indexOf('DESENVOLVEDORA') !== -1) return level + '开发人员';
+    if (hasQuality && parts.length <= 3) return '质量部门';
+    if (hasAdmin && parts.length <= 3) return '行政';
+    if (hasOps && parts.length <= 3) return '运营';
+    if (hasFinance && parts.length <= 3) return '财务';
+    if (hasFiscal && parts.length <= 3) return '税务';
+    if (hasRh && parts.length <= 3) return '人力资源';
+    if (hasTi && parts.length <= 3) return '信息技术';
     return null;
+  }
+
+  function translateUserSectorValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw || isOperationalCode(raw)) return null;
+    return translateOrgOrRole(raw) || zh[raw] || translateCatalogLabel(raw) || null;
+  }
+
+  function translateRoleAndSectorLine(core) {
+    const match = String(core || '').trim().match(/^(Admin|Administrador|Administradora|Base|Franquia|Dev|Developer|Desenvolvedor|Desenvolvedora)\s*•\s*(.+)$/i);
+    if (!match) return null;
+    const role = translateRoleLabel(match[1]) || translatePiece(match[1]);
+    const sector = translateUserSectorValue(match[2]) || translatePiece(match[2]) || match[2];
+    return role + ' • ' + sector;
   }
 
   function translateCore(core) {
     if (!core) return core;
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
+    const roleSectorLine = translateRoleAndSectorLine(core);
+    if (roleSectorLine) return roleSectorLine;
     if (zh[core]) return zh[core];
     const dynamicCore = translateDynamicProductText(core);
     if (dynamicCore) return dynamicCore;
@@ -1563,6 +1663,12 @@
     let match;
     const unitOnly = translateUnitLabel(core);
     if (unitOnly) return unitOnly;
+    if ((match = core.match(/^Exibindo\s+(.+?)\s+de\s+(\d+)\s+(usuários|usuarios|produtos)$/i))) {
+      const label = /produto/i.test(match[3]) ? '产品' : '用户';
+      return `显示 ${match[1]} / ${match[2]} ${label}`;
+    }
+    if ((match = core.match(/^•?\s*Página\s+(\d+)\s+de\s+(\d+)$/i))) return `• 第 ${match[1]} 页，共 ${match[2]} 页`;
+    if ((match = core.match(/^Página\s+(\d+)\s+de\s+(\d+)$/i))) return `第 ${match[1]} 页，共 ${match[2]} 页`;
     if ((match = core.match(/^(\d+)\s+admin(?:s)?$/i))) return `${match[1]} 名管理员`;
     if ((match = core.match(/^(\d+)\s+base(?:s)?$/i))) return `${match[1]} 个基地`;
     if ((match = core.match(/^(\d+)\s+franquia(?:s)?$/i))) return `${match[1]} 个加盟店`;
@@ -1832,7 +1938,27 @@
     }
   }
 
+  function applySectorTranslations() {
+    const selector = '.user-unit-cell, [data-i18n-sector], .user-pill-simple small';
+    document.querySelectorAll(selector).forEach(function (el) {
+      if (!el || shouldSkipElement(el)) return;
+      const key = 'data-i18n-sector-original';
+      if (!el.hasAttribute(key)) el.setAttribute(key, String(el.textContent || '').trim());
+      const original = el.getAttribute(key) || '';
+      if (!original) return;
+      if (currentLanguage() !== 'zh-CN') {
+        if (String(el.textContent || '').trim() !== original) el.textContent = original;
+        return;
+      }
+      const translated = translateRoleAndSectorLine(original) || translateUserSectorValue(original) || translateCore(original);
+      if (translated && translated !== original && String(el.textContent || '').trim() !== translated) {
+        el.textContent = translated;
+      }
+    });
+  }
+
   function forceTranslateMenusFiltersAndInputs() {
+    applySectorTranslations();
     const selectors = [
       '.top-nav',
       '.nav-dropdown',
@@ -1879,6 +2005,7 @@
     document.querySelectorAll(selectors.join(',')).forEach(function (el) {
       forceTranslateElementDeep(el);
     });
+    applySectorTranslations();
   }
 
   function forceTranslateStockAndCards() {
