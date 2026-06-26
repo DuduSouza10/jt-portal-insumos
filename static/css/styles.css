@@ -9998,3 +9998,264 @@ html[data-theme="light"] .stock-priority-item {
   display: none !important;
   content: none !important;
 }
+
+/* v141 - remove artefatos cinza piscando atrás/sobre os cards */
+/* A grade global fixa causava pequenos blocos cinza em alguns navegadores/temas. */
+body::before,
+body::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+}
+
+/* Remove brilhos/shimmers decorativos que podiam escapar da área do botão/card. */
+.btn::after,
+.top-nav a::after,
+.logout::after,
+.tab::after,
+.card::before,
+.card::after,
+.table-card::before,
+.table-card::after,
+.hero-card::before,
+.hero-card::after,
+.stat-card::before,
+.stat-card::after,
+.monthly-report-card::before,
+.monthly-report-card::after,
+.asset-toolbar::before,
+.asset-toolbar::after,
+.asset-filter-card::before,
+.asset-filter-card::after,
+.asset-report-card::before,
+.asset-report-card::after,
+.asset-monthly-report-card::before,
+.asset-monthly-report-card::after,
+.material-report-card::before,
+.material-report-card::after,
+.material-report-card-v66::before,
+.material-report-card-v66::after,
+.stock-panel::before,
+.stock-panel::after,
+.stock-board::before,
+.stock-board::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  animation: none !important;
+}
+
+/* Evita flicker de camadas causado por will-change/blur em cards estáticos. */
+.card,
+.table-card,
+.auth-card,
+.wide-card,
+.stat-card,
+.hero-card,
+.cart-panel,
+.search-card,
+.request-side,
+.stock-panel,
+.stock-board,
+.stock-movements-card,
+.asset-toolbar,
+.asset-filter-card,
+.asset-report-card,
+.monthly-report-card,
+.permission-card,
+.export-language-card,
+.dev-access-card {
+  will-change: auto !important;
+  background: var(--surface-card-solid) !important;
+  background-image: none !important;
+  background-color: var(--surface-card-solid) !important;
+  background-clip: border-box !important;
+}
+
+html[data-theme="light"] .card,
+html[data-theme="light"] .table-card,
+html[data-theme="light"] .auth-card,
+html[data-theme="light"] .wide-card,
+html[data-theme="light"] .stat-card,
+html[data-theme="light"] .hero-card,
+html[data-theme="light"] .cart-panel,
+html[data-theme="light"] .search-card,
+html[data-theme="light"] .request-side,
+html[data-theme="light"] .stock-panel,
+html[data-theme="light"] .stock-board,
+html[data-theme="light"] .stock-movements-card,
+html[data-theme="light"] .asset-toolbar,
+html[data-theme="light"] .asset-filter-card,
+html[data-theme="light"] .asset-report-card,
+html[data-theme="light"] .monthly-report-card,
+html[data-theme="light"] .permission-card,
+html[data-theme="light"] .export-language-card,
+html[data-theme="light"] .dev-access-card {
+  background: #ffffff !important;
+  background-image: none !important;
+  background-color: #ffffff !important;
+}
+
+/* Mantém chips/campos sólidos para a grade do fundo não vazar em tema claro. */
+.product-filter-summary span,
+.user-filter-summary span,
+.product-pagination-panel,
+.user-pagination-panel,
+.asset-item-pill,
+.asset-meta div,
+.monthly-report-form,
+.report-all-toggle,
+.material-report-badges span,
+.import-form,
+.user-import-form,
+.access-permission-summary {
+  background-image: none !important;
+  background-color: var(--surface-chip-solid) !important;
+}
+
+html[data-theme="light"] .product-filter-summary span,
+html[data-theme="light"] .user-filter-summary span,
+html[data-theme="light"] .product-pagination-panel,
+html[data-theme="light"] .user-pagination-panel,
+html[data-theme="light"] .asset-item-pill,
+html[data-theme="light"] .asset-meta div,
+html[data-theme="light"] .monthly-report-form,
+html[data-theme="light"] .report-all-toggle,
+html[data-theme="light"] .material-report-badges span,
+html[data-theme="light"] .import-form,
+html[data-theme="light"] .user-import-form,
+html[data-theme="light"] .access-permission-summary {
+  background-image: none !important;
+  background-color: #ffffff !important;
+}
+
+/* v142 - tema claro: hover/selecionado vermelho com texto branco + ícones de ação vermelhos */
+html[data-theme="light"] .btn:not(.icon-action-btn):not(.category-icon-button):not(:disabled):hover,
+html[data-theme="light"] .btn:not(.icon-action-btn):not(.category-icon-button).active,
+html[data-theme="light"] .tab:hover,
+html[data-theme="light"] .tab.active,
+html[data-theme="light"] .catalog-view-button:hover,
+html[data-theme="light"] .catalog-view-button.active,
+html[data-theme="light"] .file-picker-button:hover,
+html[data-theme="light"] .file-picker-clear:hover,
+html[data-theme="light"] .category-suggestion:hover,
+html[data-theme="light"] .category-suggestion:focus,
+html[data-theme="light"] .permission-close:hover,
+html[data-theme="light"] .export-language-option:hover,
+html[data-theme="light"] .export-language-option.primary,
+html[data-theme="light"] .product-pagination .page-btn:not(.disabled):hover,
+html[data-theme="light"] .product-pagination .page-btn.active,
+html[data-theme="light"] .user-pagination .page-btn:not(.disabled):hover,
+html[data-theme="light"] .user-pagination .page-btn.active,
+html[data-theme="light"] .settings-toggle:hover,
+html[data-theme="light"] .language-toggle:hover,
+html[data-theme="light"] .report-all-toggle:hover,
+html[data-theme="light"] .asset-item-pill:hover,
+html[data-theme="light"] .stock-product-card.selected,
+html[data-theme="light"] .stock-product-card:hover,
+html[data-theme="light"] .stock-priority-item:hover,
+html[data-theme="light"] .import-mode-option:hover,
+html[data-theme="light"] .import-mode-option:has(input:checked),
+html[data-theme="light"] .permission-option:hover,
+html[data-theme="light"] .permission-option:has(input:checked) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .44) !important;
+  box-shadow: 0 12px 28px rgba(230, 0, 18, .18) !important;
+}
+
+html[data-theme="light"] .nav-header .top-nav > a:hover,
+html[data-theme="light"] .nav-header .top-nav > a.active,
+html[data-theme="light"] .nav-header .nav-dropdown:hover > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .nav-dropdown:focus-within > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .nav-dropdown.open > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .nav-dropdown.active > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .logout:hover,
+html[data-theme="light"] .nav-header .public-actions .btn:hover,
+html[data-theme="light"] .nav-header .public-actions .btn.active,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, .open, .active) > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:hover,
+html[data-theme="light"] .nav-header .nav-drop-menu a:hover,
+html[data-theme="light"] .nav-header .nav-drop-menu a.active,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, .active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .42) !important;
+}
+
+html[data-theme="light"] .btn:not(.icon-action-btn):not(.category-icon-button):not(:disabled):hover *,
+html[data-theme="light"] .btn:not(.icon-action-btn):not(.category-icon-button).active *,
+html[data-theme="light"] .tab:hover *,
+html[data-theme="light"] .tab.active *,
+html[data-theme="light"] .catalog-view-button:hover *,
+html[data-theme="light"] .catalog-view-button.active *,
+html[data-theme="light"] .file-picker-button:hover *,
+html[data-theme="light"] .file-picker-clear:hover *,
+html[data-theme="light"] .category-suggestion:hover *,
+html[data-theme="light"] .category-suggestion:focus *,
+html[data-theme="light"] .export-language-option:hover *,
+html[data-theme="light"] .export-language-option.primary *,
+html[data-theme="light"] .product-pagination .page-btn:not(.disabled):hover *,
+html[data-theme="light"] .product-pagination .page-btn.active *,
+html[data-theme="light"] .user-pagination .page-btn:not(.disabled):hover *,
+html[data-theme="light"] .user-pagination .page-btn.active *,
+html[data-theme="light"] .nav-header .top-nav > a:hover *,
+html[data-theme="light"] .nav-header .top-nav > a.active *,
+html[data-theme="light"] .nav-header .nav-dropdown:hover > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .nav-dropdown:focus-within > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .nav-dropdown.open > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .nav-dropdown.active > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .logout:hover *,
+html[data-theme="light"] .nav-header .nav-drop-menu a:hover *,
+html[data-theme="light"] .nav-header .nav-drop-menu a.active *,
+html[data-theme="light"] .stock-product-card.selected *,
+html[data-theme="light"] .stock-product-card:hover *,
+html[data-theme="light"] .stock-priority-item:hover *,
+html[data-theme="light"] .import-mode-option:hover *,
+html[data-theme="light"] .import-mode-option:has(input:checked) *,
+html[data-theme="light"] .permission-option:hover *,
+html[data-theme="light"] .permission-option:has(input:checked) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Mantém botões de ícone com o fundo atual, mas deixa o ícone vermelho no tema claro. */
+html[data-theme="light"] .icon-action-btn.btn.ghost,
+html[data-theme="light"] .category-icon-button.btn.ghost {
+  background: rgba(230, 0, 18, .055) !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .18) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] .icon-action-btn.btn.ghost:hover,
+html[data-theme="light"] .category-icon-button.btn.ghost:hover {
+  background: rgba(230, 0, 18, .10) !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .30) !important;
+  box-shadow: 0 10px 22px rgba(230, 0, 18, .10) !important;
+}
+
+html[data-theme="light"] .icon-action-btn.btn.ghost img,
+html[data-theme="light"] .category-icon-button.btn.ghost img {
+  filter: brightness(0) saturate(100%) invert(16%) sepia(100%) saturate(5549%) hue-rotate(347deg) brightness(91%) contrast(111%) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="light"] .icon-action-btn.btn.danger img,
+html[data-theme="light"] .icon-action-btn.btn.success img {
+  filter: brightness(0) invert(1) !important;
+}
