@@ -10259,3 +10259,263 @@ html[data-theme="light"] .icon-action-btn.btn.danger img,
 html[data-theme="light"] .icon-action-btn.btn.success img {
   filter: brightness(0) invert(1) !important;
 }
+
+/* v143 - tema claro: regras finais de botões e animações
+   - Botões vermelhos fora do menu: normal vermelho/texto branco; hover/focus/active branco/texto vermelho.
+   - Menu superior: normal branco/texto vermelho; hover/ativo vermelho/texto branco.
+   - Botões de ícone mantêm o fundo atual e ícone vermelho. */
+html[data-theme="light"] .btn,
+html[data-theme="light"] .tab,
+html[data-theme="light"] .catalog-view-button,
+html[data-theme="light"] .file-picker-button,
+html[data-theme="light"] .file-picker-clear,
+html[data-theme="light"] .export-language-option,
+html[data-theme="light"] .product-pagination .page-btn,
+html[data-theme="light"] .user-pagination .page-btn,
+html[data-theme="light"] .settings-toggle,
+html[data-theme="light"] .language-toggle,
+html[data-theme="light"] .report-all-toggle,
+html[data-theme="light"] .asset-item-pill,
+html[data-theme="light"] .import-mode-option,
+html[data-theme="light"] .permission-option,
+html[data-theme="light"] .nav-header .top-nav > a,
+html[data-theme="light"] .nav-dropdown > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .logout,
+html[data-theme="light"] .nav-header .nav-drop-menu a {
+  transition:
+    background-color .18s ease,
+    background-image .18s ease,
+    color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    transform .18s ease,
+    opacity .18s ease !important;
+}
+
+/* MENU SUPERIOR - normal branco com letra vermelha */
+html[data-theme="light"] .nav-header .top-nav > a:not(.active):not(:hover):not(:focus-visible),
+html[data-theme="light"] .nav-header .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .logout:not(:hover):not(:focus-visible),
+html[data-theme="light"] .nav-header .public-actions .btn.ghost:not(:hover):not(:focus-visible):not(.active) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .26) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .04) !important;
+}
+
+html[data-theme="light"] .nav-header .top-nav > a:not(.active):not(:hover):not(:focus-visible) *,
+html[data-theme="light"] .nav-header .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .logout:not(:hover):not(:focus-visible) *,
+html[data-theme="light"] .nav-header .public-actions .btn.ghost:not(:hover):not(:focus-visible):not(.active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* MENU SUPERIOR - hover/ativo pressionado vermelho com letra branca */
+html[data-theme="light"] .nav-header .top-nav > a:is(:hover, :focus-visible, .active),
+html[data-theme="light"] .nav-header .nav-dropdown:is(:hover, :focus-within, .open, .active) > .nav-drop-toggle,
+html[data-theme="light"] .nav-header .logout:is(:hover, :focus-visible),
+html[data-theme="light"] .nav-header .public-actions .btn.ghost:is(:hover, :focus-visible, .active),
+html[data-theme="light"] .nav-header .nav-drop-menu a:is(:hover, :focus-visible, .active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .52) !important;
+  box-shadow: 0 14px 28px rgba(230, 0, 18, .22) !important;
+  transform: translateY(-1px) !important;
+}
+
+html[data-theme="light"] .nav-header .top-nav > a:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] .nav-header .nav-dropdown:is(:hover, :focus-within, .open, .active) > .nav-drop-toggle *,
+html[data-theme="light"] .nav-header .logout:is(:hover, :focus-visible) *,
+html[data-theme="light"] .nav-header .public-actions .btn.ghost:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] .nav-header .nav-drop-menu a:is(:hover, :focus-visible, .active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* BOTÕES VERMELHOS FORA DO MENU - normal vermelho com letra branca */
+html[data-theme="light"] body .btn.primary:not(.icon-action-btn):not(.category-icon-button),
+html[data-theme="light"] body .btn.danger:not(.icon-action-btn):not(.category-icon-button),
+html[data-theme="light"] body .export-language-option.primary,
+html[data-theme="light"] body .tab.active,
+html[data-theme="light"] body .catalog-view-button.active,
+html[data-theme="light"] body .product-pagination .page-btn.active,
+html[data-theme="light"] body .user-pagination .page-btn.active,
+html[data-theme="light"] body .settings-toggle.active,
+html[data-theme="light"] body .language-toggle.active,
+html[data-theme="light"] body .report-all-toggle:has(input:checked),
+html[data-theme="light"] body .import-mode-option:has(input:checked),
+html[data-theme="light"] body .permission-option:has(input:checked) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .46) !important;
+  box-shadow: 0 14px 30px rgba(230, 0, 18, .18) !important;
+}
+
+html[data-theme="light"] body .btn.primary:not(.icon-action-btn):not(.category-icon-button) *,
+html[data-theme="light"] body .btn.danger:not(.icon-action-btn):not(.category-icon-button) *,
+html[data-theme="light"] body .export-language-option.primary *,
+html[data-theme="light"] body .tab.active *,
+html[data-theme="light"] body .catalog-view-button.active *,
+html[data-theme="light"] body .product-pagination .page-btn.active *,
+html[data-theme="light"] body .user-pagination .page-btn.active *,
+html[data-theme="light"] body .settings-toggle.active *,
+html[data-theme="light"] body .language-toggle.active *,
+html[data-theme="light"] body .report-all-toggle:has(input:checked) *,
+html[data-theme="light"] body .import-mode-option:has(input:checked) *,
+html[data-theme="light"] body .permission-option:has(input:checked) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* BOTÕES VERMELHOS FORA DO MENU - hover/focus/pressionado branco com letra vermelha */
+html[data-theme="light"] body .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .export-language-option.primary:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .tab.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .catalog-view-button.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .product-pagination .page-btn.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .user-pagination .page-btn.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .settings-toggle.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .language-toggle.active:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .report-all-toggle:has(input:checked):is(:hover, :focus-within),
+html[data-theme="light"] body .import-mode-option:has(input:checked):is(:hover, :focus-within),
+html[data-theme="light"] body .permission-option:has(input:checked):is(:hover, :focus-within) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  box-shadow: 0 14px 30px rgba(230, 0, 18, .14) !important;
+  transform: translateY(-1px) !important;
+}
+
+html[data-theme="light"] body .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .export-language-option.primary:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .tab.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .catalog-view-button.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .product-pagination .page-btn.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .user-pagination .page-btn.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .settings-toggle.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .language-toggle.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .report-all-toggle:has(input:checked):is(:hover, :focus-within) *,
+html[data-theme="light"] body .import-mode-option:has(input:checked):is(:hover, :focus-within) *,
+html[data-theme="light"] body .permission-option:has(input:checked):is(:hover, :focus-within) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Elementos clicáveis não vermelhos: hover vermelho com texto branco, como pedido antes. */
+html[data-theme="light"] body .tab:not(.active):is(:hover, :focus-visible),
+html[data-theme="light"] body .catalog-view-button:not(.active):is(:hover, :focus-visible),
+html[data-theme="light"] body .file-picker-button:is(:hover, :focus-visible),
+html[data-theme="light"] body .file-picker-clear:is(:hover, :focus-visible),
+html[data-theme="light"] body .category-suggestion:is(:hover, :focus),
+html[data-theme="light"] body .export-language-option:not(.primary):is(:hover, :focus-visible),
+html[data-theme="light"] body .product-pagination .page-btn:not(.active):not(.disabled):is(:hover, :focus-visible),
+html[data-theme="light"] body .user-pagination .page-btn:not(.active):not(.disabled):is(:hover, :focus-visible),
+html[data-theme="light"] body .asset-item-pill:is(:hover, :focus-visible),
+html[data-theme="light"] body .stock-product-card:is(:hover, .selected),
+html[data-theme="light"] body .stock-priority-item:is(:hover, :focus-within),
+html[data-theme="light"] body .import-mode-option:not(:has(input:checked)):is(:hover, :focus-within),
+html[data-theme="light"] body .permission-option:not(:has(input:checked)):is(:hover, :focus-within) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .44) !important;
+  box-shadow: 0 12px 26px rgba(230, 0, 18, .16) !important;
+  transform: translateY(-1px) !important;
+}
+
+html[data-theme="light"] body .tab:not(.active):is(:hover, :focus-visible) *,
+html[data-theme="light"] body .catalog-view-button:not(.active):is(:hover, :focus-visible) *,
+html[data-theme="light"] body .file-picker-button:is(:hover, :focus-visible) *,
+html[data-theme="light"] body .file-picker-clear:is(:hover, :focus-visible) *,
+html[data-theme="light"] body .category-suggestion:is(:hover, :focus) *,
+html[data-theme="light"] body .export-language-option:not(.primary):is(:hover, :focus-visible) *,
+html[data-theme="light"] body .product-pagination .page-btn:not(.active):not(.disabled):is(:hover, :focus-visible) *,
+html[data-theme="light"] body .user-pagination .page-btn:not(.active):not(.disabled):is(:hover, :focus-visible) *,
+html[data-theme="light"] body .asset-item-pill:is(:hover, :focus-visible) *,
+html[data-theme="light"] body .stock-product-card:is(:hover, .selected) *,
+html[data-theme="light"] body .stock-priority-item:is(:hover, :focus-within) *,
+html[data-theme="light"] body .import-mode-option:not(:has(input:checked)):is(:hover, :focus-within) *,
+html[data-theme="light"] body .permission-option:not(:has(input:checked)):is(:hover, :focus-within) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões de ícone: mantém o fundo, mas o desenho do ícone fica vermelho mesmo em hover. */
+html[data-theme="light"] .icon-action-btn.btn,
+html[data-theme="light"] .category-icon-button.btn,
+html[data-theme="light"] .icon-action-btn.btn:is(:hover, :focus-visible, :active),
+html[data-theme="light"] .category-icon-button.btn:is(:hover, :focus-visible, :active) {
+  background: rgba(230, 0, 18, .055) !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .20) !important;
+  box-shadow: 0 10px 22px rgba(230, 0, 18, .08) !important;
+}
+
+html[data-theme="light"] .icon-action-btn.btn img,
+html[data-theme="light"] .category-icon-button.btn img,
+html[data-theme="light"] .icon-action-btn.btn:is(:hover, :focus-visible, :active) img,
+html[data-theme="light"] .category-icon-button.btn:is(:hover, :focus-visible, :active) img {
+  filter: brightness(0) saturate(100%) invert(16%) sepia(100%) saturate(5549%) hue-rotate(347deg) brightness(91%) contrast(111%) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="light"] .icon-action-btn.btn *,
+html[data-theme="light"] .category-icon-button.btn * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+}
+
+/* Garante animação nos cards/linhas/controles que estavam estáticos após os ajustes visuais. */
+html[data-theme="light"] .card,
+html[data-theme="light"] .table-card,
+html[data-theme="light"] .auth-card,
+html[data-theme="light"] .wide-card,
+html[data-theme="light"] .stat-card,
+html[data-theme="light"] .hero-card,
+html[data-theme="light"] .cart-panel,
+html[data-theme="light"] .search-card,
+html[data-theme="light"] .request-side,
+html[data-theme="light"] .stock-panel,
+html[data-theme="light"] .stock-board,
+html[data-theme="light"] .monthly-report-card,
+html[data-theme="light"] .permission-card,
+html[data-theme="light"] .export-language-card,
+html[data-theme="light"] .dev-access-card,
+html[data-theme="light"] tr,
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .stock-product-card,
+html[data-theme="light"] .stock-priority-item {
+  transition:
+    transform .18s ease,
+    box-shadow .18s ease,
+    border-color .18s ease,
+    background-color .18s ease,
+    background-image .18s ease !important;
+}
