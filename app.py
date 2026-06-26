@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from io import BytesIO
-from functools import wraps
+from functools import wraps, lru_cache
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any
@@ -4074,15 +4074,15 @@ def detect_user_header_row(worksheet: Any, max_scan_rows: int = 30) -> tuple[int
     return best_row_number, best_map
 
 
+@lru_cache(maxsize=4096)
 def generate_user_import_password_hash(password: str) -> str:
-    """Gera hash em modo mais leve para importação em massa.
+    """Gera hash compatível com check_password_hash sem travar importação em massa.
 
-    O padrão atual do Werkzeug usa scrypt, que é ótimo para poucos cadastros,
-    mas pode consumir muita memória/tempo ao importar centenas de usuários e fazer
-    o servidor responder Internal Server Error por timeout. O PBKDF2 continua
-    compatível com check_password_hash e evita derrubar a rota de importação.
+    Em importações grandes, o método padrão do Werkzeug pode estourar tempo/memória
+    do Render/Cloudflare. O cache acelera planilhas com senha padrão repetida e o
+    PBKDF2 reduz o risco de Internal Server Error por timeout.
     """
-    return generate_password_hash(str(password or ""), method="pbkdf2:sha256:260000", salt_length=16)
+    return generate_password_hash(str(password or ""), method="pbkdf2:sha256:20000", salt_length=12)
 
 
 def parse_user_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> UserImportRecord:
@@ -4126,9 +4126,8 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
 
 def user_upsert_sql_rows(rows: list[tuple[int | None, UserImportRecord]], created_at: str, updated_at: str) -> str:
     values_sql: list[str] = []
-    for target_id, record in rows:
+    for _target_id, record in rows:
         values = [
-            target_id,
             record.responsible_name,
             record.organization_name,
             record.franchise_name,
@@ -4148,10 +4147,11 @@ def user_upsert_sql_rows(rows: list[tuple[int | None, UserImportRecord]], create
 
 
 def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImportRecord]], row_errors: list[str]) -> tuple[int, int, int]:
-    """Cria/atualiza usuários em blocos para evitar timeout/Internal Server Error.
+    """Cria/atualiza usuários em blocos pequenos e seguros.
 
-    Antes, a atualização era feita linha a linha e cada senha usava hash pesado.
-    No D1/Render isso multiplicava chamadas HTTP e deixava a importação lenta.
+    Usa o login (username) como chave de atualização. Isso evita INSERT com id NULL
+    e reduz falhas no Cloudflare D1. Quando um bloco falha, diminui automaticamente
+    até linha a linha sem derrubar a rota.
     """
     if not rows:
         return 0, 0, 0
@@ -4159,7 +4159,7 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
     updated = len(rows) - created
     skipped = 0
     fields = (
-        "id, responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
+        "responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
         "username, email, password_hash, role, status, created_at, updated_at, page_permissions_configured"
     )
     update_set = """
@@ -4168,7 +4168,6 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
         franchise_name = excluded.franchise_name,
         franchise_number = excluded.franchise_number,
         cnpj = excluded.cnpj,
-        username = excluded.username,
         email = excluded.email,
         password_hash = excluded.password_hash,
         role = excluded.role,
@@ -4177,44 +4176,42 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
         page_permissions_configured = 0
     """
 
-    for chunk in chunk_list(rows, 50):
+    def execute_chunk(chunk: list[tuple[int | None, UserImportRecord]]) -> bool:
         if not chunk:
-            continue
+            return True
         sql = f"""
         INSERT INTO users ({fields})
         VALUES {user_upsert_sql_rows(chunk, now_iso(), now_iso())}
-        ON CONFLICT(id) DO UPDATE SET {update_set}
+        ON CONFLICT(username) DO UPDATE SET {update_set}
         """
+        conn.execute(sql)
+        return True
+
+    for chunk in chunk_list(rows, 20):
         try:
-            conn.execute(sql)
+            execute_chunk(chunk)
+            continue
         except Exception as chunk_exc:
-            print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em bloco falhou; tentando blocos menores: {chunk_exc}")
-            for small in chunk_list(chunk, 10):
+            print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em bloco de {len(chunk)} falhou: {chunk_exc}")
+
+        for small in chunk_list(chunk, 5):
+            try:
+                execute_chunk(small)
+                continue
+            except Exception as small_exc:
+                print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em sub-bloco de {len(small)} falhou: {small_exc}")
+
+            for target_id, record in small:
                 try:
-                    small_sql = f"""
-                    INSERT INTO users ({fields})
-                    VALUES {user_upsert_sql_rows(small, now_iso(), now_iso())}
-                    ON CONFLICT(id) DO UPDATE SET {update_set}
-                    """
-                    conn.execute(small_sql)
-                except Exception as small_exc:
-                    print(f"[IMPORTAÇÃO USUÁRIOS] Upsert em sub-bloco falhou; tentando linha a linha: {small_exc}")
-                    for target_id, record in small:
-                        try:
-                            one_sql = f"""
-                            INSERT INTO users ({fields})
-                            VALUES {user_upsert_sql_rows([(target_id, record)], now_iso(), now_iso())}
-                            ON CONFLICT(id) DO UPDATE SET {update_set}
-                            """
-                            conn.execute(one_sql)
-                        except Exception as exc:
-                            skipped += 1
-                            if target_id is None:
-                                created -= 1
-                            else:
-                                updated -= 1
-                            row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:180]}")
-                            print(f"[IMPORTAÇÃO USUÁRIOS] Erro na linha {record.source_row}: {exc}")
+                    execute_chunk([(target_id, record)])
+                except Exception as exc:
+                    skipped += 1
+                    if target_id is None:
+                        created -= 1
+                    else:
+                        updated -= 1
+                    row_errors.append(f"linha {record.source_row}: {type(exc).__name__} - {str(exc)[:180]}")
+                    print(f"[IMPORTAÇÃO USUÁRIOS] Erro na linha {record.source_row}: {exc}")
     return max(0, created), max(0, updated), skipped
 
 
@@ -4280,7 +4277,7 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
         skipped = 0
         errors: list[str] = []
         seen_usernames: set[str] = set()
-        max_import_rows = int(os.getenv("USER_IMPORT_MAX_ROWS", "12000"))
+        max_import_rows = int(os.getenv("USER_IMPORT_MAX_ROWS", "1000"))
         processed_rows = 0
 
         for row_number, row_values_tuple in enumerate(
@@ -5110,6 +5107,139 @@ def admin_users():
         selected_status=selected_status,
         user_filters=user_filters,
         user_counts=user_counts,
+    )
+
+
+def filter_and_sort_users_for_export(users: list[User], q: str, status: str, role: str, sort_mode: str) -> list[User]:
+    normalized_query = normalize_header(q).replace("_", " ").strip()
+    terms = [term for term in normalized_query.split() if term]
+
+    def searchable(user: User) -> str:
+        return normalize_header(" ".join([
+            user.responsible_name,
+            user.username,
+            user.organization_name,
+            user.franchise_name,
+            user.franchise_number,
+            user.formatted_phone,
+            user.cnpj,
+            user.formatted_cnpj,
+            user_role_label(user.role),
+            status_label(user.status),
+        ])).replace("_", " ")
+
+    filtered: list[User] = []
+    for user in users:
+        if status and user.status != status:
+            continue
+        if role and user.role != role:
+            continue
+        text = searchable(user)
+        if terms and not all(term in text for term in terms):
+            continue
+        filtered.append(user)
+
+    def unit_name(user: User) -> str:
+        return (user.franchise_name or user.organization_name or "").casefold()
+
+    sort_mode = sort_mode if sort_mode in {
+        "newest", "oldest", "responsible_asc", "responsible_desc", "username_asc", "username_desc", "role_asc", "unit_asc", "status_asc"
+    } else "newest"
+    if sort_mode == "oldest":
+        filtered.sort(key=lambda user: (user.created_at or datetime.min, user.id))
+    elif sort_mode == "responsible_asc":
+        filtered.sort(key=lambda user: (user.responsible_name.casefold(), -user.id))
+    elif sort_mode == "responsible_desc":
+        filtered.sort(key=lambda user: (user.responsible_name.casefold(), user.id), reverse=True)
+    elif sort_mode == "username_asc":
+        filtered.sort(key=lambda user: (user.username.casefold(), -user.id))
+    elif sort_mode == "username_desc":
+        filtered.sort(key=lambda user: (user.username.casefold(), user.id), reverse=True)
+    elif sort_mode == "role_asc":
+        filtered.sort(key=lambda user: (user.role.casefold(), user.responsible_name.casefold(), user.id))
+    elif sort_mode == "unit_asc":
+        filtered.sort(key=lambda user: (unit_name(user), user.responsible_name.casefold(), user.id))
+    elif sort_mode == "status_asc":
+        filtered.sort(key=lambda user: (user.status.casefold(), user.responsible_name.casefold(), user.id))
+    else:
+        filtered.sort(key=lambda user: (user.created_at or datetime.min, user.id), reverse=True)
+    return filtered
+
+
+@app.get("/admin/users/export")
+@admin_required
+@page_access_required("admin_users")
+def admin_users_export():
+    selected_status = (request.args.get("status", "") or "").strip().lower()
+    if selected_status not in {"", "pending", "approved", "rejected"}:
+        selected_status = ""
+    selected_role = (request.args.get("role", "") or "").strip().lower()
+    if selected_role not in {"", "admin", "base", "franchise"}:
+        selected_role = ""
+    search_query = (request.args.get("q", "") or "").strip()
+    selected_sort = (request.args.get("sort", "newest") or "newest").strip().lower()
+
+    with db_connect() as conn:
+        rows = conn.execute("SELECT * FROM users ORDER BY created_at DESC, id DESC").fetchall()
+    users = [user for row in rows if (user := row_to_user(row)) is not None]
+    users = filter_and_sort_users_for_export(users, search_query, selected_status, selected_role, selected_sort)
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Usuários"
+    headers = [
+        "Responsável",
+        "Usuário",
+        "Tipo de acesso",
+        "Base/Franquia",
+        "Telefone",
+        "CNPJ",
+        "Status",
+        "Criado em",
+        "Atualizado em",
+    ]
+    worksheet.append(headers)
+    for user in users:
+        worksheet.append([
+            user.responsible_name,
+            user.username,
+            user_role_label(user.role),
+            user.franchise_name or user.organization_name,
+            user.formatted_phone if user.role == "franchise" else "",
+            user.formatted_cnpj or "",
+            status_label(user.status),
+            (user.created_at - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") if user.created_at else "",
+            (user.updated_at - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") if user.updated_at else "",
+        ])
+
+    header_fill = PatternFill("solid", fgColor="E60012")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="DDDDDD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+    for row in worksheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.border = border
+            cell.alignment = Alignment(vertical="center")
+    widths = [34, 24, 18, 34, 22, 22, 16, 20, 20]
+    for index, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = width
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = f"A1:I{max(1, worksheet.max_row)}"
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    filename = f"usuarios_tabela_atual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename,
     )
 
 

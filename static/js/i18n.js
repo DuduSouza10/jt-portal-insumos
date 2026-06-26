@@ -466,6 +466,7 @@
   "Aprovados": "已批准",
   "Recusados": "已拒绝",
   "Adicionar usuário": "新增用户",
+  "Exportar tabela atual": "导出当前表格",
   "Usuário": "用户",
   "Editar acesso": "编辑存取",
   "Aprovar": "批准",

@@ -13,6 +13,7 @@
     </div>
     <div class="user-tools">
       <a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>
+      <a class="btn ghost" id="userExportCurrentButton" href="{{ url_for('admin_users_export') }}">Exportar tabela atual</a>
       <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
     </div>
   </div>
@@ -200,6 +201,7 @@
   const tabs = Array.from(document.querySelectorAll('[data-user-status-tab]'));
   const emptyRow = document.getElementById('userLiveEmpty');
   const userImportForm = document.querySelector('[data-user-import-form]');
+  const exportCurrentButton = document.getElementById('userExportCurrentButton');
 
   if (userImportForm) {
     userImportForm.addEventListener('submit', function (event) {
@@ -314,6 +316,17 @@
     if (counters[name]) counters[name].textContent = String(value);
   }
 
+  function updateExportLink() {
+    if (!exportCurrentButton) return;
+    const params = new URLSearchParams();
+    if (search && search.value.trim()) params.set('q', search.value.trim());
+    if (statusFilter && statusFilter.value) params.set('status', statusFilter.value);
+    if (roleFilter && roleFilter.value) params.set('role', roleFilter.value);
+    if (sortFilter && sortFilter.value) params.set('sort', sortFilter.value);
+    const baseUrl = {{ url_for('admin_users_export')|tojson }};
+    exportCurrentButton.href = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+  }
+
   function syncTabs(status) {
     tabs.forEach(function (tab) {
       const active = (tab.dataset.userStatusTab || '') === (status || '');
@@ -371,6 +384,7 @@
       base: counts.base,
       franchise: counts.franchise
     });
+    updateExportLink();
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.setTimeout(function () { window.JT_I18N.refresh(tbody); }, 20);
     }
