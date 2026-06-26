@@ -11328,3 +11328,81 @@ html[data-theme="dark"] .material-import-form > small {
     min-height: 82px !important;
   }
 }
+
+/* v148 - cards de importação sempre vermelhos e seletor de arquivo padronizado */
+.import-form .import-mode-option,
+.import-form .import-mode-option:not(:has(input:checked)):is(:hover, :focus-within),
+.import-form .import-mode-option:has(input:checked),
+.import-form .import-mode-option:has(input:checked):is(:hover, :focus-within),
+html[data-theme="light"] body .import-form .import-mode-option,
+html[data-theme="light"] body .import-form .import-mode-option:not(:has(input:checked)):is(:hover, :focus-within),
+html[data-theme="light"] body .import-form .import-mode-option:has(input:checked),
+html[data-theme="light"] body .import-form .import-mode-option:has(input:checked):is(:hover, :focus-within),
+html[data-theme="dark"] body .import-form .import-mode-option,
+html[data-theme="dark"] body .import-form .import-mode-option:not(:has(input:checked)):is(:hover, :focus-within),
+html[data-theme="dark"] body .import-form .import-mode-option:has(input:checked),
+html[data-theme="dark"] body .import-form .import-mode-option:has(input:checked):is(:hover, :focus-within) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  box-shadow: 0 16px 30px rgba(230, 0, 18, .20) !important;
+  transform: none !important;
+}
+
+.import-form .import-mode-option *,
+.import-form .import-mode-option small,
+.import-form .import-mode-option:is(:hover, :focus-within) *,
+.import-form .import-mode-option:is(:hover, :focus-within) small,
+.import-form .import-mode-option:has(input:checked) *,
+.import-form .import-mode-option:has(input:checked) small,
+html[data-theme="light"] body .import-form .import-mode-option *,
+html[data-theme="dark"] body .import-form .import-mode-option * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.import-form .import-mode-option input[type="radio"] {
+  accent-color: #ffffff !important;
+}
+
+.import-form .import-mode-option:has(input:checked) input[type="radio"] {
+  outline: 2px solid rgba(255, 255, 255, .82) !important;
+  outline-offset: 2px !important;
+}
+
+.import-form .file-picker-button,
+html[data-theme="light"] body .import-form .file-picker-button,
+html[data-theme="dark"] body .import-form .file-picker-button {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  border: 1px solid rgba(230, 0, 18, .22) !important;
+  box-shadow: 0 10px 22px rgba(17, 24, 39, .08) !important;
+}
+
+.import-form .file-picker-button:hover,
+.import-form .file-picker-button:focus-visible,
+.import-form .file-picker-button:active,
+html[data-theme="light"] body .import-form .file-picker-button:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .import-form .file-picker-button:is(:hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .50) !important;
+  box-shadow: 0 14px 28px rgba(230, 0, 18, .18) !important;
+}
+
+.import-form .file-picker-clear,
+html[data-theme="light"] body .import-form .file-picker-clear,
+html[data-theme="dark"] body .import-form .file-picker-clear {
+  background: rgba(230, 0, 18, .10) !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .18) !important;
+}

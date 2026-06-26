@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Editar tipo de acesso • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Editar tipo de acesso{% endblock %}
+{% block page_subtitle %}Altere o nome e as páginas liberadas para este cargo personalizado.{% endblock %}
+{% block content %}
+<div class="card wide-card access-type-panel">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Controle Dev</span>
+      <h2>{{ access_role.name }}</h2>
+      <p>{{ access_role.role_key }}</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('admin_access_types') }}">Voltar</a>
+  </div>
+
+  <form method="post" class="form-grid two-cols access-type-form">
+    <label>
+      Nome do tipo de acesso
+      <input name="name" value="{{ access_role.name }}" required maxlength="80">
+    </label>
+    <label>
+      Descrição
+      <input name="description" value="{{ access_role.description }}" maxlength="240">
+    </label>
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Páginas e permissões desse tipo</strong>
+        <span>Usuários desse tipo herdarão essas páginas automaticamente.</span>
+      </div>
+    </div>
+    <div class="full permission-grid access-type-permission-grid">
+      {% for option in permission_options %}
+        <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}">
+          <input type="checkbox" name="page_permissions" value="{{ option.key }}" {% if option.key in selected_permissions %}checked{% endif %}>
+          <span>
+            <strong>{{ option.label }}</strong>
+            <small>{{ option.description }}</small>
+          </span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="full form-actions">
+      <button class="btn primary" type="submit">Salvar tipo de acesso</button>
+      <a class="btn ghost" href="{{ url_for('admin_access_types') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

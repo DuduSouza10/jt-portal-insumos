@@ -136,6 +136,17 @@ CREATE TABLE IF NOT EXISTS user_page_permissions (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS access_role_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    permissions_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_access_role_types_name ON access_role_types(name COLLATE NOCASE);
+
 -- v65 - Entrada de Materiais
 CREATE TABLE IF NOT EXISTS material_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

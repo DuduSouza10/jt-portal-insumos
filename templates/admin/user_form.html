@@ -4,20 +4,20 @@
 {% block page_subtitle %}Cadastre usuários manualmente, defina o tipo de acesso e confira as páginas liberadas.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}">
+  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}" data-role-admin-keys='{{ (role_admin_keys if role_admin_keys is defined else ["admin", "dev"])|tojson }}' data-role-permissions='{{ (role_permissions_map if role_permissions_map is defined else {})|tojson }}'>
     <label>
       Nome do responsável (quem usará o acesso)
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     {% set role_options = allowed_role_options if allowed_role_options is defined else ['base', 'franchise', 'admin'] %}
+    {% set role_labels_map = role_labels if role_labels is defined else {'base': 'Base', 'franchise': 'Franquia', 'admin': 'Administrador', 'dev': 'Dev'} %}
     {% set role_locked = (user and user.is_admin and not current_can_manage_dev_roles() and not (current_user and user.id == current_user.id and current_can_bootstrap_dev_role())) %}
     <label>
       Tipo de acesso (permissão do usuário)
       <select name="role" id="roleSelect" required {% if role_locked %}disabled{% endif %}>
-        {% if 'base' in role_options or (user and user.role == 'base') %}<option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>{% endif %}
-        {% if 'franchise' in role_options or (user and user.role == 'franchise') %}<option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>{% endif %}
-        {% if 'admin' in role_options or (user and user.role == 'admin') %}<option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>{% endif %}
-        {% if 'dev' in role_options or (user and user.role == 'dev') %}<option value="dev" {% if user and user.role == 'dev' %}selected{% endif %}>Dev</option>{% endif %}
+        {% for option in role_options %}
+          <option value="{{ option }}" {% if user and user.role == option %}selected{% elif not user and option == 'base' %}selected{% endif %}>{{ role_labels_map.get(option, option) }}</option>
+        {% endfor %}
       </select>
       {% if role_locked %}<input type="hidden" name="role" value="{{ user.role }}">{% endif %}
       <input name="dev_password" id="devPasswordInput" type="hidden" value="">
@@ -118,6 +118,7 @@
                 form="userAccessForm"
                 name="page_permissions"
                 value="{{ option.key }}"
+                data-page-key="{{ option.key }}"
                 {% if option.key in selected_permissions %}checked{% endif %}
               >
               <span>
@@ -148,6 +149,10 @@
   const modal = document.getElementById('permissionModal');
   const roleSelect = document.getElementById('roleSelect');
   const editorIsDev = form && form.dataset.currentDev === '1';
+  let roleAdminKeys = ['admin', 'dev'];
+  let rolePermissionsMap = {};
+  try { roleAdminKeys = JSON.parse(form ? (form.dataset.roleAdminKeys || '[]') : '[]') || roleAdminKeys; } catch (err) {}
+  try { rolePermissionsMap = JSON.parse(form ? (form.dataset.rolePermissions || '{}') : '{}') || {}; } catch (err) {}
   const openButton = document.querySelector('[data-open-permission-modal]');
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
   const baseWrap = document.getElementById('baseNameWrap');
@@ -171,8 +176,10 @@
     const role = roleSelect ? roleSelect.value : 'base';
     const isBase = role === 'base';
     const isFranchise = role === 'franchise';
-    const isAdmin = role === 'admin' || role === 'dev';
+    const isAdmin = roleAdminKeys.includes(role);
     const isDev = role === 'dev';
+    const rolePermissionSet = new Set(rolePermissionsMap[role] || (isAdmin ? Array.from(document.querySelectorAll('.permission-option input[type="checkbox"]')).map(function (checkbox) { return checkbox.value; }) : ['home', 'my_requests']));
+    const isCustomRole = role && !['base', 'franchise', 'admin', 'dev'].includes(role);
 
     const showSetorField = editorIsDev && !isFranchise;
     const showBaseField = isBase || showSetorField;
@@ -193,7 +200,12 @@
     document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
       const option = checkbox.closest('.permission-option');
       const adminOnly = option && option.dataset.adminOnly === 'true';
-      if (isAdmin) {
+      const allowedByRole = rolePermissionSet.has(checkbox.value);
+      if (isCustomRole) {
+        checkbox.checked = allowedByRole;
+        checkbox.disabled = true;
+        option.classList.toggle('disabled', !allowedByRole);
+      } else if (isAdmin) {
         checkbox.checked = true;
         checkbox.disabled = false;
         option.classList.remove('disabled');

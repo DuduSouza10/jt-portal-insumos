@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}Tipos de acesso • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Tipos de acesso{% endblock %}
+{% block page_subtitle %}Crie cargos personalizados e defina quais páginas cada tipo poderá acessar.{% endblock %}
+{% block content %}
+<div class="card wide-card access-type-panel">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Controle Dev</span>
+      <h2>Criar novo tipo de acesso</h2>
+      <p>Depois de criado, o tipo aparecerá junto com Base, Franquia, Administrador e Dev.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('admin_users') }}">Voltar para usuários</a>
+  </div>
+
+  <form method="post" class="form-grid two-cols access-type-form">
+    <label>
+      Nome do tipo de acesso
+      <input name="name" placeholder="Ex.: Diretor Geral, Qualidade, Financeiro" required maxlength="80">
+    </label>
+    <label>
+      Descrição
+      <input name="description" placeholder="Opcional. Ex.: Acesso para diretoria e auditoria" maxlength="240">
+    </label>
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Páginas e permissões desse tipo</strong>
+        <span>Marque exatamente as páginas que esse cargo poderá usar.</span>
+      </div>
+    </div>
+    <div class="full permission-grid access-type-permission-grid">
+      {% for option in permission_options %}
+        <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}">
+          <input type="checkbox" name="page_permissions" value="{{ option.key }}" {% if option.key in selected_permissions %}checked{% endif %}>
+          <span>
+            <strong>{{ option.label }}</strong>
+            <small>{{ option.description }}</small>
+          </span>
+        </label>
+      {% endfor %}
+    </div>
+    <div class="full form-actions">
+      <button class="btn primary" type="submit">Criar tipo de acesso</button>
+      <a class="btn ghost" href="{{ url_for('admin_users') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<div class="card table-card access-type-list-card">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow">Tipos personalizados</span>
+      <h2>Tipos cadastrados</h2>
+    </div>
+  </div>
+  {% if custom_roles %}
+    <table>
+      <thead>
+        <tr><th>Tipo</th><th>Descrição</th><th>Páginas</th><th>Ações</th></tr>
+      </thead>
+      <tbody>
+        {% for role in custom_roles %}
+        <tr>
+          <td><strong>{{ role.name }}</strong><br><small>{{ role.role_key }}</small></td>
+          <td>{{ role.description or '-' }}</td>
+          <td>
+            <div class="access-role-pages">
+              {% for key in role.permissions %}
+                {% for option in permission_options if option.key == key %}
+                  <span>{{ option.label }}</span>
+                {% endfor %}
+              {% endfor %}
+            </div>
+          </td>
+          <td>
+            <div class="table-actions">
+              <a class="btn ghost icon-action-btn" href="{{ url_for('admin_access_type_edit', role_key=role.role_key) }}" title="Editar tipo de acesso">
+                <img src="{{ url_for('static', filename='img/pencil.svg') }}" alt="Editar">
+              </a>
+              <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('Excluir este tipo de acesso? Apenas tipos sem usuários podem ser excluídos.');">
+                <button class="btn danger icon-action-btn" type="submit" title="Excluir tipo de acesso">
+                  <img src="{{ url_for('static', filename='img/trash.svg') }}" alt="Excluir">
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty-state">Nenhum tipo personalizado criado ainda.</div>
+  {% endif %}
+</div>
+{% endblock %}

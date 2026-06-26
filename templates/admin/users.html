@@ -12,6 +12,7 @@
       <button class="tab {{ 'active' if selected_status == 'rejected' else '' }}" type="button" data-user-status-tab="rejected">Recusados</button>
     </div>
     <div class="user-tools">
+      {% if current_is_dev() %}<a class="btn ghost" href="{{ url_for('admin_access_types') }}">Criar tipo de acesso</a>{% endif %}
       <a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>
       <a class="btn ghost" id="userExportCurrentButton" href="{{ url_for('admin_users_export') }}">Exportar tabela atual</a>
       <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
@@ -38,10 +39,11 @@
         Filtrar tipo
         <select id="userRoleFilter" name="role">
           <option value="" {{ 'selected' if not user_filters.role else '' }}>Todos</option>
-          <option value="dev" {{ 'selected' if user_filters.role == 'dev' else '' }}>Dev</option>
-          <option value="admin" {{ 'selected' if user_filters.role == 'admin' else '' }}>Administrador</option>
-          <option value="base" {{ 'selected' if user_filters.role == 'base' else '' }}>Base</option>
-          <option value="franchise" {{ 'selected' if user_filters.role == 'franchise' else '' }}>Franquia</option>
+          {% set labels = role_labels if role_labels is defined else {'dev': 'Dev', 'admin': 'Administrador', 'base': 'Base', 'franchise': 'Franquia'} %}
+          {% set filter_options = role_filter_options if role_filter_options is defined else ['dev', 'admin', 'base', 'franchise'] %}
+          {% for option in filter_options %}
+            <option value="{{ option }}" {{ 'selected' if user_filters.role == option else '' }}>{{ labels.get(option, option) }}</option>
+          {% endfor %}
         </select>
       </label>
       <label>
