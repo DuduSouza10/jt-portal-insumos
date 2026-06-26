@@ -11552,3 +11552,216 @@ html[data-theme="light"] body a.btn.danger:not(:hover):not(:focus-visible):not(:
   border-radius: 999px !important;
   box-shadow: 0 0 0 3px rgba(255,255,255,.30) !important;
 }
+
+/* v150 - correção definitiva de contraste, importação e cards do Dev */
+/* Remove a grade/efeito que aparecia como quadradinhos atrás dos cards. */
+html[data-theme="light"] body::before,
+html[data-theme="dark"] body::before {
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+  background: none !important;
+}
+
+.access-type-list-card,
+.access-type-panel,
+.access-type-list-card table,
+.access-type-list-card thead,
+.access-type-list-card tbody,
+.access-action-group,
+.access-permission-summary,
+.access-role-pages span,
+.access-role-fixed-badge {
+  background-image: none !important;
+  animation: none !important;
+}
+
+html[data-theme="light"] .access-type-list-card,
+html[data-theme="light"] .access-type-panel,
+html[data-theme="light"] .access-action-group,
+html[data-theme="light"] .access-permission-summary {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+html[data-theme="light"] .system-access-role-row {
+  background: rgba(230, 0, 18, .018) !important;
+}
+
+.access-role-fixed-badge {
+  display: inline-flex !important;
+  width: fit-content !important;
+  margin-top: 7px !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(230, 0, 18, .18) !important;
+  background: rgba(230, 0, 18, .07) !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  font-size: 10.5px !important;
+  font-weight: 950 !important;
+}
+
+/* Todo botão vermelho no tema claro fica com texto branco. */
+html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .52) !important;
+}
+
+html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Hover dos botões principais vermelhos: branco com texto vermelho, exceto cards/opções de importação. */
+html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button):not(.import-mode-option):is(:hover, :focus-visible, :active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .56) !important;
+}
+
+html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button):not(.import-mode-option):is(:hover, :focus-visible, :active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões brancos/ghost no tema claro nunca podem ficar com texto branco em fundo branco. */
+html[data-theme="light"] body :is(.btn.ghost, .file-picker-button, .page-btn, .catalog-view-button, .tab):not(.active):not(.icon-action-btn):not(.category-icon-button) {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+}
+
+html[data-theme="light"] body :is(.btn.ghost, .file-picker-button, .page-btn, .catalog-view-button, .tab):not(.active):not(.icon-action-btn):not(.category-icon-button) * {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+/* Cards de importação: sempre vermelho com texto branco, sem mudança no hover/focus/seleção. */
+.import-form .import-mode-option,
+.import-form .import-mode-option:hover,
+.import-form .import-mode-option:focus,
+.import-form .import-mode-option:focus-within,
+.import-form .import-mode-option:active,
+.import-form .import-mode-option:has(input:checked),
+.import-form .import-mode-option:has(input:checked):hover,
+.import-form .import-mode-option:has(input:checked):focus,
+.import-form .import-mode-option:has(input:checked):focus-within,
+html[data-theme="light"] body .import-form .import-mode-option,
+html[data-theme="light"] body .import-form .import-mode-option:hover,
+html[data-theme="light"] body .import-form .import-mode-option:focus-within,
+html[data-theme="light"] body .import-form .import-mode-option:has(input:checked),
+html[data-theme="dark"] body .import-form .import-mode-option,
+html[data-theme="dark"] body .import-form .import-mode-option:hover,
+html[data-theme="dark"] body .import-form .import-mode-option:focus-within,
+html[data-theme="dark"] body .import-form .import-mode-option:has(input:checked) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  box-shadow: 0 16px 30px rgba(230,0,18,.18) !important;
+  transform: none !important;
+}
+
+.import-form .import-mode-option *,
+.import-form .import-mode-option small,
+.import-form .import-mode-option:hover *,
+.import-form .import-mode-option:hover small,
+.import-form .import-mode-option:focus-within *,
+.import-form .import-mode-option:focus-within small,
+.import-form .import-mode-option:has(input:checked) *,
+.import-form .import-mode-option:has(input:checked) small,
+html[data-theme="light"] body .import-form .import-mode-option *,
+html[data-theme="dark"] body .import-form .import-mode-option * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Bolinha de seleção limpa: sem quadrado, sem outline gigante, apenas ponto branco quando selecionada. */
+.import-form .import-mode-option input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  flex: 0 0 16px !important;
+  margin: 3px 0 0 !important;
+  padding: 0 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  border: 2px solid rgba(255,255,255,.94) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.import-form .import-mode-option input[type="radio"]::before {
+  content: "" !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  transform: scale(0) !important;
+  transition: transform .12s ease !important;
+}
+
+.import-form .import-mode-option input[type="radio"]:checked::before {
+  transform: scale(1) !important;
+}
+
+.import-form .import-mode-option input[type="radio"]:focus,
+.import-form .import-mode-option input[type="radio"]:focus-visible,
+.import-form .import-mode-option input[type="radio"]:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Selecionar arquivo padronizado: não fica mais escuro que o restante. */
+.import-form .file-picker-button,
+.import-form .file-picker-button:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body .import-form .file-picker-button,
+html[data-theme="dark"] body .import-form .file-picker-button {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  border-color: rgba(230, 0, 18, .22) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.06) !important;
+}
+
+.import-form .file-picker-button:hover,
+.import-form .file-picker-button:focus-visible,
+.import-form .file-picker-button:active,
+html[data-theme="light"] body .import-form .file-picker-button:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .import-form .file-picker-button:is(:hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .56) !important;
+}
+
+.import-form .file-picker-button:hover *,
+.import-form .file-picker-button:focus-visible *,
+.import-form .file-picker-button:active * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}

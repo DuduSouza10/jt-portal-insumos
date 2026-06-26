@@ -78,15 +78,19 @@
       <h2>Tipos cadastrados</h2>
     </div>
   </div>
-  {% if custom_roles %}
+  {% if access_roles %}
     <table>
       <thead>
         <tr><th>Tipo</th><th>Descrição</th><th>Páginas</th><th>Funcionalidades</th><th>Ações</th></tr>
       </thead>
       <tbody>
-        {% for role in custom_roles %}
-        <tr>
-          <td><strong>{{ role.name }}</strong><br><small>{{ role.role_key }}</small></td>
+        {% for role in access_roles %}
+        <tr class="{{ 'system-access-role-row' if not role.is_custom else '' }}">
+          <td>
+            <strong>{{ role.name }}</strong><br>
+            <small>{{ role.role_key }}</small>
+            {% if not role.is_custom %}<span class="access-role-fixed-badge">Sistema</span>{% endif %}
+          </td>
           <td>{{ role.description or '-' }}</td>
           <td>
             <div class="access-role-pages">
@@ -108,14 +112,21 @@
           </td>
           <td>
             <div class="table-actions">
+              {% if role.can_edit %}
               <a class="btn ghost icon-action-btn" href="{{ url_for('admin_access_type_edit', role_key=role.role_key) }}" title="Editar tipo de acesso">
                 <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="Editar">
               </a>
-              <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('Excluir este tipo de acesso? Apenas tipos sem usuários podem ser excluídos.');">
+              {% endif %}
+              {% if role.can_delete %}
+              <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('Excluir este tipo de acesso do banco de dados? Usuários que estiverem usando esse tipo serão movidos para Base.');">
                 <button class="btn danger icon-action-btn" type="submit" title="Excluir tipo de acesso">
                   <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="Excluir">
                 </button>
               </form>
+              {% endif %}
+              {% if not role.can_edit and not role.can_delete %}
+                <small class="muted">Tipo padrão</small>
+              {% endif %}
             </div>
           </td>
         </tr>
@@ -123,7 +134,31 @@
       </tbody>
     </table>
   {% else %}
-    <div class="empty-state">Nenhum tipo personalizado criado ainda.</div>
+    <div class="empty-state">Nenhum tipo de acesso encontrado.</div>
   {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  function syncActionGroups() {
+    const pageInputs = Array.from(document.querySelectorAll('[data-access-page-permissions] input[name="page_permissions"]'));
+    const enabledPages = new Set(pageInputs.filter((input) => input.checked).map((input) => input.value));
+    document.querySelectorAll('[data-access-action-permissions] [data-action-group]').forEach((group) => {
+      const pageKey = group.getAttribute('data-action-group');
+      const isEnabled = enabledPages.has(pageKey);
+      group.hidden = !isEnabled;
+      group.querySelectorAll('input[name="action_permissions"]').forEach((input) => {
+        input.disabled = !isEnabled;
+        if (!isEnabled) input.checked = false;
+      });
+    });
+  }
+  document.addEventListener('change', function (event) {
+    if (event.target && event.target.matches('[data-access-page-permissions] input[name="page_permissions"]')) syncActionGroups();
+  });
+  document.addEventListener('DOMContentLoaded', syncActionGroups);
+  syncActionGroups();
+})();
+</script>
 {% endblock %}

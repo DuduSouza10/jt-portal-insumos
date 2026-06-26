@@ -6514,6 +6514,43 @@ def action_permission_label_map() -> dict[str, str]:
     return {item["key"]: item["label"] for item in ACTION_PERMISSION_OPTIONS}
 
 
+def access_role_listing() -> list[dict[str, Any]]:
+    page_labels = {item["key"]: item["label"] for item in PAGE_PERMISSION_OPTIONS}
+    action_labels = action_permission_label_map()
+    default_descriptions = {
+        "base": "Tipo padrão para bases. Permissões administrativas não liberadas.",
+        "franchise": "Tipo padrão para franquias. Permissões administrativas não liberadas.",
+        "admin": "Tipo padrão administrativo com acesso completo às áreas administrativas.",
+        "dev": "Tipo Dev com controle total do portal, tipos de acesso e permissões.",
+    }
+    roles: list[dict[str, Any]] = []
+    for key in ["dev", "admin", "base", "franchise"]:
+        permissions = sorted(default_page_keys_for_role(key), key=lambda item: list(page_labels).index(item) if item in page_labels else 999)
+        actions = sorted(action_permission_key_set(), key=lambda item: list(action_labels).index(item) if item in action_labels else 999) if key in {"admin", "dev"} else []
+        roles.append({
+            "role_key": key,
+            "name": STATIC_ROLE_LABELS.get(key, key),
+            "description": default_descriptions.get(key, "Tipo padrão do sistema."),
+            "permissions": permissions,
+            "action_permissions": actions,
+            "is_custom": False,
+            "can_edit": False,
+            "can_delete": False,
+        })
+    for role in list_custom_access_roles():
+        roles.append({
+            "role_key": role.role_key,
+            "name": role.name,
+            "description": role.description or "-",
+            "permissions": role.permissions,
+            "action_permissions": role.action_permissions,
+            "is_custom": True,
+            "can_edit": True,
+            "can_delete": True,
+        })
+    return roles
+
+
 def access_role_form_context(role: AccessRoleType | None = None, permissions: list[str] | set[str] | None = None, action_permissions: list[str] | set[str] | None = None) -> dict[str, Any]:
     selected = set(permissions if permissions is not None else (role.permissions if role else ["home", "my_requests"]))
     selected_actions = set(action_permissions if action_permissions is not None else (role.action_permissions if role else []))
@@ -6525,6 +6562,7 @@ def access_role_form_context(role: AccessRoleType | None = None, permissions: li
         "selected_action_permissions": selected_actions,
         "action_permission_label_map": action_permission_label_map(),
         "custom_roles": list_custom_access_roles(),
+        "access_roles": access_role_listing(),
     }
 
 
@@ -6612,13 +6650,23 @@ def admin_access_type_delete(role_key: str):
         abort(404)
     with db_connect() as conn:
         in_use = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = ?", (role.role_key,)).fetchone()["total"]
-        if int(in_use or 0) > 0:
-            flash("Não é possível excluir: existem usuários usando este tipo de acesso.", "warning")
-            return redirect(url_for("admin_access_types"))
+        affected = int(in_use or 0)
+        if affected > 0:
+            # Ao excluir um tipo personalizado, nenhum usuário fica apontando para um cargo inexistente.
+            # Eles voltam para Base e as permissões herdadas desse tipo são limpas.
+            changed_at = now_iso()
+            conn.execute(
+                "DELETE FROM user_page_permissions WHERE user_id IN (SELECT id FROM users WHERE role = ?)",
+                (role.role_key,),
+            )
+            conn.execute(
+                "UPDATE users SET role = 'base', organization_name = COALESCE(NULLIF(organization_name, ''), ?), page_permissions_configured = 0, updated_at = ? WHERE role = ?",
+                (BASE_UNIT_OPTIONS[0] if BASE_UNIT_OPTIONS else ADMIN_ORGANIZATION_NAME, changed_at, role.role_key),
+            )
         conn.execute("DELETE FROM access_role_types WHERE role_key = ?", (role.role_key,))
         conn.commit()
     get_custom_access_role.cache_clear()
-    flash("Tipo de acesso excluído.", "success")
+    flash("Tipo de acesso excluído do banco de dados." + (f" {affected} usuário(s) foram movidos para Base." if affected else ""), "success")
     return redirect(url_for("admin_access_types"))
 
 

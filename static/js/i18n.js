@@ -5,6 +5,16 @@
   let isApplying = false;
   const zh = {
   "Tipos de acesso": "访问类型",
+  "Sistema": "系统",
+  "Tipo padrão": "默认类型",
+  "Tipo padrão do sistema.": "系统默认类型。",
+  "Tipo padrão para bases. Permissões administrativas não liberadas.": "基地默认类型。不开放管理权限。",
+  "Tipo padrão para franquias. Permissões administrativas não liberadas.": "加盟店默认类型。不开放管理权限。",
+  "Tipo padrão administrativo com acesso completo às áreas administrativas.": "管理员默认类型，可完全访问管理区域。",
+  "Tipo Dev com controle total do portal, tipos de acesso e permissões.": "Dev 类型，可完全控制门户、访问类型和权限。",
+  "Nenhum tipo de acesso encontrado.": "未找到访问类型。",
+  "Tipo de acesso excluído do banco de dados.": "访问类型已从数据库中删除。",
+  "Usuários que estiverem usando esse tipo serão movidos para Base.": "正在使用此类型的用户将被移动到基地类型。",
   "Criar tipo de acesso": "创建访问类型",
   "Criar novo tipo de acesso": "创建新的访问类型",
   "Depois de criado, o tipo aparecerá junto com Base, Franquia, Administrador e Dev.": "创建后，该类型将与基地、加盟店、管理员和开发人员一起显示。",

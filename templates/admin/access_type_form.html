@@ -71,3 +71,27 @@
   </form>
 </div>
 {% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  function syncActionGroups() {
+    const pageInputs = Array.from(document.querySelectorAll('[data-access-page-permissions] input[name="page_permissions"]'));
+    const enabledPages = new Set(pageInputs.filter((input) => input.checked).map((input) => input.value));
+    document.querySelectorAll('[data-access-action-permissions] [data-action-group]').forEach((group) => {
+      const pageKey = group.getAttribute('data-action-group');
+      const isEnabled = enabledPages.has(pageKey);
+      group.hidden = !isEnabled;
+      group.querySelectorAll('input[name="action_permissions"]').forEach((input) => {
+        input.disabled = !isEnabled;
+        if (!isEnabled) input.checked = false;
+      });
+    });
+  }
+  document.addEventListener('change', function (event) {
+    if (event.target && event.target.matches('[data-access-page-permissions] input[name="page_permissions"]')) syncActionGroups();
+  });
+  document.addEventListener('DOMContentLoaded', syncActionGroups);
+  syncActionGroups();
+})();
+</script>
+{% endblock %}
