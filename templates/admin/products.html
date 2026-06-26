@@ -8,9 +8,9 @@
     <h2>Produtos cadastrados</h2>
     <div class="product-tools">
       <a class="btn ghost" href="{{ url_for('admin_stock') }}">Gestão de Insumos</a>
-      <button class="btn ghost" type="button" data-open-categories-modal>Editar categorias</button>
-      <button class="btn ghost" type="button" data-open-export-modal>Exportar planilha</button>
-      <a class="btn primary" href="{{ url_for('admin_product_new') }}">Novo produto</a>
+      {% if can_do('products_edit_category') %}<button class="btn ghost" type="button" data-open-categories-modal>Editar categorias</button>{% endif %}
+      {% if can_do('products_export') %}<button class="btn ghost" type="button" data-open-export-modal>Exportar planilha</button>{% endif %}
+      {% if can_do('products_create') %}<a class="btn primary" href="{{ url_for('admin_product_new') }}">Novo produto</a>{% endif %}
     </div>
   </div>
 
@@ -133,6 +133,7 @@
     </section>
   </div>
 
+  {% if can_do('products_import') %}
   <form class="import-form product-import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data" data-product-import-form>
     <label>
       Importar planilha de produtos (.xlsx)
@@ -158,6 +159,7 @@
     <button class="btn primary" type="submit">Importar dados</button>
     <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Kit, Quantidade por kit, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.</small>
   </form>
+  {% endif %}
   <div class="products-table-wrap">
   <table class="products-admin-table">
     <thead>
@@ -210,19 +212,25 @@
         <td data-label="Situacao"><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
         <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
         <td class="actions-cell icon-actions-cell" data-label="Acoes">
+          {% if can_do('products_edit_basic') or can_do('products_edit_category') or can_do('products_edit_unit') or can_do('products_edit_price') or can_do('products_edit_stock') or can_do('products_edit_limits') or can_do('products_edit_visibility') %}
           <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_product_edit', product_id=product.id) }}" data-tooltip="Editar" aria-label="Editar produto">
             <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
           </a>
+          {% endif %}
+          {% if can_do('products_edit_visibility') %}
           <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}') : '{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
             <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="{{ 'Inativar' if product.active else 'Ativar' }}" aria-label="{{ 'Inativar produto' if product.active else 'Ativar produto' }}">
               <img src="{{ url_for('static', filename=('img/action-inactive.svg' if product.active else 'img/action-correct.svg')) }}" alt="">
             </button>
           </form>
+          {% endif %}
+          {% if can_do('products_delete') %}
           <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.') : 'Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')">
             <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir produto">
               <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
             </button>
           </form>
+          {% endif %}
         </td>
       </tr>
       {% else %}

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Tipos de acesso • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Tipos de acesso{% endblock %}
-{% block page_subtitle %}Crie cargos personalizados e defina quais páginas cada tipo poderá acessar.{% endblock %}
+{% block page_subtitle %}Crie cargos personalizados e defina páginas e permissões específicas de cada tipo.{% endblock %}
 {% block content %}
 <div class="card wide-card access-type-panel">
   <div class="section-head">
@@ -24,11 +24,11 @@
     </label>
     <div class="full access-permission-summary card">
       <div>
-        <strong>Páginas e permissões desse tipo</strong>
-        <span>Marque exatamente as páginas que esse cargo poderá usar.</span>
+        <strong>Páginas desse tipo</strong>
+        <span>Marque as páginas que esse cargo poderá visualizar no portal.</span>
       </div>
     </div>
-    <div class="full permission-grid access-type-permission-grid">
+    <div class="full permission-grid access-type-permission-grid" data-access-page-permissions>
       {% for option in permission_options %}
         <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}">
           <input type="checkbox" name="page_permissions" value="{{ option.key }}" {% if option.key in selected_permissions %}checked{% endif %}>
@@ -37,6 +37,31 @@
             <small>{{ option.description }}</small>
           </span>
         </label>
+      {% endfor %}
+    </div>
+
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Funcionalidades liberadas por página</strong>
+        <span>Use essas opções para liberar ações como alterar estoque, preço, unidade de medida, importação e aprovações.</span>
+      </div>
+    </div>
+    <div class="full access-action-groups" data-access-action-permissions>
+      {% for group in action_permission_groups %}
+      <section class="access-action-group" data-action-group="{{ group.page_key }}">
+        <h3>{{ group.page_label }}</h3>
+        <div class="permission-grid access-type-permission-grid granular-permission-grid">
+          {% for action in group.actions %}
+          <label class="permission-option action-permission-option">
+            <input type="checkbox" name="action_permissions" value="{{ action.key }}" data-page-key="{{ action.page_key }}" {% if action.key in selected_action_permissions %}checked{% endif %}>
+            <span>
+              <strong>{{ action.label }}</strong>
+              <small>{{ action.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
       {% endfor %}
     </div>
     <div class="full form-actions">
@@ -56,7 +81,7 @@
   {% if custom_roles %}
     <table>
       <thead>
-        <tr><th>Tipo</th><th>Descrição</th><th>Páginas</th><th>Ações</th></tr>
+        <tr><th>Tipo</th><th>Descrição</th><th>Páginas</th><th>Funcionalidades</th><th>Ações</th></tr>
       </thead>
       <tbody>
         {% for role in custom_roles %}
@@ -73,13 +98,22 @@
             </div>
           </td>
           <td>
+            <div class="access-role-pages access-role-actions">
+              {% for key in role.action_permissions %}
+                <span>{{ action_permission_label_map.get(key, key) }}</span>
+              {% else %}
+                <small class="muted">Somente visualização</small>
+              {% endfor %}
+            </div>
+          </td>
+          <td>
             <div class="table-actions">
               <a class="btn ghost icon-action-btn" href="{{ url_for('admin_access_type_edit', role_key=role.role_key) }}" title="Editar tipo de acesso">
-                <img src="{{ url_for('static', filename='img/pencil.svg') }}" alt="Editar">
+                <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="Editar">
               </a>
               <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('Excluir este tipo de acesso? Apenas tipos sem usuários podem ser excluídos.');">
                 <button class="btn danger icon-action-btn" type="submit" title="Excluir tipo de acesso">
-                  <img src="{{ url_for('static', filename='img/trash.svg') }}" alt="Excluir">
+                  <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="Excluir">
                 </button>
               </form>
             </div>

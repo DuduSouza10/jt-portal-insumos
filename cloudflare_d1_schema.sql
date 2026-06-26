@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS access_role_types (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     permissions_json TEXT NOT NULL DEFAULT '[]',
+    action_permissions_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT
 );

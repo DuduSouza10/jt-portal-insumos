@@ -13,9 +13,9 @@
     </div>
     <div class="user-tools">
       {% if current_is_dev() %}<a class="btn ghost" href="{{ url_for('admin_access_types') }}">Criar tipo de acesso</a>{% endif %}
-      <a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>
-      <a class="btn ghost" id="userExportCurrentButton" href="{{ url_for('admin_users_export') }}">Exportar tabela atual</a>
-      <a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>
+      {% if can_do('users_import_export') %}<a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>{% endif %}
+      {% if can_do('users_import_export') %}<a class="btn ghost" id="userExportCurrentButton" href="{{ url_for('admin_users_export') }}">Exportar tabela atual</a>{% endif %}
+      {% if can_do('users_create_edit') %}<a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>{% endif %}
     </div>
   </div>
 
@@ -86,6 +86,7 @@
     </div>
   </form>
 
+  {% if can_do('users_import_export') %}
   <form class="import-form user-import-form" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
     <label>
       Cadastro em massa de usuários (.xlsx)
@@ -111,6 +112,7 @@
     <button class="btn primary" type="submit">Importar usuários</button>
     <small>Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
   </form>
+  {% endif %}
 
   <table>
     <thead>

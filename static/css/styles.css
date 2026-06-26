@@ -11406,3 +11406,149 @@ html[data-theme="dark"] body .import-form .file-picker-clear {
   -webkit-text-fill-color: var(--red) !important;
   border-color: rgba(230, 0, 18, .18) !important;
 }
+
+/* v149 - importação: radio limpo, cards vermelhos consistentes e botões corrigidos */
+.import-form .import-mode-option,
+.import-form .import-mode-option:hover,
+.import-form .import-mode-option:focus-within,
+.import-form .import-mode-option:has(input:checked),
+.import-form .import-mode-option:has(input:checked):hover,
+.import-form .import-mode-option:has(input:checked):focus-within {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 16px 30px rgba(230,0,18,.18) !important;
+  transform: none !important;
+}
+
+.import-form .import-mode-option *,
+.import-form .import-mode-option:hover *,
+.import-form .import-mode-option:focus-within *,
+.import-form .import-mode-option:has(input:checked) *,
+.import-form .import-mode-option:has(input:checked):hover *,
+.import-form .import-mode-option:has(input:checked):focus-within * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.import-form .import-mode-option input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin: 2px 0 0 !important;
+  border: 2px solid rgba(255,255,255,.95) !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 20px !important;
+}
+
+.import-form .import-mode-option input[type="radio"]::before {
+  content: "" !important;
+  width: 9px !important;
+  height: 9px !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  transform: scale(0) !important;
+  transition: transform .15s ease !important;
+}
+
+.import-form .import-mode-option input[type="radio"]:checked::before {
+  transform: scale(1) !important;
+}
+
+.import-form .import-mode-option input[type="radio"]:focus-visible {
+  outline: 2px solid rgba(255,255,255,.72) !important;
+  outline-offset: 3px !important;
+}
+
+.import-form .file-picker-button,
+.import-form .file-picker-button:not(:hover):not(:focus-visible):not(:active) {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  border-color: rgba(230, 0, 18, .24) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.06) !important;
+}
+
+.import-form .file-picker-button:hover,
+.import-form .file-picker-button:focus-visible,
+.import-form .file-picker-button:active {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .56) !important;
+  box-shadow: 0 14px 28px rgba(230,0,18,.18) !important;
+}
+
+/* Garante contraste correto em qualquer botão vermelho do tema claro. */
+html[data-theme="light"] body .btn.primary:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body .btn.danger:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body button.btn.primary:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body button.btn.danger:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body a.btn.primary:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body a.btn.danger:not(:hover):not(:focus-visible):not(:active) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html[data-theme="light"] body .btn.primary:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body .btn.danger:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body button.btn.primary:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body button.btn.danger:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body a.btn.primary:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body a.btn.danger:not(:hover):not(:focus-visible):not(:active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Tela Dev de tipos de acesso: grupos de funcionalidades mais claros. */
+.access-action-groups {
+  display: grid !important;
+  gap: 14px !important;
+}
+
+.access-action-group {
+  padding: 14px !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 18px !important;
+  background: var(--surface-soft) !important;
+}
+
+.access-action-group h3 {
+  margin: 0 0 10px !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  color: var(--text-strong) !important;
+}
+
+.granular-permission-grid {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
+}
+
+.access-role-actions span {
+  background: rgba(230,0,18,.08) !important;
+  border-color: rgba(230,0,18,.18) !important;
+}
+
+/* v149b - foco do radio sem quadrado */
+.import-form .import-mode-option input[type="radio"]:focus,
+.import-form .import-mode-option input[type="radio"]:focus-visible {
+  outline: none !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.30) !important;
+}

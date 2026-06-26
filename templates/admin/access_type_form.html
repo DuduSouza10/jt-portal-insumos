@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Editar tipo de acesso • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Editar tipo de acesso{% endblock %}
-{% block page_subtitle %}Altere o nome e as páginas liberadas para este cargo personalizado.{% endblock %}
+{% block page_subtitle %}Altere o nome, páginas e funcionalidades liberadas para este cargo personalizado.{% endblock %}
 {% block content %}
 <div class="card wide-card access-type-panel">
   <div class="section-head">
@@ -24,11 +24,11 @@
     </label>
     <div class="full access-permission-summary card">
       <div>
-        <strong>Páginas e permissões desse tipo</strong>
+        <strong>Páginas desse tipo</strong>
         <span>Usuários desse tipo herdarão essas páginas automaticamente.</span>
       </div>
     </div>
-    <div class="full permission-grid access-type-permission-grid">
+    <div class="full permission-grid access-type-permission-grid" data-access-page-permissions>
       {% for option in permission_options %}
         <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}">
           <input type="checkbox" name="page_permissions" value="{{ option.key }}" {% if option.key in selected_permissions %}checked{% endif %}>
@@ -37,6 +37,31 @@
             <small>{{ option.description }}</small>
           </span>
         </label>
+      {% endfor %}
+    </div>
+
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Funcionalidades liberadas por página</strong>
+        <span>Controle ações específicas, como alterar estoque, preço, unidade de medida, importações e aprovações.</span>
+      </div>
+    </div>
+    <div class="full access-action-groups" data-access-action-permissions>
+      {% for group in action_permission_groups %}
+      <section class="access-action-group" data-action-group="{{ group.page_key }}">
+        <h3>{{ group.page_label }}</h3>
+        <div class="permission-grid access-type-permission-grid granular-permission-grid">
+          {% for action in group.actions %}
+          <label class="permission-option action-permission-option">
+            <input type="checkbox" name="action_permissions" value="{{ action.key }}" data-page-key="{{ action.page_key }}" {% if action.key in selected_action_permissions %}checked{% endif %}>
+            <span>
+              <strong>{{ action.label }}</strong>
+              <small>{{ action.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
       {% endfor %}
     </div>
     <div class="full form-actions">

@@ -512,6 +512,7 @@ class AccessRoleType:
     name: str
     description: str = ""
     permissions: list[str] = field(default_factory=list)
+    action_permissions: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -1377,6 +1378,7 @@ def init_db() -> None:
                 name TEXT NOT NULL,
                 description TEXT NOT NULL DEFAULT '',
                 permissions_json TEXT NOT NULL DEFAULT '[]',
+                action_permissions_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1403,6 +1405,10 @@ def init_db() -> None:
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "page_permissions_configured" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN page_permissions_configured INTEGER NOT NULL DEFAULT 0")
+
+        access_role_columns = {row["name"] for row in conn.execute("PRAGMA table_info(access_role_types)").fetchall()}
+        if "action_permissions_json" not in access_role_columns:
+            conn.execute("ALTER TABLE access_role_types ADD COLUMN action_permissions_json TEXT NOT NULL DEFAULT '[]'")
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         user_migrations = [
@@ -1889,6 +1895,8 @@ def inject_globals():
         "stock_status_label": stock_status_label,
         "can_access": lambda page_key: page_key in allowed_pages,
         "can_access_any": lambda page_keys: any(page_key in allowed_pages for page_key in page_keys),
+        "can_do": lambda action_key: user_has_action_access(user, action_key),
+        "action_permission_options": ACTION_PERMISSION_OPTIONS,
         "page_permission_options": PAGE_PERMISSION_OPTIONS,
         "base_franchise_options": BASE_FRANCHISE_OPTIONS,
         "base_unit_options": BASE_UNIT_OPTIONS,
@@ -1973,6 +1981,39 @@ PAGE_PERMISSION_OPTIONS = [
 ]
 
 
+ACTION_PERMISSION_OPTIONS = [
+    {"key": "products_create", "page_key": "admin_products", "label": "Criar produtos", "description": "Permite cadastrar novos produtos no catálogo."},
+    {"key": "products_edit_basic", "page_key": "admin_products", "label": "Editar dados principais", "description": "Permite alterar nome, descrição e imagem dos produtos."},
+    {"key": "products_edit_category", "page_key": "admin_products", "label": "Editar categorias", "description": "Permite alterar categoria, ícone e lista de categorias."},
+    {"key": "products_edit_unit", "page_key": "admin_products", "label": "Editar unidade/kit", "description": "Permite alterar unidade de medida, kit e quantidade por kit."},
+    {"key": "products_edit_price", "page_key": "admin_products", "label": "Editar preço", "description": "Permite alterar valor unitário dos produtos."},
+    {"key": "products_edit_stock", "page_key": "admin_products", "label": "Editar estoque", "description": "Permite alterar estoque disponível diretamente no cadastro."},
+    {"key": "products_edit_limits", "page_key": "admin_products", "label": "Editar limites", "description": "Permite alterar limite de pedido, estoque mínimo/máximo e quantidade mínima."},
+    {"key": "products_edit_visibility", "page_key": "admin_products", "label": "Editar visibilidade/status", "description": "Permite ativar/inativar, marcar item interno e definir público base/franquia."},
+    {"key": "products_import", "page_key": "admin_products", "label": "Importar produtos", "description": "Permite importar planilhas de produtos."},
+    {"key": "products_export", "page_key": "admin_products", "label": "Exportar produtos", "description": "Permite exportar planilhas de produtos."},
+    {"key": "products_delete", "page_key": "admin_products", "label": "Excluir produtos", "description": "Permite excluir produtos definitivamente."},
+    {"key": "stock_material_entries", "page_key": "admin_stock", "label": "Entrada de materiais", "description": "Permite registrar ou importar entradas e alterar estoque por entrada."},
+    {"key": "stock_assets_create", "page_key": "admin_stock", "label": "Criar ativos e baixar estoque", "description": "Permite cadastrar ativos e descontar itens do estoque."},
+    {"key": "stock_reports", "page_key": "admin_stock", "label": "Gerar relatórios de estoque", "description": "Permite gerar relatórios de solicitações, entradas e ativos."},
+    {"key": "requests_edit_items", "page_key": "admin_requests", "label": "Editar itens de solicitações", "description": "Permite alterar quantidades de pedidos pendentes."},
+    {"key": "requests_approve_reject", "page_key": "admin_requests", "label": "Aprovar ou recusar solicitações", "description": "Permite aprovar, recusar e movimentar estoque por solicitação."},
+    {"key": "users_create_edit", "page_key": "admin_users", "label": "Criar/editar usuários", "description": "Permite cadastrar usuários e alterar dados de acesso."},
+    {"key": "users_import_export", "page_key": "admin_users", "label": "Importar/exportar usuários", "description": "Permite baixar modelos, exportar tabela e importar usuários."},
+    {"key": "users_status_delete", "page_key": "admin_users", "label": "Status e exclusão de usuários", "description": "Permite aprovar, recusar, reativar ou excluir usuários."},
+]
+
+
+def action_permission_key_set() -> set[str]:
+    return {item["key"] for item in ACTION_PERMISSION_OPTIONS}
+
+
+def action_permissions_for_pages(page_keys: list[str] | set[str]) -> list[dict[str, Any]]:
+    allowed_pages = set(page_keys)
+    return [item for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in allowed_pages]
+
+
+
 STATIC_ROLE_LABELS = {"dev": "Dev", "admin": "Administrador", "base": "Base", "franchise": "Franquia"}
 STATIC_ROLE_KEYS = set(STATIC_ROLE_LABELS.keys())
 
@@ -2015,6 +2056,26 @@ def parse_role_permissions(value: Any) -> list[str]:
     return seen
 
 
+def parse_action_permissions(value: Any, allowed_page_keys: list[str] | set[str] | None = None) -> list[str]:
+    valid = action_permission_key_set()
+    if allowed_page_keys is not None:
+        valid = {item["key"] for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in set(allowed_page_keys)}
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        try:
+            decoded = json.loads(str(value or "[]"))
+            raw_items = decoded if isinstance(decoded, list) else []
+        except Exception:
+            raw_items = []
+    seen: list[str] = []
+    for item in raw_items:
+        key = str(item or "").strip()
+        if key in valid and key not in seen:
+            seen.append(key)
+    return seen
+
+
 def row_to_access_role(row: Any | None) -> AccessRoleType | None:
     if row is None:
         return None
@@ -2023,6 +2084,7 @@ def row_to_access_role(row: Any | None) -> AccessRoleType | None:
         name=str(row["name"] or ""),
         description=str(row["description"] or ""),
         permissions=parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]"),
+        action_permissions=parse_action_permissions(row["action_permissions_json"] if "action_permissions_json" in row.keys() else "[]", parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]")),
         created_at=parse_dt(row["created_at"]) if "created_at" in row.keys() else None,
         updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
     )
@@ -2036,7 +2098,7 @@ def get_custom_access_role(role_key: str | None) -> AccessRoleType | None:
     try:
         with db_connect() as conn:
             row = conn.execute(
-                "SELECT role_key, name, description, permissions_json, created_at, updated_at FROM access_role_types WHERE role_key = ?",
+                "SELECT role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at FROM access_role_types WHERE role_key = ?",
                 (key,),
             ).fetchone()
         return row_to_access_role(row)
@@ -2048,7 +2110,7 @@ def list_custom_access_roles() -> list[AccessRoleType]:
     try:
         with db_connect() as conn:
             rows = conn.execute(
-                "SELECT role_key, name, description, permissions_json, created_at, updated_at FROM access_role_types ORDER BY name COLLATE NOCASE ASC"
+                "SELECT role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at FROM access_role_types ORDER BY name COLLATE NOCASE ASC"
             ).fetchall()
         return [role for row in rows if (role := row_to_access_role(row)) is not None]
     except Exception:
@@ -2119,6 +2181,34 @@ def get_user_page_permissions(user: User | None) -> set[str]:
     if has_request_context():
         setattr(g, cache_key, set(allowed))
     return set(allowed)
+
+
+def get_user_action_permissions(user: User | None) -> set[str]:
+    if user is None:
+        return set()
+    cache_key = f"_action_permissions_{user.id}"
+    if has_request_context() and hasattr(g, cache_key):
+        return set(getattr(g, cache_key))
+    if user.role in {"admin", "dev"}:
+        allowed = action_permission_key_set()
+    else:
+        custom = get_custom_access_role(user.role)
+        allowed = set(custom.action_permissions) if custom is not None else set()
+        allowed = {key for key in allowed if any(item["key"] == key and item["page_key"] in get_user_page_permissions(user) for item in ACTION_PERMISSION_OPTIONS)}
+    if has_request_context():
+        setattr(g, cache_key, set(allowed))
+    return set(allowed)
+
+
+def user_has_action_access(user: User | None, action_key: str) -> bool:
+    return str(action_key or "").strip() in get_user_action_permissions(user)
+
+
+def require_action_permission(action_key: str, message: str | None = None, redirect_endpoint: str = "admin_products"):
+    if user_has_action_access(current_user(), action_key):
+        return None
+    flash(message or "Seu tipo de acesso não tem permissão para executar esta ação.", "warning")
+    return redirect(request.referrer or url_for(redirect_endpoint))
 
 
 def user_has_page_access(user: User | None, page_key: str) -> bool:
@@ -2809,6 +2899,23 @@ def fill_product_from_form(product: Product) -> Product:
         product.visible_base = False
         product.visible_franchise = False
     return product
+
+
+def product_update_missing_action_permissions(old_product: Product, new_product: Product, uploaded_image_changed: bool = False, remove_image: bool = False) -> list[str]:
+    checks: list[tuple[bool, str, str]] = [
+        ((old_product.name != new_product.name) or (old_product.description != new_product.description) or uploaded_image_changed or remove_image, "products_edit_basic", "dados principais/imagem"),
+        ((old_product.category != new_product.category) or (old_product.category_emoji != new_product.category_emoji), "products_edit_category", "categoria"),
+        ((old_product.unit_measure != new_product.unit_measure) or (old_product.is_kit != new_product.is_kit) or (old_product.kit_quantity != new_product.kit_quantity), "products_edit_unit", "unidade de medida/kit"),
+        (old_product.stock_quantity != new_product.stock_quantity, "products_edit_stock", "estoque"),
+        (old_product.price_cents != new_product.price_cents, "products_edit_price", "preço"),
+        ((old_product.limit_base != new_product.limit_base) or (old_product.limit_franchise != new_product.limit_franchise) or (old_product.min_order_quantity != new_product.min_order_quantity) or (old_product.min_stock != new_product.min_stock) or (old_product.max_stock != new_product.max_stock), "products_edit_limits", "limites/regras"),
+        ((old_product.active != new_product.active) or (old_product.visible_base != new_product.visible_base) or (old_product.visible_franchise != new_product.visible_franchise) or (old_product.internal != new_product.internal), "products_edit_visibility", "visibilidade/status"),
+    ]
+    missing: list[str] = []
+    for changed, action_key, label in checks:
+        if changed and not user_has_action_access(current_user(), action_key):
+            missing.append(label)
+    return missing
 
 
 def list_product_categories(user: User | None = None) -> list[dict[str, str]]:
@@ -5809,6 +5916,9 @@ def filter_and_sort_users_for_export(users: list[User], q: str, status: str, rol
 @admin_required
 @page_access_required("admin_users")
 def admin_users_export():
+    denied = require_action_permission("users_import_export", "Seu tipo de acesso não pode exportar usuários.", "admin_users")
+    if denied:
+        return denied
     selected_status = (request.args.get("status", "") or "").strip().lower()
     if selected_status not in {"", "pending", "approved", "rejected"}:
         selected_status = ""
@@ -5937,6 +6047,9 @@ def admin_users_export():
 @admin_required
 @page_access_required("admin_users")
 def admin_users_template():
+    denied = require_action_permission("users_import_export", "Seu tipo de acesso não pode baixar o modelo de usuários.", "admin_users")
+    if denied:
+        return denied
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Usuários"
@@ -6034,6 +6147,9 @@ def admin_users_template():
 @admin_required
 @page_access_required("admin_users")
 def admin_users_import():
+    denied = require_action_permission("users_import_export", "Seu tipo de acesso não pode importar usuários.", "admin_users")
+    if denied:
+        return denied
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de usuários.", "warning")
@@ -6092,6 +6208,10 @@ def admin_users_import():
 @page_access_required("admin_users")
 def admin_user_new():
     if request.method == "POST":
+        denied = require_action_permission("users_create_edit", "Seu tipo de acesso não pode criar usuários.", "admin_users")
+        if denied:
+            return denied
+
         responsible_name = request.form.get("responsible_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
@@ -6306,6 +6426,9 @@ def admin_user_edit(user_id: int):
 @admin_required
 @page_access_required("admin_users")
 def admin_user_status(user_id: int):
+    denied = require_action_permission("users_status_delete", "Seu tipo de acesso não pode alterar status de usuários.", "admin_users")
+    if denied:
+        return denied
     target = get_user(user_id)
     if target is None:
         abort(404)
@@ -6330,6 +6453,9 @@ def admin_user_status(user_id: int):
 @admin_required
 @page_access_required("admin_users")
 def admin_user_delete(user_id: int):
+    denied = require_action_permission("users_status_delete", "Seu tipo de acesso não pode excluir usuários.", "admin_users")
+    if denied:
+        return denied
     target = get_user(user_id)
     if target is None:
         abort(404)
@@ -6369,12 +6495,35 @@ def normalize_access_role_permissions_from_form(form: Any) -> list[str]:
     return list(dict.fromkeys(permissions))
 
 
-def access_role_form_context(role: AccessRoleType | None = None, permissions: list[str] | set[str] | None = None) -> dict[str, Any]:
+def normalize_access_role_action_permissions_from_form(form: Any, page_permissions: list[str] | set[str]) -> list[str]:
+    selected = [str(key or "").strip() for key in form.getlist("action_permissions")]
+    valid = {item["key"] for item in action_permissions_for_pages(page_permissions)}
+    return list(dict.fromkeys([key for key in selected if key in valid]))
+
+
+def grouped_action_permissions(page_permissions: list[str] | set[str] | None = None) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    for page in PAGE_PERMISSION_OPTIONS:
+        actions = [item for item in ACTION_PERMISSION_OPTIONS if item["page_key"] == page["key"]]
+        if actions:
+            groups.append({"page_key": page["key"], "page_label": page["label"], "actions": actions})
+    return groups
+
+
+def action_permission_label_map() -> dict[str, str]:
+    return {item["key"]: item["label"] for item in ACTION_PERMISSION_OPTIONS}
+
+
+def access_role_form_context(role: AccessRoleType | None = None, permissions: list[str] | set[str] | None = None, action_permissions: list[str] | set[str] | None = None) -> dict[str, Any]:
     selected = set(permissions if permissions is not None else (role.permissions if role else ["home", "my_requests"]))
+    selected_actions = set(action_permissions if action_permissions is not None else (role.action_permissions if role else []))
     return {
         "access_role": role,
         "permission_options": PAGE_PERMISSION_OPTIONS,
         "selected_permissions": selected,
+        "action_permission_groups": grouped_action_permissions(selected),
+        "selected_action_permissions": selected_actions,
+        "action_permission_label_map": action_permission_label_map(),
         "custom_roles": list_custom_access_roles(),
     }
 
@@ -6390,9 +6539,10 @@ def admin_access_types():
         name = (request.form.get("name") or "").strip()[:80]
         description = (request.form.get("description") or "").strip()[:240]
         permissions = normalize_access_role_permissions_from_form(request.form)
+        action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
         if not name:
             flash("Informe o nome do tipo de acesso.", "warning")
-            return render_template("admin/access_types.html", **access_role_form_context(None, permissions))
+            return render_template("admin/access_types.html", **access_role_form_context(None, permissions, action_permissions))
         role_key = custom_access_role_key(name)
         with db_connect() as conn:
             original_key = role_key
@@ -6402,10 +6552,10 @@ def admin_access_types():
                 suffix += 1
             conn.execute(
                 """
-                INSERT INTO access_role_types (role_key, name, description, permissions_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (role_key, name, description, json.dumps(permissions, ensure_ascii=False), now_iso(), now_iso()),
+                (role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), now_iso(), now_iso()),
             )
             conn.commit()
         get_custom_access_role.cache_clear()
@@ -6428,17 +6578,18 @@ def admin_access_type_edit(role_key: str):
         name = (request.form.get("name") or "").strip()[:80]
         description = (request.form.get("description") or "").strip()[:240]
         permissions = normalize_access_role_permissions_from_form(request.form)
+        action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
         if not name:
             flash("Informe o nome do tipo de acesso.", "warning")
-            return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions))
+            return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
         with db_connect() as conn:
             conn.execute(
                 """
                 UPDATE access_role_types
-                   SET name = ?, description = ?, permissions_json = ?, updated_at = ?
+                   SET name = ?, description = ?, permissions_json = ?, action_permissions_json = ?, updated_at = ?
                  WHERE role_key = ?
                 """,
-                (name, description, json.dumps(permissions, ensure_ascii=False), now_iso(), role.role_key),
+                (name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), now_iso(), role.role_key),
             )
             # Usuários desse tipo passam a herdar as permissões novas do tipo.
             conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (now_iso(), role.role_key))
@@ -6615,6 +6766,9 @@ def admin_products():
 @admin_required
 @page_access_required("admin_products")
 def admin_product_categories_update():
+    denied = require_action_permission("products_edit_category", "Seu tipo de acesso não pode editar categorias.", "admin_products")
+    if denied:
+        return denied
     old_names = request.form.getlist("category_old")
     new_names = request.form.getlist("category_name")
     emojis = request.form.getlist("category_emoji")
@@ -6651,6 +6805,9 @@ def admin_product_categories_update():
 @admin_required
 @page_access_required("admin_products")
 def admin_products_export():
+    denied = require_action_permission("products_export", "Seu tipo de acesso não pode exportar produtos.", "admin_products")
+    if denied:
+        return denied
     export_language = (request.args.get("lang") or "pt").strip().lower()
     if export_language in {"zh", "zh-cn", "zh-hans", "zh-tw", "mandarin", "mandarim", "chinese", "simplified"}:
         export_language = "zh"
@@ -6757,6 +6914,9 @@ def admin_products_export():
 @admin_required
 @page_access_required("admin_products")
 def admin_products_import():
+    denied = require_action_permission("products_import", "Seu tipo de acesso não pode importar produtos.", "admin_products")
+    if denied:
+        return denied
     try:
         import_mode = (request.form.get("import_mode") or "merge").strip().lower()
         if import_mode not in {"merge", "replace"}:
@@ -6840,6 +7000,10 @@ def admin_products_import():
 @page_access_required("admin_products")
 def admin_product_new():
     if request.method == "POST":
+        denied = require_action_permission("products_create", "Seu tipo de acesso não pode criar produtos.", "admin_products")
+        if denied:
+            return denied
+
         product = fill_product_from_form(Product())
         if not product.name:
             flash("Informe o nome do produto.", "warning")
@@ -6898,6 +7062,9 @@ def admin_product_new():
             conn.commit()
         flash("Produto cadastrado.", "success")
         return redirect(url_for("admin_products"))
+    if not user_has_action_access(current_user(), "products_create"):
+        flash("Seu tipo de acesso não pode criar produtos.", "warning")
+        return redirect(url_for("admin_products"))
     return render_template("admin/product_form.html", product=None, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
 
 
@@ -6909,6 +7076,7 @@ def admin_product_edit(product_id: int):
     if product is None:
         abort(404)
     if request.method == "POST":
+        old_product = Product(**product.__dict__)
         old_stock_quantity = product.stock_quantity
         old_image_key = product.image_key
         fill_product_from_form(product)
@@ -6927,6 +7095,10 @@ def admin_product_edit(product_id: int):
             product.image_name = ""
             product.image_key = ""
             product.image_content_type = ""
+        missing_actions = product_update_missing_action_permissions(old_product, product, bool(uploaded_image is not None and uploaded_image.filename), remove_image)
+        if missing_actions:
+            flash("Seu tipo de acesso não permite alterar: " + ", ".join(missing_actions) + ".", "warning")
+            return redirect(url_for("admin_product_edit", product_id=product_id))
         with db_connect() as conn:
             conn.execute(
                 """
@@ -6983,6 +7155,9 @@ def admin_product_edit(product_id: int):
 @admin_required
 @page_access_required("admin_products")
 def admin_product_toggle_active(product_id: int):
+    denied = require_action_permission("products_edit_visibility", "Seu tipo de acesso não pode ativar ou inativar produtos.", "admin_products")
+    if denied:
+        return denied
     product = get_product(product_id)
     if product is None:
         abort(404)
@@ -7009,6 +7184,9 @@ def admin_product_toggle_active(product_id: int):
 @admin_required
 @page_access_required("admin_products")
 def admin_product_delete(product_id: int):
+    denied = require_action_permission("products_delete", "Seu tipo de acesso não pode excluir produtos.", "admin_products")
+    if denied:
+        return denied
     try:
         with db_connect() as conn:
             product_name, removed_items, removed_requests = permanently_delete_product(conn, product_id)
@@ -7051,6 +7229,10 @@ def admin_requests_attended():
 @page_access_required("admin_stock")
 def admin_material_entries():
     if request.method == "POST":
+        denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode registrar entrada de materiais.", "admin_material_entries")
+        if denied:
+            return denied
+
         item_name = (request.form.get("item_name") or "").strip()
         quantity = parse_required_positive_int(request.form.get("quantity")) or 0
         unit_price_cents = parse_money_to_cents(request.form.get("unit_price"))
@@ -7111,6 +7293,9 @@ def admin_material_entries():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_template():
+    denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode baixar modelo de entrada de materiais.", "admin_material_entries")
+    if denied:
+        return denied
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Entrada de Materiais"
@@ -7144,6 +7329,9 @@ def admin_material_entries_template():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_import():
+    denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode importar entrada de materiais.", "admin_material_entries")
+    if denied:
+        return denied
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de entrada de materiais.", "warning")
@@ -7175,6 +7363,9 @@ def admin_material_entries_import():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_report():
+    denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar relatórios de entrada.", "admin_material_entries")
+    if denied:
+        return denied
     start_raw = (request.args.get("start_date") or "").strip()
     end_raw = (request.args.get("end_date") or "").strip()
     if not start_raw or not end_raw:
@@ -7318,6 +7509,9 @@ def admin_asset_new():
 
 
 def admin_asset_new_with_stock():
+    denied = require_action_permission("stock_assets_create", "Seu tipo de acesso não pode criar ativos ou baixar estoque.", "admin_assets")
+    if denied:
+        return denied
     name = request.form.get("name", "").strip()
     base_raw = request.form.get("base", "").strip()
     franchise_raw = request.form.get("franchise", "").strip()
@@ -7612,6 +7806,9 @@ def admin_stock():
 @admin_required
 @page_access_required("admin_stock")
 def admin_stock_requests_report():
+    denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar relatórios de estoque.", "admin_stock")
+    if denied:
+        return denied
     start_raw = (request.args.get("start_date") or "").strip()
     end_raw = (request.args.get("end_date") or "").strip()
     base_raw = (request.args.get("base") or "").strip()
@@ -7655,6 +7852,9 @@ def admin_stock_requests_report():
 @admin_required
 @page_access_required("admin_stock")
 def admin_assets_period_report():
+    denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar relatórios de ativos.", "admin_assets")
+    if denied:
+        return denied
     start_raw = (request.args.get("start_date") or "").strip()
     end_raw = (request.args.get("end_date") or "").strip()
     base_raw = (request.args.get("base") or "").strip()
@@ -7710,6 +7910,9 @@ def admin_request_detail(request_id: int):
 @admin_required
 @page_access_required("admin_requests")
 def admin_request_update_items(request_id: int):
+    denied = require_action_permission("requests_edit_items", "Seu tipo de acesso não pode editar itens de solicitações.", "admin_requests")
+    if denied:
+        return denied
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
@@ -7737,6 +7940,9 @@ def admin_request_update_items(request_id: int):
 @admin_required
 @page_access_required("admin_requests")
 def admin_request_approve(request_id: int):
+    denied = require_action_permission("requests_approve_reject", "Seu tipo de acesso não pode aprovar solicitações.", "admin_requests")
+    if denied:
+        return denied
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
@@ -7793,6 +7999,9 @@ def admin_request_approve(request_id: int):
 @admin_required
 @page_access_required("admin_requests")
 def admin_request_reject(request_id: int):
+    denied = require_action_permission("requests_approve_reject", "Seu tipo de acesso não pode recusar solicitações.", "admin_requests")
+    if denied:
+        return denied
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
