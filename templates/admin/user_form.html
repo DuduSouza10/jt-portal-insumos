@@ -10,16 +10,14 @@
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
     {% set role_options = allowed_role_options if allowed_role_options is defined else ['base', 'franchise', 'admin'] %}
-    {% set role_locked = user and user.is_admin and not current_is_dev() %}
     <label>
       Tipo de acesso (permissão do usuário)
-      <select name="role" id="roleSelect" required {% if role_locked %}disabled{% endif %}>
+      <select name="role" id="roleSelect" required>
         {% if 'base' in role_options or (user and user.role == 'base') %}<option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>{% endif %}
         {% if 'franchise' in role_options or (user and user.role == 'franchise') %}<option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>{% endif %}
         {% if 'admin' in role_options or (user and user.role == 'admin') %}<option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>{% endif %}
         {% if 'dev' in role_options or (user and user.role == 'dev') %}<option value="dev" {% if user and user.role == 'dev' %}selected{% endif %}>Dev</option>{% endif %}
       </select>
-      {% if role_locked %}<input type="hidden" name="role" value="{{ user.role }}"><small class="hint">Somente um usuário Dev pode alterar o tipo de acesso de outro administrador.</small>{% endif %}
     </label>
     {% if current_can_manage_dev_roles() or current_can_bootstrap_dev_role() %}
     <label id="devPasswordWrap" class="dev-password-wrap {% if (not user or user.role != 'dev') and not current_can_edit_dev_password() %}hidden{% endif %}">

@@ -1721,8 +1721,16 @@ def allowed_role_options_for_editor(current: User | None, target: User | None = 
 
 def safe_role_for_update(current: User, target: User | None, requested_role: str, supplied_dev_password: Any, conn: Any | None = None) -> tuple[str, str | None]:
     requested = requested_role if requested_role in {"base", "franchise", "admin", "dev"} else "base"
+
+    # Permite criar o primeiro Dev editando o próprio usuário admin, desde que a senha Dev esteja correta.
+    # Fora desse bootstrap, o próprio usuário não consegue rebaixar/remover seu acesso por segurança.
     if target is not None and target.id == current.id:
+        if requested == "dev" and target.role != "dev":
+            if can_assign_dev_role(current, supplied_dev_password, conn):
+                return "dev", None
+            return current.role, "Para aplicar o acesso Dev, informe a senha Dev correta."
         return current.role, None
+
     if target is not None and target.is_admin and not can_change_admin_role(current, target):
         return target.role, "Somente usuários Dev podem alterar o tipo de acesso de administradores."
     if requested == "dev" and not can_assign_dev_role(current, supplied_dev_password, conn):
