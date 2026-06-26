@@ -463,6 +463,8 @@ ASSET_REGIONAL_OPTIONS = ["MG", "SPN", "Matriz"]
 ASSET_REGIONAL_OPTION_SET = {option.upper() for option in ASSET_REGIONAL_OPTIONS}
 ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
 ADMIN_ORGANIZATION_OPTIONS = [ADMIN_ORGANIZATION_NAME]
+DEV_ACCESS_PASSWORD_KEY = "dev_access_password"
+DEFAULT_DEV_ACCESS_PASSWORD = os.getenv("DEV_ACCESS_PASSWORD", "DevJet2026")
 
 
 @dataclass
@@ -483,8 +485,12 @@ class User:
     page_permissions_configured: bool = False
 
     @property
+    def is_dev(self) -> bool:
+        return self.role == "dev"
+
+    @property
     def is_admin(self) -> bool:
-        return self.role == "admin"
+        return self.role in {"admin", "dev"}
 
     @property
     def is_approved(self) -> bool:
@@ -800,9 +806,12 @@ def normalize_user_role(value: Any, allow_admin: bool = True) -> str | None:
         "admin": "admin",
         "administrador": "admin",
         "administradora": "admin",
+        "dev": "dev",
+        "desenvolvedor": "dev",
+        "developer": "dev",
     }
     role = aliases.get(normalized)
-    if role == "admin" and not allow_admin:
+    if role in {"admin", "dev"} and not allow_admin:
         return None
     return role
 
@@ -863,7 +872,7 @@ def validate_user_profile_fields(
         franchise_clean = franchise[:160]
         return franchise_clean, franchise_clean, phone_digits, cnpj_digits
 
-    if role == "admin":
+    if role in {"admin", "dev"}:
         return ADMIN_ORGANIZATION_NAME, "", "", ""
 
     raise ValueError("Tipo de acesso inválido.")
@@ -1303,6 +1312,12 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_users_status_created ON users(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_users_responsible_name ON users(responsible_name COLLATE NOCASE);
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT '',
+                updated_at TEXT
+            );
             CREATE INDEX IF NOT EXISTS idx_products_catalog_active_name ON products(catalog_archived, active, name);
             CREATE INDEX IF NOT EXISTS idx_products_catalog_category ON products(catalog_archived, category);
             CREATE INDEX IF NOT EXISTS idx_products_stock ON products(catalog_archived, stock_quantity);
@@ -1647,6 +1662,107 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
 
 # ---------- Helpers ----------
 
+def dev_user_exists(conn: Any | None = None) -> bool:
+    sql = "SELECT 1 FROM users WHERE role = 'dev' AND status = 'approved' LIMIT 1"
+    if conn is not None:
+        return conn.execute(sql).fetchone() is not None
+    with db_connect() as local_conn:
+        return local_conn.execute(sql).fetchone() is not None
+
+def get_dev_access_password(conn: Any | None = None) -> str:
+    sql = "SELECT value FROM app_settings WHERE key = ?"
+    try:
+        if conn is not None:
+            row = conn.execute(sql, (DEV_ACCESS_PASSWORD_KEY,)).fetchone()
+        else:
+            with db_connect() as local_conn:
+                row = local_conn.execute(sql, (DEV_ACCESS_PASSWORD_KEY,)).fetchone()
+        value = (row["value"] if row is not None and "value" in row.keys() else "") if row is not None else ""
+        return str(value or DEFAULT_DEV_ACCESS_PASSWORD)
+    except Exception:
+        return DEFAULT_DEV_ACCESS_PASSWORD
+
+def set_dev_access_password(conn: Any, value: str) -> None:
+    clean = str(value or "").strip()
+    if not clean:
+        return
+    conn.execute(
+        """
+        INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        """,
+        (DEV_ACCESS_PASSWORD_KEY, clean, now_iso()),
+    )
+
+def can_manage_dev_roles(user: User | None) -> bool:
+    return bool(user and user.is_dev and user.is_approved)
+
+def can_bootstrap_dev_role(user: User | None) -> bool:
+    return bool(user and user.is_admin and user.is_approved and not dev_user_exists())
+
+def dev_password_is_valid(value: Any, conn: Any | None = None) -> bool:
+    return str(value or "").strip() == get_dev_access_password(conn)
+
+def can_change_admin_role(current: User | None, target: User | None = None) -> bool:
+    return can_manage_dev_roles(current)
+
+def can_assign_dev_role(current: User | None, supplied_password: Any, conn: Any | None = None) -> bool:
+    if not dev_password_is_valid(supplied_password, conn):
+        return False
+    if can_manage_dev_roles(current):
+        return True
+    return bool(current and current.is_admin and current.is_approved and not dev_user_exists(conn))
+
+def allowed_role_options_for_editor(current: User | None, target: User | None = None) -> list[str]:
+    options = ["base", "franchise", "admin"]
+    if can_manage_dev_roles(current) or not dev_user_exists():
+        options.append("dev")
+    return options
+
+def safe_role_for_update(current: User, target: User | None, requested_role: str, supplied_dev_password: Any, conn: Any | None = None) -> tuple[str, str | None]:
+    requested = requested_role if requested_role in {"base", "franchise", "admin", "dev"} else "base"
+    if target is not None and target.id == current.id:
+        return current.role, None
+    if target is not None and target.is_admin and not can_change_admin_role(current, target):
+        return target.role, "Somente usuários Dev podem alterar o tipo de acesso de administradores."
+    if requested == "dev" and not can_assign_dev_role(current, supplied_dev_password, conn):
+        fallback = target.role if target is not None else "admin"
+        return fallback, "Para aplicar o acesso Dev, informe a senha Dev correta. Apenas Dev pode promover outros usuários quando já existir Dev aprovado."
+    return requested, None
+
+def can_edit_dev_password(current: User | None) -> bool:
+    return can_manage_dev_roles(current)
+
+def maybe_update_dev_password_from_form(conn: Any, current: User, form: Any) -> str | None:
+    new_password = str(form.get("new_dev_password", "") or "").strip()
+    if not new_password:
+        return None
+    if not can_edit_dev_password(current):
+        return "Somente usuários Dev podem alterar a senha de autorização Dev."
+    current_password = form.get("dev_password", "")
+    if not dev_password_is_valid(current_password, conn):
+        return "Informe a senha Dev atual para alterar a senha de autorização."
+    set_dev_access_password(conn, new_password)
+    return None
+
+def current_is_dev() -> bool:
+    return bool(current_user() and current_user().is_dev)
+
+def current_can_manage_dev_roles() -> bool:
+    return can_manage_dev_roles(current_user())
+
+def current_can_bootstrap_dev_role() -> bool:
+    return can_bootstrap_dev_role(current_user())
+
+def current_can_edit_dev_password() -> bool:
+    return can_edit_dev_password(current_user())
+
+def current_allowed_role_options(target: User | None = None) -> list[str]:
+    return allowed_role_options_for_editor(current_user(), target)
+
+def current_can_edit_admin_role(target: User | None = None) -> bool:
+    return can_change_admin_role(current_user(), target)
+
 def current_user() -> User | None:
     if has_request_context() and hasattr(g, "_current_user_cached"):
         return getattr(g, "_current_user_cached")
@@ -1678,6 +1794,7 @@ def inject_globals():
         "current_user": user,
         "format_brl": format_brl,
         "status_label": status_label,
+        "user_role_label": user_role_label,
         "stock_status_class": stock_status_class,
         "stock_status_label": stock_status_label,
         "can_access": lambda page_key: page_key in allowed_pages,
@@ -1690,6 +1807,12 @@ def inject_globals():
         "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
         "asset_regional_options": ASSET_REGIONAL_OPTIONS,
         "asset_regional_for_base": asset_regional_for_base,
+        "current_is_dev": current_is_dev,
+        "current_can_manage_dev_roles": current_can_manage_dev_roles,
+        "current_can_bootstrap_dev_role": current_can_bootstrap_dev_role,
+        "current_can_edit_dev_password": current_can_edit_dev_password,
+        "current_allowed_role_options": current_allowed_role_options,
+        "current_can_edit_admin_role": current_can_edit_admin_role,
     }
 
 
@@ -1761,13 +1884,13 @@ PAGE_PERMISSION_OPTIONS = [
 
 
 def default_page_keys_for_role(role: str) -> set[str]:
-    if role == "admin":
+    if role in {"admin", "dev"}:
         return {item["key"] for item in PAGE_PERMISSION_OPTIONS}
     return {item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]}
 
 
 def permission_options_for_role(role: str) -> list[dict[str, Any]]:
-    if role == "admin":
+    if role in {"admin", "dev"}:
         return PAGE_PERMISSION_OPTIONS
     return [item for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
 
@@ -1778,8 +1901,8 @@ def get_user_page_permissions(user: User | None) -> set[str]:
     cache_key = f"_page_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
-    if user.role == "admin":
-        allowed = default_page_keys_for_role("admin")
+    if user.role in {"admin", "dev"}:
+        allowed = default_page_keys_for_role(user.role)
     elif not user.page_permissions_configured:
         allowed = default_page_keys_for_role(user.role)
     else:
@@ -1809,7 +1932,7 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
 
 def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
     allowed_for_role = default_page_keys_for_role(role)
-    normalized = allowed_for_role if role == "admin" else {key for key in selected_keys if key in allowed_for_role}
+    normalized = allowed_for_role if role in {"admin", "dev"} else {key for key in selected_keys if key in allowed_for_role}
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     for key in sorted(normalized):
         conn.execute(
@@ -1961,7 +2084,7 @@ def feishu_line(label: str, value: Any) -> str:
 
 
 def user_role_label(role: str | None) -> str:
-    labels = {"admin": "Admin", "base": "Base", "franchise": "Franquia"}
+    labels = {"dev": "Dev", "admin": "Admin", "base": "Base", "franchise": "Franquia"}
     return labels.get(role or "", role or "-")
 
 
@@ -4393,7 +4516,7 @@ def reject_users_outside_import(conn: Any, existing_rows: list[Any], imported_us
     return total
 
 
-def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None) -> tuple[int, int, int, int, list[str]]:
+def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None, current_user_role: str = "admin") -> tuple[int, int, int, int, list[str]]:
     import_mode = (import_mode or "merge").strip().lower()
     if import_mode not in {"merge", "replace"}:
         import_mode = "merge"
@@ -4439,6 +4562,8 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
                 break
             try:
                 record = parse_user_import_record(row_number, row_values, header_map)
+                if record.role == "dev" and current_user_role != "dev":
+                    raise ValueError("somente usuário Dev pode importar usuários com tipo Dev")
                 if record.username in seen_usernames:
                     raise ValueError("nome de usuário duplicado na planilha")
                 seen_usernames.add(record.username)
@@ -4451,9 +4576,9 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
             return 0, 0, skipped, 0, errors
 
         with db_connect() as conn:
-            existing_rows = conn.execute("SELECT id, username, status FROM users").fetchall()
+            existing_rows = conn.execute("SELECT id, username, status, role FROM users").fetchall()
             existing_by_username = {
-                normalize_username(row["username"]): int(row["id"])
+                normalize_username(row["username"]): {"id": int(row["id"]), "role": str(row["role"] or "base")}
                 for row in existing_rows
                 if row["username"]
             }
@@ -4461,7 +4586,13 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
             imported_usernames = {record.username for record in records}
 
             for record in records:
-                target_id = existing_by_username.get(record.username)
+                existing_info = existing_by_username.get(record.username)
+                target_id = existing_info["id"] if existing_info else None
+                existing_role = existing_info["role"] if existing_info else ""
+                if current_user_role != "dev" and existing_role in {"admin", "dev"} and record.role != existing_role:
+                    skipped += 1
+                    errors.append(f"linha {record.source_row}: somente usuário Dev pode alterar o tipo de acesso de administradores")
+                    continue
                 upsert_rows.append((target_id, record))
 
             created, updated, upsert_skipped = execute_user_upsert_chunked(conn, upsert_rows, errors)
@@ -5241,11 +5372,11 @@ def admin_users():
         selected_status = ""
 
     selected_role = (request.args.get("role", "") or "").strip().lower()
-    if selected_role not in {"", "admin", "base", "franchise"}:
+    if selected_role not in {"", "dev", "admin", "base", "franchise"}:
         selected_role = ""
 
     search_query = (request.args.get("q", "") or "").strip()
-    selected_sort = (request.args.get("sort", "newest") or "newest").strip().lower()
+    selected_sort = (request.args.get("sort", "responsible_asc") or "responsible_asc").strip().lower()
     sort_map = {
         "newest": "created_at DESC, id DESC",
         "oldest": "created_at ASC, id ASC",
@@ -5257,9 +5388,9 @@ def admin_users():
         "unit_asc": "organization_name COLLATE NOCASE ASC, franchise_name COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
         "status_asc": "status COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
     }
-    order_clause = sort_map.get(selected_sort, sort_map["newest"])
+    order_clause = sort_map.get(selected_sort, sort_map["responsible_asc"])
     if selected_sort not in sort_map:
-        selected_sort = "newest"
+        selected_sort = "responsible_asc"
 
     per_page = list_page_limit(default=120, maximum=300)
     page = bounded_int(request.args.get("page"), 1, 1, 100000)
@@ -5328,6 +5459,7 @@ def admin_users():
         "pending": status_counts.get("pending", 0),
         "approved": status_counts.get("approved", 0),
         "rejected": status_counts.get("rejected", 0),
+        "dev": role_counts.get("dev", 0),
         "admin": role_counts.get("admin", 0),
         "base": role_counts.get("base", 0),
         "franchise": role_counts.get("franchise", 0),
@@ -5386,7 +5518,7 @@ def filter_and_sort_users_for_export(users: list[User], q: str, status: str, rol
 
     sort_mode = sort_mode if sort_mode in {
         "newest", "oldest", "responsible_asc", "responsible_desc", "username_asc", "username_desc", "role_asc", "unit_asc", "status_asc"
-    } else "newest"
+    } else "responsible_asc"
     if sort_mode == "oldest":
         filtered.sort(key=lambda user: (user.created_at or datetime.min, user.id))
     elif sort_mode == "responsible_asc":
@@ -5404,7 +5536,7 @@ def filter_and_sort_users_for_export(users: list[User], q: str, status: str, rol
     elif sort_mode == "status_asc":
         filtered.sort(key=lambda user: (user.status.casefold(), user.responsible_name.casefold(), user.id))
     else:
-        filtered.sort(key=lambda user: (user.created_at or datetime.min, user.id), reverse=True)
+        filtered.sort(key=lambda user: (user.responsible_name.casefold(), -user.id))
     return filtered
 
 
@@ -5416,10 +5548,10 @@ def admin_users_export():
     if selected_status not in {"", "pending", "approved", "rejected"}:
         selected_status = ""
     selected_role = (request.args.get("role", "") or "").strip().lower()
-    if selected_role not in {"", "admin", "base", "franchise"}:
+    if selected_role not in {"", "dev", "admin", "base", "franchise"}:
         selected_role = ""
     search_query = (request.args.get("q", "") or "").strip()
-    selected_sort = (request.args.get("sort", "newest") or "newest").strip().lower()
+    selected_sort = (request.args.get("sort", "responsible_asc") or "responsible_asc").strip().lower()
     sort_map = {
         "newest": "created_at DESC, id DESC",
         "oldest": "created_at ASC, id ASC",
@@ -5431,7 +5563,7 @@ def admin_users_export():
         "unit_asc": "organization_name COLLATE NOCASE ASC, franchise_name COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
         "status_asc": "status COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
     }
-    order_clause = sort_map.get(selected_sort, sort_map["newest"])
+    order_clause = sort_map.get(selected_sort, sort_map["responsible_asc"])
     export_limit = bounded_int(request.args.get("limit"), int(os.getenv("D1_EXPORT_LIMIT", "500")), 50, 2000)
 
     clauses: list[str] = []
@@ -5571,7 +5703,7 @@ def admin_users_template():
 
     lists = workbook.create_sheet("Listas")
     lists.append(["Tipos de acesso", "Status", "Bases"])
-    for row_index, role_label in enumerate(["Base", "Franquia", "Administrador"], start=2):
+    for row_index, role_label in enumerate(["Base", "Franquia", "Administrador", "Dev"], start=2):
         lists.cell(row=row_index, column=1, value=role_label)
     for row_index, status_label in enumerate(["Aprovado", "Pendente", "Recusado"], start=2):
         lists.cell(row=row_index, column=2, value=status_label)
@@ -5579,7 +5711,7 @@ def admin_users_template():
         lists.cell(row=row_index, column=3, value=base_name)
     lists.sheet_state = "hidden"
 
-    role_validation = DataValidation(type="list", formula1="'Listas'!$A$2:$A$4", allow_blank=False)
+    role_validation = DataValidation(type="list", formula1="'Listas'!$A$2:$A$5", allow_blank=False)
     status_validation = DataValidation(type="list", formula1="'Listas'!$B$2:$B$4", allow_blank=False)
     base_validation = DataValidation(
         type="list",
@@ -5603,6 +5735,7 @@ def admin_users_template():
         ("Base", "Preencha Nome da base. Deixe Nome da franquia, Telefone e CNPJ vazios."),
         ("Franquia", "Preencha Nome da franquia e Telefone com DDD. CNPJ é opcional. Deixe Nome da base vazio."),
         ("Administrador", "Deixe os campos de base, franquia e CNPJ vazios. O administrador recebe acesso a todas as páginas."),
+        ("Dev", "Use apenas com autorização. Somente um usuário Dev pode importar/promover usuários como Dev."),
         ("Senha", "Obrigatória para todos os novos usuários. Formate a coluna como texto para preservar zeros à esquerda."),
         ("Status", "Use Aprovado, Pendente ou Recusado."),
     ]
@@ -5668,6 +5801,7 @@ def admin_users_import():
             uploaded_bytes,
             import_mode=import_mode,
             current_user_id=current_user.id,
+            current_user_role=current_user.role,
         )
         if errors:
             preview = "; ".join(errors[:5])
@@ -5693,7 +5827,21 @@ def admin_user_new():
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
         password = request.form.get("password", "")
-        role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        current = require_current_user()
+        requested_role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        role_warning = None
+        with db_connect() as role_conn:
+            role, role_warning = safe_role_for_update(current, None, requested_role, request.form.get("dev_password", ""), role_conn)
+            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form)
+            if password_warning:
+                role_conn.rollback()
+                flash(password_warning, "warning")
+                return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"), allowed_role_options=allowed_role_options_for_editor(current), can_edit_admin_role=can_change_admin_role(current), can_edit_dev_password=can_edit_dev_password(current))
+            role_conn.commit()
+        if role_warning:
+            flash(role_warning, "warning")
+            if requested_role == "dev" and role != "dev":
+                return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"), allowed_role_options=allowed_role_options_for_editor(current), can_edit_admin_role=can_change_admin_role(current), can_edit_dev_password=can_edit_dev_password(current))
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
 
@@ -5707,19 +5855,19 @@ def admin_user_new():
             )
         except ValueError as exc:
             flash(str(exc), "danger")
-            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
         if not responsible_name or not username or not password:
             flash("Preencha responsável, nome de usuário e senha.", "danger")
-            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
-            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
         if get_user_by_username(username) is not None:
             flash("Já existe usuário cadastrado com este nome de usuário.", "danger")
-            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
 
         with db_connect() as conn:
             cursor = conn.execute(
@@ -5748,14 +5896,14 @@ def admin_user_new():
             if new_user_id is None:
                 conn.rollback()
                 flash("Não foi possível adicionar o usuário.", "danger")
-                return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+                return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
             save_user_page_permissions(conn, new_user_id, role, selected_pages)
             conn.commit()
 
         flash("Usuário adicionado com sucesso.", "success")
         return redirect(url_for("admin_users"))
 
-    return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"))
+    return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"), allowed_role_options=allowed_role_options_for_editor(require_current_user()), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
 
 
 @app.route("/admin/users/<int:user_id>/edit", methods=["GET", "POST"])
@@ -5772,17 +5920,28 @@ def admin_user_edit(user_id: int):
         responsible_name = request.form.get("responsible_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
         email = synthetic_email_for_username(username)
-        role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        requested_role = normalize_user_role(request.form.get("role", target.role), allow_admin=True) or target.role
+        role_warning = None
+        with db_connect() as role_conn:
+            role, role_warning = safe_role_for_update(current, target, requested_role, request.form.get("dev_password", ""), role_conn)
+            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form)
+            if password_warning:
+                role_conn.rollback()
+                flash(password_warning, "warning")
+                return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=selected_permissions_for_form(target), allowed_role_options=allowed_role_options_for_editor(current, target), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
+            role_conn.commit()
+        if role_warning:
+            flash(role_warning, "warning")
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         password = request.form.get("password", "")
         selected_pages = request.form.getlist("page_permissions")
 
-        # Segurança: o admin logado não pode remover o próprio acesso administrativo
+        # Segurança: o usuário logado não pode remover o próprio acesso administrativo
         # nem bloquear a própria conta sem querer.
         if target.id == current.id:
-            role = "admin"
+            role = current.role
             status = "approved"
-            selected_pages = list(default_page_keys_for_role("admin"))
+            selected_pages = list(default_page_keys_for_role(current.role))
 
         try:
             organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
@@ -5794,7 +5953,7 @@ def admin_user_edit(user_id: int):
             )
         except ValueError as exc:
             flash(str(exc), "danger")
-            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
 
         selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
         if not selected_pages:
@@ -5802,10 +5961,10 @@ def admin_user_edit(user_id: int):
 
         if not responsible_name or not username:
             flash("Preencha responsável e nome de usuário.", "danger")
-            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
         if not valid_username(username):
             flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "danger")
-            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+            return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
 
         with db_connect() as conn:
             existing = conn.execute(
@@ -5814,7 +5973,7 @@ def admin_user_edit(user_id: int):
             ).fetchone()
             if existing is not None:
                 flash("Já existe outro usuário cadastrado com este nome de usuário.", "danger")
-                return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages))
+                return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
 
             if password:
                 conn.execute(
@@ -5867,7 +6026,7 @@ def admin_user_edit(user_id: int):
         flash("Acesso do usuário atualizado.", "success")
         return redirect(url_for("admin_users"))
 
-    return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=selected_permissions_for_form(target))
+    return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=selected_permissions_for_form(target), allowed_role_options=allowed_role_options_for_editor(require_current_user(), target), can_edit_admin_role=can_change_admin_role(require_current_user(), target), can_edit_dev_password=can_edit_dev_password(require_current_user()))
 
 
 @app.post("/admin/users/<int:user_id>/status")
@@ -5879,6 +6038,9 @@ def admin_user_status(user_id: int):
         abort(404)
     action = request.form.get("action")
     current = require_current_user()
+    if target.is_admin and target.id != current.id and not current.is_dev:
+        flash("Somente usuário Dev pode alterar status de administradores.", "warning")
+        return redirect(url_for("admin_users"))
     if target.is_admin and target.id == current.id and action != "approved":
         flash("Você não pode bloquear seu próprio usuário admin.", "warning")
         return redirect(url_for("admin_users"))
@@ -5902,11 +6064,14 @@ def admin_user_delete(user_id: int):
     if target.is_admin and target.id == current.id:
         flash("Você não pode excluir seu próprio usuário admin.", "warning")
         return redirect(url_for("admin_users"))
+    if target.is_admin and not current.is_dev:
+        flash("Somente usuário Dev pode excluir administradores.", "warning")
+        return redirect(url_for("admin_users"))
 
     try:
         with db_connect() as conn:
             if target.is_admin:
-                approved_admins = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND status = 'approved'").fetchone()["total"]
+                approved_admins = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role IN ('admin', 'dev') AND status = 'approved'").fetchone()["total"]
                 if approved_admins <= 1 and target.status == "approved":
                     flash("Não é possível excluir o último administrador aprovado.", "warning")
                     return redirect(url_for("admin_users"))

@@ -9,14 +9,30 @@
       Nome do responsável (quem usará o acesso)
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
     </label>
+    {% set role_options = allowed_role_options if allowed_role_options is defined else ['base', 'franchise', 'admin'] %}
+    {% set role_locked = user and user.is_admin and not current_is_dev() %}
     <label>
       Tipo de acesso (permissão do usuário)
-      <select name="role" id="roleSelect" required>
-        <option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>
-        <option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>
-        <option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>
+      <select name="role" id="roleSelect" required {% if role_locked %}disabled{% endif %}>
+        {% if 'base' in role_options or (user and user.role == 'base') %}<option value="base" {% if user and user.role == 'base' %}selected{% endif %}>Base</option>{% endif %}
+        {% if 'franchise' in role_options or (user and user.role == 'franchise') %}<option value="franchise" {% if user and user.role == 'franchise' %}selected{% endif %}>Franquia</option>{% endif %}
+        {% if 'admin' in role_options or (user and user.role == 'admin') %}<option value="admin" {% if user and user.role == 'admin' %}selected{% endif %}>Administrador</option>{% endif %}
+        {% if 'dev' in role_options or (user and user.role == 'dev') %}<option value="dev" {% if user and user.role == 'dev' %}selected{% endif %}>Dev</option>{% endif %}
       </select>
+      {% if role_locked %}<input type="hidden" name="role" value="{{ user.role }}"><small class="hint">Somente um usuário Dev pode alterar o tipo de acesso de outro administrador.</small>{% endif %}
     </label>
+    {% if current_can_manage_dev_roles() or current_can_bootstrap_dev_role() %}
+    <label id="devPasswordWrap" class="dev-password-wrap {% if (not user or user.role != 'dev') and not current_can_edit_dev_password() %}hidden{% endif %}">
+      {{ 'Senha Dev atual (para aplicar acesso Dev ou alterar senha)' if current_can_edit_dev_password() else 'Senha Dev (para aplicar acesso Dev)' }}
+      <input name="dev_password" id="devPasswordInput" type="password" placeholder="Digite a senha Dev quando selecionar o tipo Dev ou alterar a senha">
+    </label>
+    {% endif %}
+    {% if current_can_edit_dev_password() %}
+    <label id="newDevPasswordWrap" class="dev-password-wrap">
+      Nova senha Dev (opcional)
+      <input name="new_dev_password" id="newDevPasswordInput" type="password" placeholder="Preencha somente se quiser alterar a senha Dev">
+    </label>
+    {% endif %}
     <label id="baseNameWrap">
       Nome da base (unidade J&T)
       <select name="organization_name" id="organizationSelect">
@@ -124,12 +140,19 @@
   const franchiseNumberInput = document.getElementById('franchiseNumberInput');
   const cnpjWrap = document.getElementById('cnpjWrap');
   const cnpjInput = document.getElementById('cnpjInput');
+  const devPasswordWrap = document.getElementById('devPasswordWrap');
+  const devPasswordInput = document.getElementById('devPasswordInput');
+  const newDevPasswordInput = document.getElementById('newDevPasswordInput');
 
   function syncRole() {
     const role = roleSelect ? roleSelect.value : 'base';
     const isBase = role === 'base';
     const isFranchise = role === 'franchise';
-    const isAdmin = role === 'admin';
+    const isAdmin = role === 'admin' || role === 'dev';
+    const isDev = role === 'dev';
+
+    if (devPasswordWrap) devPasswordWrap.classList.toggle('hidden', !(isDev || newDevPasswordInput));
+    if (devPasswordInput) devPasswordInput.required = isDev;
 
     baseWrap.classList.toggle('hidden', !isBase);
     franchiseNameWrap.classList.toggle('hidden', !isFranchise);

@@ -157,3 +157,12 @@ CREATE TABLE IF NOT EXISTS material_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_material_entries_created_at ON material_entries(created_at);
 CREATE INDEX IF NOT EXISTS idx_material_entries_product_id ON material_entries(product_id);
+
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_responsible_name ON users(responsible_name COLLATE NOCASE);
