@@ -12175,3 +12175,117 @@ html[data-theme="light"] body .nav-header .nav-dropdown:is(.active, .open, :hove
   fill: currentColor !important;
   stroke: currentColor !important;
 }
+
+/* v153 - contraste definitivo dos botoes em estados animados.
+   Claro: normal branco/preto, animado vermelho/branco.
+   Escuro: normal preto/branco, animado vermelho/branco. */
+:root {
+  --jt-button-dark-bg: #111111;
+  --jt-button-dark-border: rgba(255, 255, 255, .14);
+}
+
+html[data-theme="light"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  border-color: rgba(230, 0, 18, .28) !important;
+}
+
+html[data-theme="light"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) * {
+  color: var(--jt-button-black) !important;
+  -webkit-text-fill-color: var(--jt-button-black) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) {
+  background: var(--jt-button-dark-bg) !important;
+  background-color: var(--jt-button-dark-bg) !important;
+  background-image: none !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  border-color: var(--jt-button-dark-border) !important;
+}
+
+html[data-theme="dark"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):not(.active):not(:hover):not(:focus-visible):not(:active) * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active),
+html[data-theme="light"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active),
+html[data-theme="dark"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active),
+html[data-theme="dark"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active) {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  border-color: rgba(230, 0, 18, .58) !important;
+}
+
+html[data-theme="light"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="light"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="dark"] body :is(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success, .tab, .catalog-view-button, .page-btn, .file-picker-button, .export-language-option):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="dark"] body :is(.section-head, .product-tools, .user-tools, .product-filter-actions, .user-filter-actions, .asset-filter-actions, .monthly-report-form, .report-actions)
+  :is(a.btn, button.btn, .btn, .btn.ghost, .btn.primary, .btn.danger, .btn.success):not(.icon-action-btn):not(.category-icon-button):is(.active, :hover, :focus-visible, :active) * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):not(.active):not(:hover):not(:focus-visible):not(:active) {
+  background: var(--jt-button-dark-bg) !important;
+  background-color: var(--jt-button-dark-bg) !important;
+  background-image: none !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+}
+
+html[data-theme="dark"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):not(.active):not(:hover):not(:focus-visible):not(:active) * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):is(.active, :hover, :focus-visible, :active),
+html[data-theme="dark"] body .nav-header .nav-dropdown:is(.active, .open, :hover, :focus-within) > .nav-drop-toggle {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+}
+
+html[data-theme="dark"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .nav-header .nav-dropdown:is(.active, .open, :hover, :focus-within) > .nav-drop-toggle * {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
