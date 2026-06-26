@@ -5945,11 +5945,13 @@ def admin_user_edit(user_id: int):
         selected_pages = request.form.getlist("page_permissions")
 
         # Segurança: o usuário logado não pode remover o próprio acesso administrativo
-        # nem bloquear a própria conta sem querer.
+        # nem bloquear a própria conta sem querer. Se ele estiver criando o primeiro Dev
+        # com a senha correta, mantém o role calculado como dev.
         if target.id == current.id:
-            role = current.role
+            if role != "dev":
+                role = current.role
             status = "approved"
-            selected_pages = list(default_page_keys_for_role(current.role))
+            selected_pages = list(default_page_keys_for_role(role))
 
         try:
             organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
