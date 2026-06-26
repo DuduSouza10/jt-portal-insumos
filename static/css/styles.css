@@ -10699,3 +10699,410 @@ html[data-theme="light"] body .stat-card:hover,
 html[data-theme="light"] body .product-card:hover {
   transform: translateY(-1px) !important;
 }
+
+/* v145 - tema escuro corrigido: menu superior e botões com contraste correto */
+/* MENU SUPERIOR NO TEMA ESCURO
+   Normal: degradê vermelho + texto branco.
+   Hover/ativo/pressionado: fundo branco + texto vermelho. */
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar.compact-user-topbar .top-nav {
+  background: rgba(42, 0, 6, .62) !important;
+  border: 1px solid rgba(230, 0, 18, .28) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04) !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(:hover):not(:focus-visible):not(:active):not(.active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(:hover):not(:focus-within):not(.open):not(.active) > .nav-drop-toggle,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:not(:hover):not(:focus-visible):not(:active):not(.active) {
+  background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  background-color: #7d000c !important;
+  background-image: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, .14) !important;
+  box-shadow: 0 10px 22px rgba(80, 0, 8, .32) !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(:hover):not(:focus-visible):not(:active):not(.active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(:hover):not(:focus-within):not(.open):not(.active) > .nav-drop-toggle *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:not(:hover):not(:focus-visible):not(:active):not(.active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, :focus-visible, :active, .active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, :focus-within, .open, .active) > .nav-drop-toggle,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:is(:hover, :focus-visible, :active, .active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .45) !important;
+  box-shadow: 0 14px 30px rgba(230, 0, 18, .18), 0 0 0 1px rgba(255,255,255,.18) inset !important;
+  transform: translateY(-1px) !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(:hover, :focus-visible, :active, .active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(:hover, :focus-within, .open, .active) > .nav-drop-toggle *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .account-area > .logout:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .public-actions > .btn:is(:hover, :focus-visible, :active, .active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:not(:hover):not(:focus-visible):not(:active):not(.active) {
+  background: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  background-color: #7d000c !important;
+  background-image: linear-gradient(135deg, #4f0007 0%, #7d000c 54%, #9b0010 100%) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, :focus-visible, :active, .active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230,0,18,.45) !important;
+}
+
+html[data-theme="dark"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, :focus-visible, :active, .active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+}
+
+/* BOTÕES VERMELHOS FORA DO MENU NO TEMA ESCURO
+   Normal: degradê vermelho + letra branca.
+   Hover/pressionado: fundo branco + letra vermelha. */
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #userApplyFilterButton:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #productApplyFilterButton:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #userClearFiltersButton:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #productClearFiltersButton:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #clearStockSearch:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body #clearStockFilter:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .tab.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .catalog-view-button.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .product-pagination .page-btn.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .user-pagination .page-btn.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .settings-toggle.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .language-toggle.active:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .export-language-option.primary:not(:hover):not(:focus-visible):not(:active),
+html[data-theme="dark"] body .report-all-toggle:has(input:checked):not(:hover):not(:focus-within),
+html[data-theme="dark"] body .import-mode-option:has(input:checked):not(:hover):not(:focus-within),
+html[data-theme="dark"] body .permission-option:has(input:checked):not(:hover):not(:focus-within) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .48) !important;
+  box-shadow: 0 14px 30px rgba(230, 0, 18, .18) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #userApplyFilterButton:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #productApplyFilterButton:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #userClearFiltersButton:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #productClearFiltersButton:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #clearStockSearch:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body #clearStockFilter:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .tab.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .catalog-view-button.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .product-pagination .page-btn.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .user-pagination .page-btn.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .settings-toggle.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .language-toggle.active:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .export-language-option.primary:not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="dark"] body .report-all-toggle:has(input:checked):not(:hover):not(:focus-within) *,
+html[data-theme="dark"] body .import-mode-option:has(input:checked):not(:hover):not(:focus-within) *,
+html[data-theme="dark"] body .permission-option:has(input:checked):not(:hover):not(:focus-within) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #userApplyFilterButton:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #productApplyFilterButton:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #userClearFiltersButton:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #productClearFiltersButton:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #clearStockSearch:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body #clearStockFilter:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .tab.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .catalog-view-button.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .product-pagination .page-btn.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .user-pagination .page-btn.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .settings-toggle.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .language-toggle.active:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .export-language-option.primary:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .report-all-toggle:has(input:checked):is(:hover, :focus-within),
+html[data-theme="dark"] body .import-mode-option:has(input:checked):is(:hover, :focus-within),
+html[data-theme="dark"] body .permission-option:has(input:checked):is(:hover, :focus-within) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .62) !important;
+  box-shadow: 0 16px 32px rgba(230, 0, 18, .16) !important;
+  transform: translateY(-1px) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body :where(.main-content, .auth-card, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #userApplyFilterButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #productApplyFilterButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #userClearFiltersButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #productClearFiltersButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #clearStockSearch:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body #clearStockFilter:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .tab.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .catalog-view-button.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .product-pagination .page-btn.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .user-pagination .page-btn.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .settings-toggle.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .language-toggle.active:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .export-language-option.primary:is(:hover, :focus-visible, :active) *,
+html[data-theme="dark"] body .report-all-toggle:has(input:checked):is(:hover, :focus-within) *,
+html[data-theme="dark"] body .import-mode-option:has(input:checked):is(:hover, :focus-within) *,
+html[data-theme="dark"] body .permission-option:has(input:checked):is(:hover, :focus-within) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões/elementos clicáveis do tema escuro com animação consistente. */
+html[data-theme="dark"] body .btn,
+html[data-theme="dark"] body .top-nav a,
+html[data-theme="dark"] body .nav-drop-toggle,
+html[data-theme="dark"] body .nav-drop-menu a,
+html[data-theme="dark"] body .tab,
+html[data-theme="dark"] body .catalog-view-button,
+html[data-theme="dark"] body .page-btn,
+html[data-theme="dark"] body .settings-toggle,
+html[data-theme="dark"] body .language-toggle,
+html[data-theme="dark"] body .report-all-toggle,
+html[data-theme="dark"] body .import-mode-option,
+html[data-theme="dark"] body .permission-option,
+html[data-theme="dark"] body .card,
+html[data-theme="dark"] body .table-card,
+html[data-theme="dark"] body .stat-card,
+html[data-theme="dark"] body .product-card,
+html[data-theme="dark"] body tr {
+  transition:
+    transform .18s ease,
+    background-color .18s ease,
+    background-image .18s ease,
+    color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    opacity .18s ease !important;
+}
+
+/* Ícones de ação continuam sem inverter o fundo do botão no tema escuro. */
+html[data-theme="dark"] body .icon-action-btn.btn:is(:hover, :focus-visible, :active),
+html[data-theme="dark"] body .category-icon-button.btn:is(:hover, :focus-visible, :active) {
+  background: rgba(255, 255, 255, .06) !important;
+  background-image: none !important;
+  color: var(--red-2) !important;
+  -webkit-text-fill-color: var(--red-2) !important;
+  border-color: rgba(230, 0, 18, .25) !important;
+}
+
+/* v146 - ajustes finais: lixeira, bloco do usuário, idioma e botões principais */
+/* Bloco do usuário no topo: acompanha o tamanho real do texto e não deixa sobra grande. */
+body .site-header.compact-header .nav-header.premium-topbar .account-area,
+body .site-header.compact-header .nav-header.premium-topbar .header-tools.account-area {
+  width: auto !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  justify-self: end !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .user-pill.compact.user-pill-simple {
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: min(420px, 34vw) !important;
+  height: auto !important;
+  min-height: 44px !important;
+  padding: 8px 14px !important;
+  gap: 8px !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .user-pill.compact.user-pill-simple > span {
+  display: block !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+body .site-header.compact-header .nav-header.premium-topbar .user-pill.compact.user-pill-simple strong,
+body .site-header.compact-header .nav-header.premium-topbar .user-pill.compact.user-pill-simple small {
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+/* Lixeira: sempre fundo vermelho e ícone branco. */
+html body .icon-action-btn.btn.danger,
+html body .icon-action-btn.btn[data-tooltip="Excluir"],
+html body .icon-action-btn.btn[aria-label*="Excluir"],
+html body .icon-action-btn.btn:is([data-tooltip="Excluir"], [aria-label*="Excluir"]):is(:hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .55) !important;
+  box-shadow: 0 10px 24px rgba(230, 0, 18, .20) !important;
+}
+
+html body .icon-action-btn.btn.danger img,
+html body .icon-action-btn.btn[data-tooltip="Excluir"] img,
+html body .icon-action-btn.btn[aria-label*="Excluir"] img,
+html body .icon-action-btn.btn:is([data-tooltip="Excluir"], [aria-label*="Excluir"]):is(:hover, :focus-visible, :active) img {
+  filter: brightness(0) invert(1) !important;
+  opacity: 1 !important;
+}
+
+html body .icon-action-btn.btn.danger *,
+html body .icon-action-btn.btn[data-tooltip="Excluir"] *,
+html body .icon-action-btn.btn[aria-label*="Excluir"] * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botão de idioma: não muda cor/fundo quando passa o mouse. */
+html[data-theme="light"] body .settings-dock .language-toggle,
+html[data-theme="light"] body .settings-dock .language-toggle:hover,
+html[data-theme="light"] body .settings-dock .language-toggle:focus-visible,
+html[data-theme="light"] body .settings-dock .language-toggle:active {
+  background: rgba(255, 255, 255, .90) !important;
+  background-image: none !important;
+  color: #151515 !important;
+  -webkit-text-fill-color: #151515 !important;
+  border-color: rgba(230, 0, 18, .18) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html[data-theme="dark"] body .settings-dock .language-toggle,
+html[data-theme="dark"] body .settings-dock .language-toggle:hover,
+html[data-theme="dark"] body .settings-dock .language-toggle:focus-visible,
+html[data-theme="dark"] body .settings-dock .language-toggle:active {
+  background: rgba(15, 23, 42, .82) !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, .16) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html body .settings-dock .language-toggle:hover *,
+html body .settings-dock .language-toggle:focus-visible *,
+html body .settings-dock .language-toggle:active * {
+  -webkit-text-fill-color: currentColor !important;
+}
+
+/* Botões principais do conteúdo: normal branco/letra preta; hover ou pressionado degradê vermelho/letra branca. */
+html body .main-content .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button),
+html body .main-content .btn.success:not(.tiny):not(.icon-action-btn):not(.category-icon-button),
+html body .main-content .btn.danger:not(.tiny):not(.icon-action-btn):not(.category-icon-button):not(.ghost),
+html body .auth-card .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button),
+html body .permission-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button),
+html body .export-language-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button),
+html body .product-image-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  border-color: rgba(230, 0, 18, .34) !important;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .08) !important;
+  opacity: 1 !important;
+}
+
+html body .main-content .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) *,
+html body .main-content .btn.success:not(.tiny):not(.icon-action-btn):not(.category-icon-button) *,
+html body .main-content .btn.danger:not(.tiny):not(.icon-action-btn):not(.category-icon-button):not(.ghost) *,
+html body .auth-card .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) *,
+html body .permission-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) *,
+html body .export-language-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) *,
+html body .product-image-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button) * {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html body .main-content .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html body .main-content .btn.success:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html body .main-content .btn.danger:not(.tiny):not(.icon-action-btn):not(.category-icon-button):not(.ghost):is(:hover, :focus-visible, :active),
+html body .auth-card .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html body .permission-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html body .export-language-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html body .product-image-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .55) !important;
+  box-shadow: 0 16px 34px rgba(230, 0, 18, .20) !important;
+  transform: translateY(-1px) !important;
+}
+
+html body .main-content .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html body .main-content .btn.success:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html body .main-content .btn.danger:not(.tiny):not(.icon-action-btn):not(.category-icon-button):not(.ghost):is(:hover, :focus-visible, :active) *,
+html body .auth-card .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html body .permission-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html body .export-language-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html body .product-image-modal .btn.primary:not(.tiny):not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Mantém botões pequenos de tabelas, listas e paginação fora da inversão de botões principais. */
+html body .actions-cell .btn.tiny,
+html body .table-card .btn.tiny,
+html body .table-card .page-btn,
+html body .product-pagination .page-btn,
+html body .user-pagination .page-btn {
+  transition: transform .18s ease, color .18s ease, background-color .18s ease, background-image .18s ease, border-color .18s ease, box-shadow .18s ease !important;
+}
