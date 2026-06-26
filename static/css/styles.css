@@ -10519,3 +10519,183 @@ html[data-theme="light"] .stock-priority-item {
     background-color .18s ease,
     background-image .18s ease !important;
 }
+
+/* v144 - correção final tema claro: menu superior, botões vermelhos e animações */
+/* MENU SUPERIOR: normal sempre branco + texto vermelho. */
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions .btn.ghost:not(:hover):not(:focus-visible):not(.active),
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible),
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .30) !important;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .06) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions .btn.ghost:not(:hover):not(:focus-visible):not(.active) *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible) *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .logout:not(:hover):not(:focus-visible) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* MENU SUPERIOR: ativo, hover ou pressionado sempre vermelho + texto branco. */
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions .btn.ghost:is(.active, :hover, :focus-visible, :active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(.active, :hover, :focus-visible, :active),
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active),
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .48) !important;
+  box-shadow: 0 14px 28px rgba(230, 0, 18, .22) !important;
+  transform: translateY(-1px) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .public-actions .btn.ghost:is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(.active, :hover, :focus-visible, :active) *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active) *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle *,
+html:not([data-theme="dark"]) body .site-header.compact-header .nav-header.premium-topbar .logout:is(:hover, :focus-visible, :active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões vermelhos fora do menu superior: normal vermelho + letra branca. */
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button),
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button),
+html[data-theme="light"] body #userApplyFilterButton,
+html[data-theme="light"] body #productApplyFilterButton,
+html[data-theme="light"] body #userClearFiltersButton,
+html[data-theme="light"] body #productClearFiltersButton,
+html[data-theme="light"] body #clearStockSearch,
+html[data-theme="light"] body #clearStockFilter {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .46) !important;
+  box-shadow: 0 14px 28px rgba(230, 0, 18, .16) !important;
+}
+
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button) *,
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button) *,
+html[data-theme="light"] body #userApplyFilterButton *,
+html[data-theme="light"] body #productApplyFilterButton *,
+html[data-theme="light"] body #userClearFiltersButton *,
+html[data-theme="light"] body #productClearFiltersButton *,
+html[data-theme="light"] body #clearStockSearch *,
+html[data-theme="light"] body #clearStockFilter * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões vermelhos fora do menu superior: hover/pressionado branco + letra vermelha. */
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #userApplyFilterButton:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #productApplyFilterButton:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #userClearFiltersButton:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #productClearFiltersButton:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #clearStockSearch:is(:hover, :focus-visible, :active),
+html[data-theme="light"] body #clearStockFilter:is(:hover, :focus-visible, :active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .60) !important;
+  box-shadow: 0 14px 30px rgba(230, 0, 18, .14) !important;
+  transform: translateY(-1px) !important;
+}
+
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.primary:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body :where(.main-content, .modal-dialog, .permission-modal, .export-language-modal, .product-image-modal) .btn.danger:not(.icon-action-btn):not(.category-icon-button):is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #userApplyFilterButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #productApplyFilterButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #userClearFiltersButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #productClearFiltersButton:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #clearStockSearch:is(:hover, :focus-visible, :active) *,
+html[data-theme="light"] body #clearStockFilter:is(:hover, :focus-visible, :active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* Botões de ação por ícone: fundo preservado e ícone vermelho no tema claro. */
+html[data-theme="light"] body .icon-action-btn.btn,
+html[data-theme="light"] body .category-icon-button.btn {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  background: rgba(230, 0, 18, .055) !important;
+  background-image: none !important;
+  border-color: rgba(230, 0, 18, .20) !important;
+}
+html[data-theme="light"] body .icon-action-btn.btn img,
+html[data-theme="light"] body .category-icon-button.btn img {
+  filter: brightness(0) saturate(100%) invert(16%) sepia(100%) saturate(5549%) hue-rotate(347deg) brightness(91%) contrast(111%) !important;
+  opacity: 1 !important;
+}
+
+/* Reforço de animação nos elementos que tinham ficado estáticos. */
+html[data-theme="light"] body .btn,
+html[data-theme="light"] body .top-nav a,
+html[data-theme="light"] body .nav-drop-toggle,
+html[data-theme="light"] body .nav-drop-menu a,
+html[data-theme="light"] body .tab,
+html[data-theme="light"] body .catalog-view-button,
+html[data-theme="light"] body .page-btn,
+html[data-theme="light"] body .user-filter-summary span,
+html[data-theme="light"] body .product-filter-summary span,
+html[data-theme="light"] body .card,
+html[data-theme="light"] body .table-card,
+html[data-theme="light"] body .stat-card,
+html[data-theme="light"] body .product-card,
+html[data-theme="light"] body tr {
+  transition:
+    transform .18s ease,
+    background-color .18s ease,
+    background-image .18s ease,
+    color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    opacity .18s ease !important;
+}
+
+html[data-theme="light"] body .user-filter-summary span:hover,
+html[data-theme="light"] body .product-filter-summary span:hover,
+html[data-theme="light"] body .card:hover,
+html[data-theme="light"] body .table-card:hover,
+html[data-theme="light"] body .stat-card:hover,
+html[data-theme="light"] body .product-card:hover {
+  transform: translateY(-1px) !important;
+}
