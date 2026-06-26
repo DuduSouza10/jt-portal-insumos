@@ -18,7 +18,8 @@
     </div>
   </div>
 
-  <form id="userLiveFilterForm" class="user-filter-card" method="get" action="{{ url_for('admin_users') }}">
+  <form id="userLiveFilterForm" class="user-filter-card" method="get" data-server-filters="1" action="{{ url_for('admin_users') }}">
+    <input type="hidden" name="limit" value="{{ user_filters.limit if user_filters else 120 }}">
     <div class="user-filter-main">
       <label class="user-filter-search">
         Pesquisar usuário
@@ -202,6 +203,7 @@
   const emptyRow = document.getElementById('userLiveEmpty');
   const userImportForm = document.querySelector('[data-user-import-form]');
   const exportCurrentButton = document.getElementById('userExportCurrentButton');
+  const serverFilters = form && form.dataset.serverFilters === '1';
 
   if (userImportForm) {
     userImportForm.addEventListener('submit', function (event) {
@@ -323,6 +325,8 @@
     if (statusFilter && statusFilter.value) params.set('status', statusFilter.value);
     if (roleFilter && roleFilter.value) params.set('role', roleFilter.value);
     if (sortFilter && sortFilter.value) params.set('sort', sortFilter.value);
+    const limitControl = form ? form.querySelector('input[name="limit"]') : null;
+    if (limitControl && limitControl.value) params.set('limit', limitControl.value);
     const baseUrl = {{ url_for('admin_users_export')|tojson }};
     exportCurrentButton.href = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
   }
@@ -333,6 +337,57 @@
       tab.classList.toggle('active', active);
       tab.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+  }
+
+  if (serverFilters) {
+    function submitServerFilters() {
+      updateExportLink();
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    }
+
+    form.addEventListener('submit', function () {
+      updateExportLink();
+    });
+
+    [statusFilter, roleFilter, sortFilter].forEach(function (control) {
+      if (!control) return;
+      control.addEventListener('change', submitServerFilters);
+    });
+
+    if (search) {
+      search.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submitServerFilters();
+        }
+      });
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        if (statusFilter) statusFilter.value = tab.dataset.userStatusTab || '';
+        submitServerFilters();
+      });
+    });
+
+    if (applyButton) applyButton.addEventListener('click', submitServerFilters);
+    if (clearButton) {
+      clearButton.addEventListener('click', function () {
+        if (search) search.value = '';
+        if (statusFilter) statusFilter.value = '';
+        if (roleFilter) roleFilter.value = '';
+        if (sortFilter) sortFilter.value = 'newest';
+        submitServerFilters();
+      });
+    }
+
+    updateExportLink();
+    syncTabs(statusFilter ? statusFilter.value : '');
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.setTimeout(function () { window.JT_I18N.refresh(tbody); }, 20);
+    }
+    return;
   }
 
   function applyFilters() {

@@ -14,7 +14,8 @@
     </div>
   </div>
 
-  <form id="productLiveFilterForm" class="product-filter-card" method="get" action="{{ url_for('admin_products') }}">
+  <form id="productLiveFilterForm" class="product-filter-card" method="get" data-server-filters="1" action="{{ url_for('admin_products') }}">
+    <input type="hidden" name="limit" value="{{ product_filters.limit if product_filters else 120 }}">
     <div class="product-filter-main">
       <label class="product-filter-search product-filter-field field-search">
         Pesquisar produto
@@ -328,6 +329,7 @@
   const activeCounter = document.getElementById('productActiveCount');
   const inactiveCounter = document.getElementById('productInactiveCount');
   const emptyRow = document.getElementById('productLiveEmpty');
+  const serverFilters = form && form.dataset.serverFilters === '1';
 
   if (!form || !tbody || !rows.length) return;
 
@@ -378,6 +380,40 @@
 
   function setText(element, value) {
     if (element) element.textContent = String(value);
+  }
+
+  if (serverFilters) {
+    function submitServerFilters() {
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    }
+
+    form.addEventListener('submit', function () {});
+    [statusFilter, categoryFilter, sortFilter].forEach(function (select) {
+      if (select) select.addEventListener('change', submitServerFilters);
+    });
+    if (search) {
+      search.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submitServerFilters();
+        }
+      });
+    }
+    if (applyButton) applyButton.addEventListener('click', submitServerFilters);
+    if (clearButton) {
+      clearButton.addEventListener('click', function () {
+        if (search) search.value = '';
+        if (statusFilter) statusFilter.value = 'all';
+        if (categoryFilter) categoryFilter.value = '';
+        if (sortFilter) sortFilter.value = 'default';
+        submitServerFilters();
+      });
+    }
+    if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+      window.requestAnimationFrame(function () { window.JT_I18N.refresh(tbody); });
+    }
+    return;
   }
 
   function applyFilters() {

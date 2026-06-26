@@ -70,6 +70,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    g,
     has_request_context,
     jsonify,
     redirect,
@@ -402,6 +403,62 @@ BASE_UNIT_OPTIONS = [unit for unit in BASE_FRANCHISE_OPTIONS if not unit.upper()
 BASE_FRANCHISE_OPTION_SET = set(BASE_FRANCHISE_OPTIONS)
 BASE_UNIT_OPTION_SET = set(BASE_UNIT_OPTIONS)
 FRANCHISE_UNIT_OPTION_SET = set(FRANCHISE_UNIT_OPTIONS)
+
+
+def normalize_unit_lookup_key(value: Any) -> str:
+    """Normaliza nomes de bases/franquias vindos de Excel ou formulário.
+
+    A importação do Excel pode trazer NBSP, hífen diferente, espaço duplicado,
+    célula numérica ou código sem espaço entre letras e números (ex.: RAO02-SP).
+    Essa chave permite aceitar o nome correto mesmo com essas diferenças visuais.
+    """
+    text = str(value or "")
+    text = text.replace("\u00a0", " ").replace("\u2007", " ").replace("\u202f", " ")
+    text = text.replace("–", "-").replace("—", "-").replace("−", "-")
+    text = "".join(ch for ch in unicodedata.normalize("NFD", text) if unicodedata.category(ch) != "Mn")
+    text = text.upper().strip()
+    text = re.sub(r"[^A-Z0-9]+", " ", text)
+    text = re.sub(r"([A-Z])([0-9])", r"\1 \2", text)
+    text = re.sub(r"([0-9])([A-Z])", r"\1 \2", text)
+    return " ".join(text.split())
+
+
+def build_unit_lookup(options: list[str]) -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for option in options:
+        key = normalize_unit_lookup_key(option)
+        if key and key not in lookup:
+            lookup[key] = option
+        compact_key = key.replace(" ", "")
+        if compact_key and compact_key not in lookup:
+            lookup[compact_key] = option
+    return lookup
+
+
+BASE_UNIT_OPTION_LOOKUP = build_unit_lookup(BASE_UNIT_OPTIONS)
+FRANCHISE_UNIT_OPTION_LOOKUP = build_unit_lookup(FRANCHISE_UNIT_OPTIONS)
+BASE_FRANCHISE_OPTION_LOOKUP = build_unit_lookup(BASE_FRANCHISE_OPTIONS)
+
+
+def canonical_unit_option(value: Any, options: list[str], lookup: dict[str, str]) -> str:
+    raw = str(value or "").strip().replace("\u00a0", " ").replace("\u2007", " ").replace("\u202f", " ")
+    raw = re.sub(r"\s+", " ", raw).strip()
+    if not raw:
+        return ""
+    if raw in set(options):
+        return raw
+    key = normalize_unit_lookup_key(raw)
+    if key in lookup:
+        return lookup[key]
+    compact_key = key.replace(" ", "")
+    if compact_key in lookup:
+        return lookup[compact_key]
+    # Fallback: comparação por containment apenas quando não gera ambiguidade.
+    matches = [option for option in options if key and (key == normalize_unit_lookup_key(option) or key in normalize_unit_lookup_key(option) or normalize_unit_lookup_key(option) in key)]
+    unique_matches = list(dict.fromkeys(matches))
+    if len(unique_matches) == 1:
+        return unique_matches[0]
+    return ""
 ASSET_REGIONAL_OPTIONS = ["MG", "SPN", "Matriz"]
 ASSET_REGIONAL_OPTION_SET = {option.upper() for option in ASSET_REGIONAL_OPTIONS}
 ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
@@ -571,6 +628,49 @@ def db_connect():
     return conn
 
 
+# ---------- Otimização Cloudflare D1 / limite de linhas lidas ----------
+
+def low_row_read_mode() -> bool:
+    """Reduz consultas grandes no Cloudflare D1 para preservar o limite mensal de Rows read."""
+    flag = os.getenv("D1_LOW_ROW_READ", "").strip().lower()
+    if flag in {"0", "false", "no", "nao", "não", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "sim", "on"}:
+        return True
+    return using_cloudflare_d1()
+
+
+def bounded_int(value: Any, default: int, minimum: int = 1, maximum: int = 500) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+def list_page_limit(default: int = 120, maximum: int = 300) -> int:
+    env_default = bounded_int(os.getenv("D1_LIST_PAGE_SIZE"), default, 25, maximum)
+    return bounded_int(request.args.get("limit"), env_default, 25, maximum)
+
+
+def api_page_limit(default: int = 120, maximum: int = 250) -> int:
+    env_default = bounded_int(os.getenv("D1_API_PAGE_SIZE"), default, 25, maximum)
+    return bounded_int(request.args.get("limit"), env_default, 25, maximum)
+
+
+def exact_counts_enabled() -> bool:
+    flag = os.getenv("D1_EXACT_COUNTS", "").strip().lower()
+    if flag in {"1", "true", "yes", "sim", "on"}:
+        return True
+    if flag in {"0", "false", "no", "nao", "não", "off"}:
+        return False
+    return not low_row_read_mode()
+
+
+def like_term(value: str) -> str:
+    return f"%{str(value or '').strip()}%"
+
+
 def get_cursor_lastrowid(cursor: Any) -> int | None:
     """Retorna o ID do último INSERT de forma segura para runtime e Pylance."""
     value = cursor.lastrowid
@@ -657,11 +757,11 @@ def synthetic_email_for_username(username: str) -> str:
 
 
 def valid_organization_for_role(organization_name: str, role: str) -> bool:
-    organization_name = (organization_name or "").strip()
+    organization_name = str(organization_name or "").strip()
     if role == "base":
-        return organization_name in BASE_UNIT_OPTION_SET
+        return bool(canonical_unit_option(organization_name, BASE_UNIT_OPTIONS, BASE_UNIT_OPTION_LOOKUP))
     if role == "franchise":
-        return organization_name in FRANCHISE_UNIT_OPTION_SET
+        return bool(canonical_unit_option(organization_name, FRANCHISE_UNIT_OPTIONS, FRANCHISE_UNIT_OPTION_LOOKUP))
     if role == "admin":
         return bool(organization_name) and len(organization_name) <= 120
     return False
@@ -734,6 +834,7 @@ def validate_user_profile_fields(
     franchise_name: Any = "",
     franchise_number: Any = "",
     cnpj: Any = "",
+    strict_base: bool = True,
 ) -> tuple[str, str, str, str]:
     organization = str(organization_name or "").strip()
     franchise = str(franchise_name or "").strip()
@@ -741,9 +842,16 @@ def validate_user_profile_fields(
     cnpj_digits = normalize_cnpj(cnpj)
 
     if role == "base":
-        if organization not in BASE_UNIT_OPTION_SET:
+        canonical_base = canonical_unit_option(organization, BASE_UNIT_OPTIONS, BASE_UNIT_OPTION_LOOKUP)
+        if canonical_base:
+            return canonical_base, "", "", ""
+        if not organization:
+            raise ValueError("Informe o nome da base.")
+        if strict_base:
             raise ValueError("Selecione uma base válida.")
-        return organization, "", "", ""
+        # Na importação em massa, não bloqueia bases oficiais ainda não cadastradas
+        # na lista local do app. Salva o texto limpo exatamente como veio da planilha.
+        return organization[:160], "", "", ""
 
     if role == "franchise":
         if not franchise:
@@ -1192,6 +1300,16 @@ def init_db() -> None:
                 UNIQUE(user_id, page_key),
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+            CREATE INDEX IF NOT EXISTS idx_users_status_created ON users(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_products_catalog_active_name ON products(catalog_archived, active, name);
+            CREATE INDEX IF NOT EXISTS idx_products_catalog_category ON products(catalog_archived, category);
+            CREATE INDEX IF NOT EXISTS idx_products_stock ON products(catalog_archived, stock_quantity);
+            CREATE INDEX IF NOT EXISTS idx_supply_requests_status_created ON supply_requests(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_supply_requests_user_created ON supply_requests(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_request_items_request ON request_items(request_id);
+            CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
             """
         )
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
@@ -1501,7 +1619,13 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
 
 
 def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
-    sql = "SELECT * FROM supply_requests"
+    if limit is None and low_row_read_mode():
+        limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), 120, 25, 300)
+    sql = """
+        SELECT id, user_id, status, user_note, admin_note, people_count,
+               created_at, approved_at, approved_by_id, pdf_key
+          FROM supply_requests
+    """
     params: list[Any] = []
     clauses: list[str] = []
     if status:
@@ -1524,13 +1648,19 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
 # ---------- Helpers ----------
 
 def current_user() -> User | None:
+    if has_request_context() and hasattr(g, "_current_user_cached"):
+        return getattr(g, "_current_user_cached")
     uid = session.get("user_id")
     if uid is None:
-        return None
-    try:
-        return get_user(int(uid))
-    except (TypeError, ValueError):
-        return None
+        user = None
+    else:
+        try:
+            user = get_user(int(uid))
+        except (TypeError, ValueError):
+            user = None
+    if has_request_context():
+        g._current_user_cached = user
+    return user
 
 
 def require_current_user() -> User:
@@ -1542,14 +1672,16 @@ def require_current_user() -> User:
 
 @app.context_processor
 def inject_globals():
+    user = current_user()
+    allowed_pages = get_user_page_permissions(user)
     return {
-        "current_user": current_user(),
+        "current_user": user,
         "format_brl": format_brl,
         "status_label": status_label,
         "stock_status_class": stock_status_class,
         "stock_status_label": stock_status_label,
-        "can_access": lambda page_key: user_has_page_access(current_user(), page_key),
-        "can_access_any": lambda page_keys: user_has_any_page_access(current_user(), page_keys),
+        "can_access": lambda page_key: page_key in allowed_pages,
+        "can_access_any": lambda page_keys: any(page_key in allowed_pages for page_key in page_keys),
         "page_permission_options": PAGE_PERMISSION_OPTIONS,
         "base_franchise_options": BASE_FRANCHISE_OPTIONS,
         "base_unit_options": BASE_UNIT_OPTIONS,
@@ -1643,18 +1775,23 @@ def permission_options_for_role(role: str) -> list[dict[str, Any]]:
 def get_user_page_permissions(user: User | None) -> set[str]:
     if user is None:
         return set()
+    cache_key = f"_page_permissions_{user.id}"
+    if has_request_context() and hasattr(g, cache_key):
+        return set(getattr(g, cache_key))
     if user.role == "admin":
-        return default_page_keys_for_role("admin")
-    if not user.page_permissions_configured:
-        return default_page_keys_for_role(user.role)
-    with db_connect() as conn:
-        rows = conn.execute(
-            "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
-            (user.id,),
-        ).fetchall()
-    allowed = {str(row["page_key"]) for row in rows}
-    valid_for_role = default_page_keys_for_role(user.role)
-    return allowed & valid_for_role
+        allowed = default_page_keys_for_role("admin")
+    elif not user.page_permissions_configured:
+        allowed = default_page_keys_for_role(user.role)
+    else:
+        with db_connect() as conn:
+            rows = conn.execute(
+                "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
+                (user.id,),
+            ).fetchall()
+        allowed = {str(row["page_key"]) for row in rows} & default_page_keys_for_role(user.role)
+    if has_request_context():
+        setattr(g, cache_key, set(allowed))
+    return set(allowed)
 
 
 def user_has_page_access(user: User | None, page_key: str) -> bool:
@@ -4013,8 +4150,8 @@ USER_IMPORT_HEADER_ALIASES = {
     "password": ["Senha", "Senha inicial", "Password"],
     "role": ["Tipo de acesso", "Perfil", "Tipo", "Acesso"],
     "status": ["Status do cadastro", "Status", "Situação", "Situacao"],
-    "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia"],
-    "franchise_name": ["Nome da franquia", "Franquia"],
+    "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia", "Base/Franquia", "Unidade / Franquia", "Unidade/Franquia", "Organização", "Organizacao", "Base ou franquia"],
+    "franchise_name": ["Nome da franquia", "Franquia", "Base/Franquia", "Unidade / Franquia", "Unidade/Franquia", "Nome da base/franquia", "Base ou franquia"],
     "franchise_number": ["Telefone", "Número de telefone", "Numero de telefone", "Telefone da franquia", "Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
     "cnpj": ["CNPJ", "CNPJ da franquia"],
 }
@@ -4103,12 +4240,20 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
     if status is None:
         raise ValueError("status do cadastro inválido")
 
+    base_value = get_user_import_value(row_values, header_map, "base_name")
+    franchise_value = get_user_import_value(row_values, header_map, "franchise_name")
+    # Planilhas antigas podem ter uma única coluna "Base/Franquia".
+    # Para franquia, usa essa coluna como fallback do nome da franquia.
+    if role == "franchise" and not clean_import_text(franchise_value) and clean_import_text(base_value):
+        franchise_value = base_value
+
     organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
         role,
-        organization_name=get_user_import_value(row_values, header_map, "base_name"),
-        franchise_name=get_user_import_value(row_values, header_map, "franchise_name"),
+        organization_name=base_value,
+        franchise_name=franchise_value,
         franchise_number=get_user_import_value(row_values, header_map, "franchise_number"),
         cnpj=get_user_import_value(row_values, header_map, "cnpj"),
+        strict_base=False,
     )
     return UserImportRecord(
         source_row=row_number,
@@ -4429,7 +4574,20 @@ def find_product_by_name(conn: Any, name: str) -> Product | None:
     product = row_to_product(row) if row is not None else None
     if product is not None:
         return product
-    # Fallback tolerante para diferenças de caixa/acentuação.
+    # Fallback sem varrer a tabela inteira no Cloudflare D1.
+    row = conn.execute(
+        "SELECT * FROM products WHERE catalog_archived = 0 AND lower(name) = lower(?) LIMIT 1",
+        (cleaned_name,),
+    ).fetchone()
+    product = row_to_product(row) if row is not None else None
+    if product is not None:
+        return product
+
+    # No D1, varrer todos os produtos a cada linha da planilha consome o limite de Rows read.
+    # Mantém o fallback mais pesado apenas no SQLite/local.
+    if low_row_read_mode():
+        return None
+
     key = normalize_product_lookup_key(cleaned_name)
     rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0").fetchall()
     for row in rows:
@@ -4848,7 +5006,15 @@ def api_products():
     q = request.args.get("q", "").strip()
     category = request.args.get("category", "").strip()
     sort = request.args.get("sort", "name").strip().lower()
-    sql = "SELECT * FROM products WHERE active = 1 AND catalog_archived = 0"
+    limit = api_page_limit(default=120, maximum=250)
+    sql = """
+        SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
+               unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+               limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+               active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+          FROM products
+         WHERE active = 1 AND catalog_archived = 0
+    """
     params: list[Any] = []
     if not user.is_admin:
         sql += " AND stock_quantity > 0 AND COALESCE(internal, 0) = 0"
@@ -4857,9 +5023,9 @@ def api_products():
     elif user.role == "franchise":
         sql += " AND visible_franchise = 1"
     if q:
-        like = f"%{q}%"
-        sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ?)"
-        params.extend([like, like, like])
+        like = like_term(q)
+        sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)"
+        params.extend([like, like, like, like])
     if category:
         sql += " AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))"
         params.append(category)
@@ -4870,6 +5036,8 @@ def api_products():
         "price_desc": "price_cents DESC, name COLLATE NOCASE ASC",
     }
     sql += " ORDER BY " + sort_map.get(sort, sort_map["name"])
+    sql += " LIMIT ?"
+    params.append(limit)
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
@@ -5029,16 +5197,39 @@ def asset_pdf(asset_id: int):
 @page_access_required("admin_dashboard")
 def admin_dashboard():
     with db_connect() as conn:
-        counts = {
-            "users_pending": conn.execute("SELECT COUNT(*) AS total FROM users WHERE status = 'pending'").fetchone()["total"],
-            "requests_pending": conn.execute("SELECT COUNT(*) AS total FROM supply_requests WHERE status = 'pending'").fetchone()["total"],
-            "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-        }
-        low_rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 AND stock_quantity <= 20 ORDER BY stock_quantity ASC LIMIT 8").fetchall()
+        if exact_counts_enabled():
+            counts = {
+                "users_pending": conn.execute("SELECT COUNT(*) AS total FROM users WHERE status = 'pending'").fetchone()["total"],
+                "requests_pending": conn.execute("SELECT COUNT(*) AS total FROM supply_requests WHERE status = 'pending'").fetchone()["total"],
+                "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+                "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+            }
+        else:
+            user_pending_rows = conn.execute("SELECT id FROM users WHERE status = 'pending' ORDER BY id DESC LIMIT 50").fetchall()
+            request_pending_rows = conn.execute("SELECT id FROM supply_requests WHERE status = 'pending' ORDER BY id DESC LIMIT 50").fetchall()
+            product_rows = conn.execute("SELECT id, stock_quantity FROM products WHERE catalog_archived = 0 ORDER BY id DESC LIMIT 200").fetchall()
+            counts = {
+                "users_pending": len(user_pending_rows),
+                "requests_pending": len(request_pending_rows),
+                "products": len(product_rows),
+                "stock_total": sum(int(row["stock_quantity"] or 0) for row in product_rows),
+            }
+        low_rows = conn.execute(
+            """
+            SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
+                   unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+              FROM products
+             WHERE catalog_archived = 0 AND stock_quantity <= 20
+             ORDER BY stock_quantity ASC
+             LIMIT 8
+            """
+        ).fetchall()
     low_stock = [product for row in low_rows if (product := row_to_product(row)) is not None]
     latest_requests = list_supply_requests(limit=8)
     return render_template("admin/dashboard.html", counts=counts, low_stock=low_stock, latest_requests=latest_requests)
+
 
 
 @app.route("/admin/users")
@@ -5070,21 +5261,67 @@ def admin_users():
     if selected_sort not in sort_map:
         selected_sort = "newest"
 
-    # v102: a página de usuários carrega todos os registros e aplica busca/filtros/classificação
-    # instantaneamente no navegador, sem submit e sem recarregar a rota.
+    per_page = list_page_limit(default=120, maximum=300)
+    page = bounded_int(request.args.get("page"), 1, 1, 100000)
+    offset = (page - 1) * per_page
+
+    clauses: list[str] = []
     params: list[Any] = []
-    sql = "SELECT * FROM users"
-    sql += f" ORDER BY {order_clause}"
+    if selected_status:
+        clauses.append("status = ?")
+        params.append(selected_status)
+    if selected_role:
+        clauses.append("role = ?")
+        params.append(selected_role)
+    if search_query:
+        like = like_term(search_query)
+        clauses.append(
+            """(
+                responsible_name LIKE ?
+                OR username LIKE ?
+                OR organization_name LIKE ?
+                OR franchise_name LIKE ?
+                OR franchise_number LIKE ?
+                OR cnpj LIKE ?
+                OR role LIKE ?
+                OR status LIKE ?
+            )"""
+        )
+        params.extend([like, like, like, like, like, like, like, like])
+
+    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    sql = f"""
+        SELECT id, responsible_name, organization_name, franchise_name, franchise_number,
+               cnpj, username, email, password_hash, role, status, created_at,
+               updated_at, page_permissions_configured
+          FROM users
+          {where_sql}
+         ORDER BY {order_clause}
+         LIMIT ? OFFSET ?
+    """
 
     with db_connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
-        total_users = conn.execute("SELECT COUNT(*) AS total FROM users").fetchone()["total"]
-        status_rows = conn.execute("SELECT status, COUNT(*) AS total FROM users GROUP BY status").fetchall()
-        role_rows = conn.execute("SELECT role, COUNT(*) AS total FROM users GROUP BY role").fetchall()
+        rows = conn.execute(sql, [*params, per_page, offset]).fetchall()
+        if exact_counts_enabled():
+            total_users = conn.execute(f"SELECT COUNT(*) AS total FROM users{where_sql}", params).fetchone()["total"]
+            status_rows = conn.execute(f"SELECT status, COUNT(*) AS total FROM users{where_sql} GROUP BY status", params).fetchall()
+            role_rows = conn.execute(f"SELECT role, COUNT(*) AS total FROM users{where_sql} GROUP BY role", params).fetchall()
+        else:
+            total_users = len(rows)
+            status_rows = []
+            role_rows = []
 
     users = [user for row in rows if (user := row_to_user(row)) is not None]
-    status_counts = {row["status"]: int(row["total"] or 0) for row in status_rows}
-    role_counts = {row["role"]: int(row["total"] or 0) for row in role_rows}
+    if exact_counts_enabled():
+        status_counts = {row["status"]: int(row["total"] or 0) for row in status_rows}
+        role_counts = {row["role"]: int(row["total"] or 0) for row in role_rows}
+    else:
+        status_counts: dict[str, int] = {}
+        role_counts: dict[str, int] = {}
+        for user in users:
+            status_counts[user.status] = status_counts.get(user.status, 0) + 1
+            role_counts[user.role] = role_counts.get(user.role, 0) + 1
+
     user_counts = {
         "shown": len(users),
         "total": int(total_users or 0),
@@ -5094,12 +5331,17 @@ def admin_users():
         "admin": role_counts.get("admin", 0),
         "base": role_counts.get("base", 0),
         "franchise": role_counts.get("franchise", 0),
+        "page": page,
+        "limit": per_page,
+        "low_read": low_row_read_mode(),
     }
     user_filters = {
         "q": search_query,
         "status": selected_status,
         "role": selected_role,
         "sort": selected_sort,
+        "limit": per_page,
+        "page": page,
     }
     return render_template(
         "admin/users.html",
@@ -5178,11 +5420,59 @@ def admin_users_export():
         selected_role = ""
     search_query = (request.args.get("q", "") or "").strip()
     selected_sort = (request.args.get("sort", "newest") or "newest").strip().lower()
+    sort_map = {
+        "newest": "created_at DESC, id DESC",
+        "oldest": "created_at ASC, id ASC",
+        "responsible_asc": "responsible_name COLLATE NOCASE ASC, id DESC",
+        "responsible_desc": "responsible_name COLLATE NOCASE DESC, id DESC",
+        "username_asc": "username COLLATE NOCASE ASC, id DESC",
+        "username_desc": "username COLLATE NOCASE DESC, id DESC",
+        "role_asc": "role COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+        "unit_asc": "organization_name COLLATE NOCASE ASC, franchise_name COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+        "status_asc": "status COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC",
+    }
+    order_clause = sort_map.get(selected_sort, sort_map["newest"])
+    export_limit = bounded_int(request.args.get("limit"), int(os.getenv("D1_EXPORT_LIMIT", "500")), 50, 2000)
+
+    clauses: list[str] = []
+    params: list[Any] = []
+    if selected_status:
+        clauses.append("status = ?")
+        params.append(selected_status)
+    if selected_role:
+        clauses.append("role = ?")
+        params.append(selected_role)
+    if search_query:
+        like = like_term(search_query)
+        clauses.append(
+            """(
+                responsible_name LIKE ?
+                OR username LIKE ?
+                OR organization_name LIKE ?
+                OR franchise_name LIKE ?
+                OR franchise_number LIKE ?
+                OR cnpj LIKE ?
+                OR role LIKE ?
+                OR status LIKE ?
+            )"""
+        )
+        params.extend([like, like, like, like, like, like, like, like])
+    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
 
     with db_connect() as conn:
-        rows = conn.execute("SELECT * FROM users ORDER BY created_at DESC, id DESC").fetchall()
+        rows = conn.execute(
+            f"""
+            SELECT id, responsible_name, organization_name, franchise_name, franchise_number,
+                   cnpj, username, email, password_hash, role, status, created_at,
+                   updated_at, page_permissions_configured
+              FROM users
+              {where_sql}
+             ORDER BY {order_clause}
+             LIMIT ?
+            """,
+            [*params, export_limit],
+        ).fetchall()
     users = [user for row in rows if (user := row_to_user(row)) is not None]
-    users = filter_and_sort_users_for_export(users, search_query, selected_status, selected_role, selected_sort)
 
     workbook = Workbook()
     worksheet = workbook.active
@@ -5645,29 +5935,67 @@ def admin_products():
     if sort_filter not in {"default", "category", "category_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
         sort_filter = "default"
 
-    # Carrega o catálogo completo para os filtros funcionarem instantaneamente no navegador,
-    # sem depender de reload ou nova consulta no servidor.
-    sql = """
-        SELECT *
+    per_page = list_page_limit(default=120, maximum=300)
+    page = bounded_int(request.args.get("page"), 1, 1, 100000)
+    offset = (page - 1) * per_page
+
+    clauses = ["catalog_archived = 0"]
+    params: list[Any] = []
+    if status_filter == "active":
+        clauses.append("active = 1")
+    elif status_filter == "inactive":
+        clauses.append("active = 0")
+    if category_filter:
+        clauses.append("LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))")
+        params.append(category_filter)
+    if search:
+        like = like_term(search)
+        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)")
+        params.extend([like, like, like, like])
+
+    sort_map = {
+        "default": "active DESC, category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+        "category": "category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
+        "category_desc": "category COLLATE NOCASE DESC, name COLLATE NOCASE ASC",
+        "value_asc": "price_cents ASC, name COLLATE NOCASE ASC",
+        "value_desc": "price_cents DESC, name COLLATE NOCASE ASC",
+        "stock_asc": "stock_quantity ASC, name COLLATE NOCASE ASC",
+        "stock_desc": "stock_quantity DESC, name COLLATE NOCASE ASC",
+    }
+    where_sql = " WHERE " + " AND ".join(clauses)
+    sql = f"""
+        SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
+               unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+               limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+               active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
           FROM products
-         WHERE catalog_archived = 0
-         ORDER BY active DESC, category ASC, name ASC
+          {where_sql}
+         ORDER BY {sort_map.get(sort_filter, sort_map["default"])}
+         LIMIT ? OFFSET ?
     """
     with db_connect() as conn:
-        rows = conn.execute(sql).fetchall()
-        total_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"]
-        active_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 1").fetchone()["total"]
-        inactive_products = conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND active = 0").fetchone()["total"]
+        rows = conn.execute(sql, [*params, per_page, offset]).fetchall()
+        if exact_counts_enabled():
+            total_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql}", params).fetchone()["total"]
+            active_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 1", params).fetchone()["total"]
+            inactive_products = conn.execute(f"SELECT COUNT(*) AS total FROM products{where_sql} AND active = 0", params).fetchone()["total"]
+        else:
+            total_products = len(rows)
+            active_products = sum(1 for row in rows if int(row["active"] or 0) == 1)
+            inactive_products = sum(1 for row in rows if int(row["active"] or 0) == 0)
     products = [product for row in rows if (product := row_to_product(row)) is not None]
-    categories = sorted({(product.category or "").strip() for product in products if (product.category or "").strip()}, key=lambda value: value.casefold())
+    category_items = list_product_categories()
+    categories = [item["name"] for item in category_items]
     return render_template(
         "admin/products.html",
         products=products,
         product_categories_filter=categories,
-        product_categories_manage=list_product_categories(),
-        product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter},
-        product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products)},
+        product_categories_manage=category_items,
+        product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter, "limit": per_page, "page": page},
+        product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products), "page": page, "limit": per_page, "low_read": low_row_read_mode()},
     )
+
+
 
 
 
@@ -6503,7 +6831,19 @@ app.view_functions["admin_asset_new"] = admin_required(page_access_required("adm
 @page_access_required("admin_stock")
 def admin_stock():
     with db_connect() as conn:
-        product_rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 ORDER BY active DESC, category ASC, name ASC").fetchall()
+        product_rows = conn.execute(
+            """
+            SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
+                   unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+              FROM products
+             WHERE catalog_archived = 0
+             ORDER BY active DESC, category ASC, name ASC
+             LIMIT ?
+            """,
+            (bounded_int(os.getenv("D1_STOCK_PRODUCT_LIMIT"), 250 if low_row_read_mode() else 1000, 50, 1000),),
+        ).fetchall()
         movement_rows = conn.execute(
             """
             SELECT sm.*,
@@ -6520,12 +6860,20 @@ def admin_stock():
              LIMIT 200
             """
         ).fetchall()
-        totals = {
-            "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-            "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-            "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND min_stock IS NOT NULL AND stock_quantity <= min_stock").fetchone()["total"],
-            "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"],
-        }
+        if exact_counts_enabled():
+            totals = {
+                "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+                "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
+                "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND min_stock IS NOT NULL AND stock_quantity <= min_stock").fetchone()["total"],
+                "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"],
+            }
+        else:
+            totals = {
+                "products": len(product_rows),
+                "stock_total": sum(int(row["stock_quantity"] or 0) for row in product_rows),
+                "critical": sum(1 for row in product_rows if row["min_stock"] is not None and int(row["stock_quantity"] or 0) <= int(row["min_stock"] or 0)),
+                "movements": len(movement_rows),
+            }
 
     products = [product for row in product_rows if (product := row_to_product(row)) is not None]
 
