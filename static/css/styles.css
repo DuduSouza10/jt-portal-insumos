@@ -13298,21 +13298,6 @@ html[data-theme="dark"] body .nav-header .nav-dropdown:is(.active, .open, :hover
   display: none !important;
 }
 
-.product-admin-card.no-import-card .product-filter-card,
-.users-table-card.no-import-card .user-filter-card {
-  width: 100% !important;
-  margin-top: 18px !important;
-  margin-bottom: 18px !important;
-}
-
-.product-admin-card.no-import-card .product-filter-main {
-  grid-template-columns: minmax(280px, 1.9fr) minmax(170px, .85fr) minmax(190px, .95fr) minmax(140px, .7fr) auto !important;
-}
-
-.users-table-card.no-import-card .user-filter-main {
-  grid-template-columns: minmax(250px, 1.65fr) minmax(145px, .7fr) minmax(145px, .7fr) minmax(190px, .9fr) minmax(130px, .58fr) auto !important;
-}
-
 .material-entry-grid.no-import-card {
   grid-template-columns: minmax(0, 1fr) !important;
 }
@@ -13338,5 +13323,107 @@ html[data-theme="dark"] body .nav-header .nav-dropdown:is(.active, .open, :hover
   .product-admin-card.no-import-card .product-filter-main,
   .users-table-card.no-import-card .user-filter-main {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* v168 - layout dos cards restantes sem bloco de importação */
+.product-admin-card.no-import-card .product-filter-card,
+.users-table-card.no-import-card .user-filter-card {
+  width: 100% !important;
+  margin: 18px 0 20px !important;
+  padding: 18px !important;
+}
+
+.product-admin-card.no-import-card .product-filter-main,
+.users-table-card.no-import-card .user-filter-main {
+  gap: 12px !important;
+  align-items: end !important;
+}
+
+.product-admin-card.no-import-card .product-filter-main {
+  grid-template-columns: minmax(280px, 1.45fr) minmax(135px, .62fr) minmax(170px, .78fr) minmax(150px, .70fr) minmax(120px, .52fr) !important;
+}
+
+.users-table-card.no-import-card .user-filter-main {
+  grid-template-columns: minmax(260px, 1.35fr) minmax(135px, .58fr) minmax(135px, .58fr) minmax(170px, .74fr) minmax(125px, .52fr) !important;
+}
+
+.product-admin-card.no-import-card .product-filter-main > *,
+.users-table-card.no-import-card .user-filter-main > * {
+  min-width: 0 !important;
+  grid-column: auto !important;
+}
+
+.product-admin-card.no-import-card .product-filter-search,
+.users-table-card.no-import-card .user-filter-search {
+  grid-column: auto !important;
+}
+
+.product-admin-card.no-import-card .product-filter-actions,
+.users-table-card.no-import-card .user-filter-actions {
+  grid-column: 1 / -1 !important;
+  justify-content: flex-end !important;
+  min-height: 44px !important;
+  margin-top: 2px !important;
+}
+
+.product-admin-card.no-import-card .product-filter-actions .btn,
+.users-table-card.no-import-card .user-filter-actions .btn {
+  min-height: 44px !important;
+  padding-inline: 18px !important;
+}
+
+.product-admin-card.no-import-card .product-filter-summary,
+.users-table-card.no-import-card .user-filter-summary {
+  justify-content: flex-start !important;
+  margin-top: 14px !important;
+  padding-top: 14px !important;
+}
+
+@media (max-width: 1280px) {
+  .product-admin-card.no-import-card .product-filter-main,
+  .users-table-card.no-import-card .user-filter-main {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-search,
+  .users-table-card.no-import-card .user-filter-search {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .product-admin-card.no-import-card .product-filter-main,
+  .users-table-card.no-import-card .user-filter-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-search,
+  .users-table-card.no-import-card .user-filter-search,
+  .product-admin-card.no-import-card .product-filter-actions,
+  .users-table-card.no-import-card .user-filter-actions {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .product-admin-card.no-import-card .product-filter-main,
+  .users-table-card.no-import-card .user-filter-main {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-search,
+  .users-table-card.no-import-card .user-filter-search {
+    grid-column: 1 / -1 !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-actions,
+  .users-table-card.no-import-card .user-filter-actions {
+    justify-content: stretch !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-actions .btn,
+  .users-table-card.no-import-card .user-filter-actions .btn {
+    width: 100% !important;
   }
 }
