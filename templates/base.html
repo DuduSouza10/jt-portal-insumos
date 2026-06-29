@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=164">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=167">
 </head>
 <body>
   <div class="bg-orb orb-one"></div>
@@ -52,7 +52,9 @@
                 <div class="nav-drop-menu" role="menu">
                   <a role="menuitem" href="{{ url_for('admin_assets') }}" class="{{ 'active' if request.endpoint in ['admin_assets','admin_asset_new'] else '' }}">Gestão de Ativos</a>
                   <a role="menuitem" href="{{ url_for('admin_stock') }}" class="{{ 'active' if request.endpoint == 'admin_stock' else '' }}">Gestão de Insumos</a>
-                  <a role="menuitem" href="{{ url_for('admin_material_entries') }}" class="{{ 'active' if request.endpoint == 'admin_material_entries' else '' }}">Entrada de Materiais</a>
+                  {% if can_do('stock_material_entries') %}
+                    <a role="menuitem" href="{{ url_for('admin_material_entries') }}" class="{{ 'active' if request.endpoint == 'admin_material_entries' else '' }}">Entrada de Materiais</a>
+                  {% endif %}
                 </div>
               </div>
             {% endif %}
@@ -278,7 +280,7 @@
       });
     });
   </script>
-  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=161"></script>
+  <script src="{{ url_for('static', filename='js/i18n.js') }}?v=165"></script>
   <script src="{{ url_for('static', filename='js/theme.js') }}?v=145"></script>
   <script src="{{ url_for('static', filename='js/file-inputs.js') }}?v=149"></script>
   <script>

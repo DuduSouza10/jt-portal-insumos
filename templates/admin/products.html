@@ -3,7 +3,7 @@
 {% block page_title %}Produtos e estoque{% endblock %}
 {% block page_subtitle %}Cadastre insumos, valores, limites e parâmetros de estoque mínimo/máximo.{% endblock %}
 {% block content %}
-<div class="card table-card">
+<div class="card table-card product-admin-card {{ 'has-import-card' if can_do('products_import') else 'no-import-card' }}">
   <div class="section-head product-tools-head">
     <h2>Produtos cadastrados</h2>
     <div class="product-tools">

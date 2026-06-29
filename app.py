@@ -906,6 +906,7 @@ def validate_user_profile_fields(
     franchise_number: Any = "",
     cnpj: Any = "",
     strict_base: bool = True,
+    allow_blank_profile: bool = False,
 ) -> tuple[str, str, str, str]:
     organization = str(organization_name or "").strip()
     franchise = str(franchise_name or "").strip()
@@ -917,6 +918,8 @@ def validate_user_profile_fields(
         if canonical_base:
             return canonical_base, "", "", ""
         if not organization:
+            if allow_blank_profile:
+                return "", "", "", ""
             raise ValueError("Informe o nome da base.")
         if strict_base:
             raise ValueError("Selecione uma base válida.")
@@ -926,6 +929,8 @@ def validate_user_profile_fields(
 
     if role == "franchise":
         if not franchise:
+            if allow_blank_profile:
+                return "", "", phone_digits, cnpj_digits
             raise ValueError("Informe o nome da franquia.")
         if phone_digits and len(phone_digits) not in {10, 11}:
             raise ValueError("Informe um telefone válido com DDD, usando apenas números.")
@@ -935,7 +940,7 @@ def validate_user_profile_fields(
         return franchise_clean, franchise_clean, phone_digits, cnpj_digits
 
     if role in {"admin", "dev"} or get_custom_access_role(role) is not None:
-        setor = organization[:160] if organization else ADMIN_ORGANIZATION_NAME
+        setor = organization[:160] if organization else ("" if allow_blank_profile else ADMIN_ORGANIZATION_NAME)
         return setor, "", phone_digits, cnpj_digits
 
     raise ValueError("Tipo de acesso inválido.")
@@ -4720,7 +4725,12 @@ def generate_user_import_password_hash(password: str) -> str:
     return generate_password_hash(str(password or ""), method="pbkdf2:sha256:20000", salt_length=12)
 
 
-def parse_user_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> UserImportRecord:
+def parse_user_import_record(
+    row_number: int,
+    row_values: list[Any],
+    header_map: dict[str, int],
+    replace_mode: bool = False,
+) -> UserImportRecord:
     responsible_name = clean_import_text(get_user_import_value(row_values, header_map, "responsible_name"))
     username = normalize_username(clean_import_text(get_user_import_value(row_values, header_map, "username")))
     password = clean_import_text(get_user_import_value(row_values, header_map, "password"))
@@ -4752,6 +4762,7 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
         franchise_number=get_user_import_value(row_values, header_map, "franchise_number"),
         cnpj=get_user_import_value(row_values, header_map, "cnpj"),
         strict_base=False,
+        allow_blank_profile=replace_mode,
     )
     return UserImportRecord(
         source_row=row_number,
@@ -4936,7 +4947,7 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
                 errors.append(f"limite de {max_import_rows} linhas atingido; divida a planilha para importar o restante")
                 break
             try:
-                record = parse_user_import_record(row_number, row_values, header_map)
+                record = parse_user_import_record(row_number, row_values, header_map, replace_mode=(import_mode == "replace"))
                 if record.role == "dev" and current_user_role != "dev":
                     raise ValueError("somente usuário Dev pode importar usuários com tipo Dev")
                 if record.role not in STATIC_ROLE_KEYS and current_user_role != "dev":
@@ -7372,11 +7383,10 @@ def admin_requests_attended():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries():
+    if not user_has_action_access(current_user(), "stock_material_entries"):
+        flash("Seu tipo de acesso não pode acessar entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
     if request.method == "POST":
-        denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode registrar entrada de materiais.", "admin_material_entries")
-        if denied:
-            return denied
-
         item_name = (request.form.get("item_name") or "").strip()
         quantity = parse_required_positive_int(request.form.get("quantity")) or 0
         unit_price_cents = parse_money_to_cents(request.form.get("unit_price"))
@@ -7437,9 +7447,9 @@ def admin_material_entries():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_template():
-    denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode baixar modelo de entrada de materiais.", "admin_material_entries")
-    if denied:
-        return denied
+    if not user_has_action_access(current_user(), "stock_material_entries"):
+        flash("Seu tipo de acesso não pode baixar modelo de entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Entrada de Materiais"
@@ -7473,9 +7483,9 @@ def admin_material_entries_template():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_import():
-    denied = require_action_permission("stock_material_entries", "Seu tipo de acesso não pode importar entrada de materiais.", "admin_material_entries")
-    if denied:
-        return denied
+    if not user_has_action_access(current_user(), "stock_material_entries"):
+        flash("Seu tipo de acesso não pode importar entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de entrada de materiais.", "warning")
@@ -7507,6 +7517,9 @@ def admin_material_entries_import():
 @admin_required
 @page_access_required("admin_stock")
 def admin_material_entries_report():
+    if not user_has_action_access(current_user(), "stock_material_entries"):
+        flash("Seu tipo de acesso não pode acessar entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
     denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar relatórios de entrada.", "admin_material_entries")
     if denied:
         return denied

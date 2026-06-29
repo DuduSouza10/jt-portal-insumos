@@ -3,7 +3,7 @@
 {% block page_title %}Cadastro de usuários{% endblock %}
 {% block page_subtitle %}Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.{% endblock %}
 {% block content %}
-<div class="card table-card users-table-card">
+<div class="card table-card users-table-card {{ 'has-import-card' if can_do('users_import_export') else 'no-import-card' }}">
   <div class="section-head user-tools-head">
     <div class="tabs user-status-tabs" data-user-status-tabs>
       <button class="tab {{ 'active' if selected_status == '' else '' }}" type="button" data-user-status-tab="">Todos</button>
@@ -105,7 +105,7 @@
         <input type="radio" name="import_mode" value="replace">
         <span>
           <strong>Substituir cadastros</strong>
-          <small>Atualiza a planilha e recusa cadastros que não estiverem nela, exceto o usuário logado.</small>
+          <small>Usa a planilha como fonte final: campos vazios limpam dados antigos e cadastros fora dela são recusados, exceto o usuário logado.</small>
         </span>
       </label>
     </fieldset>
@@ -259,7 +259,7 @@
     userImportForm.addEventListener('submit', function (event) {
       const selectedMode = userImportForm.querySelector('input[name="import_mode"]:checked');
       if (selectedMode && selectedMode.value === 'replace') {
-        const message = 'Substituir cadastros? Usuários que não estiverem na planilha serão recusados, exceto o usuário logado.';
+        const message = 'Substituir cadastros? Campos vazios na planilha limparão dados antigos. Usuários que não estiverem na planilha serão recusados, exceto o usuário logado.';
         const confirmed = window.confirm(window.jtText ? window.jtText(message) : message);
         if (!confirmed) event.preventDefault();
       }

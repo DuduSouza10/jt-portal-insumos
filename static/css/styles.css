@@ -13181,3 +13181,162 @@ html[data-theme="dark"] body .nav-header .nav-dropdown:is(.active, .open, :hover
   fill: currentColor !important;
   stroke: currentColor !important;
 }
+
+/* v166 - Entrada de Materiais responsiva */
+.material-entry-grid,
+.material-entry-grid > *,
+.material-side-panel,
+.material-import-actions,
+.material-import-form,
+.material-side-panel .file-picker-shell {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.material-side-panel {
+  width: 100% !important;
+}
+
+.material-import-actions {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 14px !important;
+  overflow: hidden !important;
+}
+
+.material-import-actions > .btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+.material-side-panel .material-import-form {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+.material-side-panel .material-import-form > .enhanced-file-input {
+  min-width: 0 !important;
+}
+
+.material-side-panel .material-import-form > .file-picker-shell {
+  width: 100% !important;
+  min-width: 0 !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+.material-side-panel .material-import-form .file-picker-name {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.material-side-panel .material-import-form .file-picker-actions {
+  min-width: 0 !important;
+  flex-wrap: nowrap !important;
+}
+
+.material-side-panel .material-import-form .file-picker-button {
+  max-width: 100% !important;
+  white-space: nowrap !important;
+}
+
+.material-side-panel .material-import-form > .btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  align-self: stretch !important;
+  justify-content: center !important;
+  padding-inline: 16px !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+@media (max-width: 1100px) {
+  .material-entry-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .material-side-panel .material-import-form > .file-picker-shell {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 12px !important;
+  }
+
+  .material-side-panel .material-import-form .file-picker-actions {
+    width: 100% !important;
+    justify-content: stretch !important;
+  }
+
+  .material-side-panel .material-import-form .file-picker-button {
+    flex: 1 1 auto !important;
+  }
+}
+
+/* v167 - cards de importação controlados por permissão */
+.product-admin-card.no-import-card .product-import-form,
+.users-table-card.no-import-card .user-import-form,
+.material-entry-grid.no-import-card .import-permission-card {
+  display: none !important;
+}
+
+.product-tools:empty,
+.user-tools:empty {
+  display: none !important;
+}
+
+.product-admin-card.no-import-card .product-filter-card,
+.users-table-card.no-import-card .user-filter-card {
+  width: 100% !important;
+  margin-top: 18px !important;
+  margin-bottom: 18px !important;
+}
+
+.product-admin-card.no-import-card .product-filter-main {
+  grid-template-columns: minmax(280px, 1.9fr) minmax(170px, .85fr) minmax(190px, .95fr) minmax(140px, .7fr) auto !important;
+}
+
+.users-table-card.no-import-card .user-filter-main {
+  grid-template-columns: minmax(250px, 1.65fr) minmax(145px, .7fr) minmax(145px, .7fr) minmax(190px, .9fr) minmax(130px, .58fr) auto !important;
+}
+
+.material-entry-grid.no-import-card {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.material-entry-grid.no-import-card .material-entry-form {
+  width: 100% !important;
+}
+
+@media (max-width: 1280px) {
+  .product-admin-card.no-import-card .product-filter-main,
+  .users-table-card.no-import-card .user-filter-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .product-admin-card.no-import-card .product-filter-actions,
+  .users-table-card.no-import-card .user-filter-actions {
+    grid-column: 1 / -1 !important;
+    justify-content: flex-start !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .product-admin-card.no-import-card .product-filter-main,
+  .users-table-card.no-import-card .user-filter-main {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
