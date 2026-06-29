@@ -1783,14 +1783,32 @@ def can_bootstrap_dev_role(user: User | None) -> bool:
 def dev_password_is_valid(value: Any, conn: Any | None = None) -> bool:
     return str(value or "").strip() == get_dev_access_password(conn)
 
+def safe_local_redirect_target(value: Any, fallback_endpoint: str, **fallback_values: Any) -> str:
+    fallback = url_for(fallback_endpoint, **fallback_values)
+    target = str(value or "").strip()
+    if not target:
+        return fallback
+    if target.startswith("//") or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", target):
+        return fallback
+    if not target.startswith("/"):
+        return fallback
+    return target
+
+def return_target(default_endpoint: str, **fallback_values: Any) -> str:
+    target = request.form.get("return_to") or request.args.get("return_to")
+    return safe_local_redirect_target(target, default_endpoint, **fallback_values)
+
+def redirect_to_return(default_endpoint: str, **fallback_values: Any) -> Any:
+    return redirect(return_target(default_endpoint, **fallback_values))
+
 def can_change_admin_role(current: User | None, target: User | None = None) -> bool:
     return can_manage_dev_roles(current)
 
 def can_assign_dev_role(current: User | None, supplied_password: Any, conn: Any | None = None) -> bool:
-    if not dev_password_is_valid(supplied_password, conn):
-        return False
     if can_manage_dev_roles(current):
         return True
+    if not dev_password_is_valid(supplied_password, conn):
+        return False
     return bool(current and current.is_admin and current.is_approved and not dev_user_exists(conn))
 
 def allowed_role_options_for_editor(current: User | None, target: User | None = None) -> list[str]:
@@ -1830,15 +1848,14 @@ def safe_role_for_update(current: User, target: User | None, requested_role: str
 def can_edit_dev_password(current: User | None) -> bool:
     return can_manage_dev_roles(current)
 
-def maybe_update_dev_password_from_form(conn: Any, current: User, form: Any) -> str | None:
+def maybe_update_dev_password_from_form(conn: Any, current: User, form: Any, target: User | None = None) -> str | None:
     new_password = str(form.get("new_dev_password", "") or "").strip()
     if not new_password:
         return None
     if not can_edit_dev_password(current):
         return "Somente usuários Dev podem alterar a senha de autorização Dev."
-    current_password = form.get("dev_password", "")
-    if not dev_password_is_valid(current_password, conn):
-        return "Informe a senha Dev atual para alterar a senha de autorização."
+    if target is None or target.id != current.id or not current.is_dev:
+        return "A senha de autorização Dev só pode ser alterada pelo próprio usuário Dev."
     set_dev_access_password(conn, new_password)
     return None
 
@@ -2071,6 +2088,25 @@ def custom_access_role_key(value: Any) -> str:
     if slug in STATIC_ROLE_KEYS:
         slug = f"personalizado_{slug}"
     return f"custom_{slug}"[:80].rstrip("_")
+
+
+def editable_custom_access_role_key(value: Any, fallback: Any = "") -> str:
+    raw = normalize_header(str(value or fallback or "")).replace("_", " ").strip()
+    slug = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    if slug.startswith("custom_") and len(slug) > len("custom_"):
+        slug = slug[:80].rstrip("_")
+    if not slug:
+        slug = "tipo"
+    if slug in STATIC_ROLE_KEYS:
+        slug = f"personalizado_{slug}"
+    return slug[:80].rstrip("_")
+
+
+def display_access_role_key(role_key: Any) -> str:
+    key = str(role_key or "").strip()
+    if key.startswith("custom_") and len(key) > len("custom_"):
+        return key[len("custom_"):]
+    return key
 
 
 def parse_role_permissions(value: Any) -> list[str]:
@@ -6218,16 +6254,16 @@ def admin_users_import():
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de usuários.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
     if not uploaded.filename.lower().endswith(".xlsx"):
         flash("Importe apenas arquivos .xlsx.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
 
     try:
         uploaded_bytes = uploaded.read()
         if not uploaded_bytes:
             flash("A planilha enviada está vazia.", "warning")
-            return redirect(url_for("admin_users"))
+            return redirect_to_return("admin_users")
         import_mode = (request.form.get("import_mode") or "merge").strip().lower()
         if import_mode not in {"merge", "replace"}:
             import_mode = "merge"
@@ -6265,7 +6301,7 @@ def admin_users_import():
     except Exception as exc:
         app.logger.exception("Falha ao importar usuários")
         flash(f"Não consegui importar a planilha. Erro tratado: {type(exc).__name__}. Veja os logs se continuar acontecendo.", "danger")
-    return redirect(url_for("admin_users"))
+    return redirect_to_return("admin_users")
 
 
 @app.route("/admin/users/new", methods=["GET", "POST"])
@@ -6286,7 +6322,7 @@ def admin_user_new():
         role_warning = None
         with db_connect() as role_conn:
             role, role_warning = safe_role_for_update(current, None, requested_role, request.form.get("dev_password", ""), role_conn)
-            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form)
+            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form, None)
             if password_warning:
                 role_conn.rollback()
                 flash(password_warning, "warning")
@@ -6356,7 +6392,7 @@ def admin_user_new():
             conn.commit()
 
         flash("Usuário adicionado com sucesso.", "success")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
 
     return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"), allowed_role_options=allowed_role_options_for_editor(require_current_user()), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
 
@@ -6382,7 +6418,7 @@ def admin_user_edit(user_id: int):
         role_warning = None
         with db_connect() as role_conn:
             role, role_warning = safe_role_for_update(current, target, requested_role, request.form.get("dev_password", ""), role_conn)
-            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form)
+            password_warning = maybe_update_dev_password_from_form(role_conn, current, request.form, target)
             if password_warning:
                 role_conn.rollback()
                 flash(password_warning, "warning")
@@ -6485,7 +6521,7 @@ def admin_user_edit(user_id: int):
             conn.commit()
 
         flash("Acesso do usuário atualizado.", "success")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
 
     return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=selected_permissions_for_form(target), allowed_role_options=allowed_role_options_for_editor(require_current_user(), target), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user(), target), can_edit_dev_password=can_edit_dev_password(require_current_user()))
 
@@ -6504,17 +6540,17 @@ def admin_user_status(user_id: int):
     current = require_current_user()
     if target.is_admin and target.id != current.id and not current.is_dev:
         flash("Somente usuário Dev pode alterar status de administradores.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
     if target.is_admin and target.id == current.id and action != "approved":
         flash("Você não pode bloquear seu próprio usuário admin.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
     if action not in ["approved", "rejected", "pending"]:
         abort(400)
     with db_connect() as conn:
         conn.execute("UPDATE users SET status = ?, updated_at = ? WHERE id = ?", (action, now_iso(), user_id))
         conn.commit()
     flash("Status do usuário atualizado.", "success")
-    return redirect(request.referrer or url_for("admin_users"))
+    return redirect_to_return("admin_users")
 
 
 @app.post("/admin/users/<int:user_id>/delete")
@@ -6530,10 +6566,10 @@ def admin_user_delete(user_id: int):
     current = require_current_user()
     if target.is_admin and target.id == current.id:
         flash("Você não pode excluir seu próprio usuário admin.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
     if target.is_admin and not current.is_dev:
         flash("Somente usuário Dev pode excluir administradores.", "warning")
-        return redirect(url_for("admin_users"))
+        return redirect_to_return("admin_users")
 
     try:
         with db_connect() as conn:
@@ -6541,7 +6577,7 @@ def admin_user_delete(user_id: int):
                 approved_admins = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role IN ('admin', 'dev') AND status = 'approved'").fetchone()["total"]
                 if approved_admins <= 1 and target.status == "approved":
                     flash("Não é possível excluir o último administrador aprovado.", "warning")
-                    return redirect(url_for("admin_users"))
+                    return redirect_to_return("admin_users")
             removed_requests, _ = permanently_delete_user(conn, user_id)
             conn.commit()
         if removed_requests:
@@ -6551,7 +6587,7 @@ def admin_user_delete(user_id: int):
     except Exception as exc:
         app.logger.exception("Falha ao excluir usuário definitivamente")
         flash(f"Não consegui excluir o usuário do banco. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_users"))
+    return redirect_to_return("admin_users")
 
 
 def normalize_access_role_permissions_from_form(form: Any) -> list[str]:
@@ -6600,6 +6636,7 @@ def access_role_listing() -> list[dict[str, Any]]:
         actions = sorted(role_definition.action_permissions, key=lambda item: list(action_labels).index(item) if item in action_labels else 999)
         roles.append({
             "role_key": key,
+            "display_key": display_access_role_key(key),
             "name": role_definition.name,
             "description": default_descriptions.get(key, "Tipo padrão do sistema."),
             "permissions": permissions,
@@ -6611,6 +6648,7 @@ def access_role_listing() -> list[dict[str, Any]]:
     for role in list_custom_access_roles():
         roles.append({
             "role_key": role.role_key,
+            "display_key": display_access_role_key(role.role_key),
             "name": role.name,
             "description": role.description or "-",
             "permissions": role.permissions,
@@ -6670,7 +6708,7 @@ def admin_access_types():
         get_access_role_override.cache_clear()
         get_custom_access_role.cache_clear()
         flash("Tipo de acesso criado com sucesso.", "success")
-        return redirect(url_for("admin_access_types"))
+        return redirect_to_return("admin_access_types")
     return render_template("admin/access_types.html", **access_role_form_context())
 
 
@@ -6687,9 +6725,12 @@ def admin_access_type_edit(role_key: str):
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()[:80]
         description = (request.form.get("description") or "").strip()[:240]
+        updated_role_key = role.role_key
         if role.is_static:
             name = STATIC_ROLE_LABELS.get(role.role_key, role.name)
             description = description or STATIC_ROLE_DESCRIPTIONS.get(role.role_key, role.description)
+        else:
+            updated_role_key = editable_custom_access_role_key(request.form.get("role_key"), role.role_key)
         permissions = normalize_access_role_permissions_from_form(request.form)
         action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
         if not name:
@@ -6697,26 +6738,50 @@ def admin_access_type_edit(role_key: str):
             return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
         with db_connect() as conn:
             changed_at = now_iso()
-            conn.execute(
-                """
-                INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(role_key) DO UPDATE SET
-                    name = excluded.name,
-                    description = excluded.description,
-                    permissions_json = excluded.permissions_json,
-                    action_permissions_json = excluded.action_permissions_json,
-                    updated_at = excluded.updated_at
-                """,
-                (role.role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), changed_at, changed_at),
-            )
+            if updated_role_key != role.role_key:
+                existing = conn.execute("SELECT 1 FROM access_role_types WHERE role_key = ?", (updated_role_key,)).fetchone()
+                if existing is not None or updated_role_key in STATIC_ROLE_KEYS:
+                    flash("Já existe outro tipo de acesso com esse identificador.", "warning")
+                    return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
+                conn.execute(
+                    """
+                    UPDATE access_role_types
+                       SET role_key = ?, name = ?, description = ?, permissions_json = ?,
+                           action_permissions_json = ?, updated_at = ?
+                     WHERE role_key = ?
+                    """,
+                    (
+                        updated_role_key,
+                        name,
+                        description,
+                        json.dumps(permissions, ensure_ascii=False),
+                        json.dumps(action_permissions, ensure_ascii=False),
+                        changed_at,
+                        role.role_key,
+                    ),
+                )
+                conn.execute("UPDATE users SET role = ?, page_permissions_configured = 0, updated_at = ? WHERE role = ?", (updated_role_key, changed_at, role.role_key))
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(role_key) DO UPDATE SET
+                        name = excluded.name,
+                        description = excluded.description,
+                        permissions_json = excluded.permissions_json,
+                        action_permissions_json = excluded.action_permissions_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (role.role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), changed_at, changed_at),
+                )
             # Usuários desse tipo passam a herdar as permissões novas do tipo.
-            conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, role.role_key))
+            conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, updated_role_key))
             conn.commit()
         get_access_role_override.cache_clear()
         get_custom_access_role.cache_clear()
         flash("Tipo de acesso atualizado.", "success")
-        return redirect(url_for("admin_access_types"))
+        return redirect_to_return("admin_access_types")
     return render_template("admin/access_type_form.html", **access_role_form_context(role))
 
 
@@ -6750,7 +6815,7 @@ def admin_access_type_delete(role_key: str):
     get_access_role_override.cache_clear()
     get_custom_access_role.cache_clear()
     flash("Tipo de acesso excluído do banco de dados." + (f" {affected} usuário(s) foram movidos para Base." if affected else ""), "success")
-    return redirect(url_for("admin_access_types"))
+    return redirect_to_return("admin_access_types")
 
 
 @app.route("/admin/products")
@@ -6915,7 +6980,7 @@ def admin_product_categories_update():
                 conn.rollback()
                 flash("Nenhuma categoria pode ficar sem nome.", "warning")
                 next_url = (request.form.get("next") or request.referrer or "").strip()
-                return redirect(next_url or url_for("admin_products"))
+                return redirect(safe_local_redirect_target(request.form.get("return_to") or next_url, "admin_products"))
             emoji_clean = clean_category_emoji(emoji_value, new_clean)
             conn.execute(
                 """
@@ -6930,7 +6995,7 @@ def admin_product_categories_update():
 
     flash(f"Categorias atualizadas: {updated}.", "success")
     next_url = (request.form.get("next") or request.referrer or "").strip()
-    return redirect(next_url or url_for("admin_products"))
+    return redirect(safe_local_redirect_target(request.form.get("return_to") or next_url, "admin_products"))
 
 @app.get("/admin/products/export")
 @admin_required
@@ -7055,21 +7120,21 @@ def admin_products_import():
         uploaded = request.files.get("spreadsheet")
         if uploaded is None or not uploaded.filename:
             flash("Selecione uma planilha .xlsx para importar.", "warning")
-            return redirect(url_for("admin_products"))
+            return redirect_to_return("admin_products")
         if not uploaded.filename.lower().endswith(".xlsx"):
             flash("Importe apenas arquivos .xlsx.", "warning")
-            return redirect(url_for("admin_products"))
+            return redirect_to_return("admin_products")
 
         try:
             uploaded_bytes = uploaded.read()
         except Exception as exc:
             print(f"[IMPORTAÇÃO PRODUTOS] Falha ao ler upload: {exc}")
             flash("Não foi possível ler o arquivo enviado.", "danger")
-            return redirect(url_for("admin_products"))
+            return redirect_to_return("admin_products")
 
         if not uploaded_bytes:
             flash("A planilha enviada está vazia.", "warning")
-            return redirect(url_for("admin_products"))
+            return redirect_to_return("admin_products")
 
         # Salvar cópia no R2 é opcional e nunca pode derrubar ou atrasar planilhas grandes.
         if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
@@ -7096,7 +7161,7 @@ def admin_products_import():
                 pass
             print(f"[IMPORTAÇÃO PRODUTOS] Erro geral tratado: {type(exc).__name__} - {exc}")
             flash("Não consegui importar essa planilha. O erro foi registrado nos logs do Render; envie o trecho vermelho se continuar acontecendo.", "danger")
-            return redirect(url_for("admin_products"))
+            return redirect_to_return("admin_products")
 
         flash_import_errors(row_errors)
         if created or updated:
@@ -7113,7 +7178,7 @@ def admin_products_import():
             flash(f"Nenhum produto foi criado ou atualizado. {skipped} linha(s) ignorada(s).", "warning")
         else:
             flash("Nenhum produto válido foi encontrado na planilha. Confira se a primeira linha contém os cabeçalhos corretos.", "warning")
-        return redirect(url_for("admin_products"))
+        return redirect_to_return("admin_products")
     except Exception as exc:
         # Última barreira para impedir Internal Server Error branco na tela.
         try:
@@ -7123,7 +7188,7 @@ def admin_products_import():
             pass
         print(f"[IMPORTAÇÃO PRODUTOS] Falha inesperada capturada: {type(exc).__name__} - {exc}")
         flash("A importação falhou, mas o site não quebrou. Veja os logs do Render para o detalhe do erro.", "danger")
-        return redirect(url_for("admin_products"))
+        return redirect_to_return("admin_products")
 
 
 @app.route("/admin/products/new", methods=["GET", "POST"])
@@ -7138,14 +7203,14 @@ def admin_product_new():
         product = fill_product_from_form(Product())
         if not product.name:
             flash("Informe o nome do produto.", "warning")
-            return redirect(url_for("admin_product_new"))
+            return redirect_to_return("admin_product_new")
         uploaded_image = request.files.get("product_image")
         if uploaded_image is not None and uploaded_image.filename:
             try:
                 product.image_name, product.image_key, product.image_content_type = save_product_image_upload(uploaded_image)
             except ValueError as exc:
                 flash(str(exc), "warning")
-                return redirect(url_for("admin_product_new"))
+                return redirect_to_return("admin_product_new")
         with db_connect() as conn:
             cursor = conn.execute(
                 """
@@ -7192,10 +7257,10 @@ def admin_product_new():
                 record_stock_movement(conn, int(new_id), product.stock_quantity, 0, product.stock_quantity, "product_created", "Produto cadastrado manualmente.", created_by_id=require_current_user().id)
             conn.commit()
         flash("Produto cadastrado.", "success")
-        return redirect(url_for("admin_products"))
+        return redirect_to_return("admin_products")
     if not user_has_action_access(current_user(), "products_create"):
         flash("Seu tipo de acesso não pode criar produtos.", "warning")
-        return redirect(url_for("admin_products"))
+        return redirect_to_return("admin_products")
     return render_template("admin/product_form.html", product=None, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
 
 
@@ -7213,7 +7278,7 @@ def admin_product_edit(product_id: int):
         fill_product_from_form(product)
         if not product.name:
             flash("Informe o nome do produto.", "warning")
-            return redirect(url_for("admin_product_edit", product_id=product_id))
+            return redirect_to_return("admin_product_edit", product_id=product_id)
         uploaded_image = request.files.get("product_image")
         remove_image = request.form.get("remove_image") == "on"
         if uploaded_image is not None and uploaded_image.filename:
@@ -7221,7 +7286,7 @@ def admin_product_edit(product_id: int):
                 product.image_name, product.image_key, product.image_content_type = save_product_image_upload(uploaded_image)
             except ValueError as exc:
                 flash(str(exc), "warning")
-                return redirect(url_for("admin_product_edit", product_id=product_id))
+                return redirect_to_return("admin_product_edit", product_id=product_id)
         elif remove_image:
             product.image_name = ""
             product.image_key = ""
@@ -7229,7 +7294,7 @@ def admin_product_edit(product_id: int):
         missing_actions = product_update_missing_action_permissions(old_product, product, bool(uploaded_image is not None and uploaded_image.filename), remove_image)
         if missing_actions:
             flash("Seu tipo de acesso não permite alterar: " + ", ".join(missing_actions) + ".", "warning")
-            return redirect(url_for("admin_product_edit", product_id=product_id))
+            return redirect_to_return("admin_product_edit", product_id=product_id)
         with db_connect() as conn:
             conn.execute(
                 """
@@ -7278,7 +7343,7 @@ def admin_product_edit(product_id: int):
         if old_image_key and old_image_key != product.image_key:
             remove_local_product_image(old_image_key)
         flash("Produto atualizado.", "success")
-        return redirect(url_for("admin_products"))
+        return redirect_to_return("admin_products")
     return render_template("admin/product_form.html", product=product, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
 
 
@@ -7308,7 +7373,7 @@ def admin_product_toggle_active(product_id: int):
     except Exception as exc:
         app.logger.exception("Falha ao alterar status do produto")
         flash(f"Não consegui alterar o status do produto. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_products"))
+    return redirect_to_return("admin_products")
 
 
 @app.post("/admin/products/<int:product_id>/delete")
@@ -7334,7 +7399,7 @@ def admin_product_delete(product_id: int):
     except Exception as exc:
         app.logger.exception("Falha ao excluir produto definitivamente")
         flash(f"Não consegui excluir o produto do banco. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_products"))
+    return redirect_to_return("admin_products")
 
 
 @app.route("/admin/requests")
@@ -7375,7 +7440,7 @@ def admin_material_entries():
         invoice_value_cents = parse_money_to_cents(request.form.get("invoice_value")) if has_invoice else 0
         if not item_name or quantity <= 0:
             flash("Informe nome do item e quantidade válida para adicionar a entrada.", "warning")
-            return redirect(url_for("admin_material_entries"))
+            return redirect_to_return("admin_material_entries")
         invoice_file_name = ""
         invoice_file_key = ""
         if has_invoice and invoice_file is not None:
@@ -7414,7 +7479,7 @@ def admin_material_entries():
         except Exception as exc:
             app.logger.exception("Falha ao registrar entrada de materiais")
             flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE)
     return render_template("admin/material_entries.html", entries=entries)
 
@@ -7465,15 +7530,15 @@ def admin_material_entries_import():
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de entrada de materiais.", "warning")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     if not uploaded.filename.lower().endswith(".xlsx"):
         flash("Importe apenas arquivos .xlsx.", "warning")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     try:
         uploaded_bytes = uploaded.read()
         if not uploaded_bytes:
             flash("A planilha enviada está vazia.", "warning")
-            return redirect(url_for("admin_material_entries"))
+            return redirect_to_return("admin_material_entries")
         if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
             try:
                 upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
@@ -7486,7 +7551,7 @@ def admin_material_entries_import():
     except Exception as exc:
         app.logger.exception("Falha ao importar entrada de materiais")
         flash(f"Não consegui importar a planilha. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_material_entries"))
+    return redirect_to_return("admin_material_entries")
 
 
 @app.get("/admin/material-entries/report")
@@ -7503,17 +7568,17 @@ def admin_material_entries_report():
     end_raw = (request.args.get("end_date") or "").strip()
     if not start_raw or not end_raw:
         flash("Informe a data inicial e a data final para gerar o relatório de entradas.", "warning")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     try:
         start_dt = parse_report_date(start_raw, "Data inicial")
         end_base = parse_report_date(end_raw, "Data final")
         end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
     except ValueError as exc:
         flash(str(exc), "danger")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     if end_dt < start_dt:
         flash("A data final não pode ser menor que a data inicial.", "warning")
-        return redirect(url_for("admin_material_entries"))
+        return redirect_to_return("admin_material_entries")
     entries = list_material_entries(start_dt, end_dt)
     buffer = build_material_entries_report_pdf(entries, start_dt, end_base, require_current_user())
     filename = f"relatorio_entrada_materiais_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
@@ -7653,7 +7718,7 @@ def admin_asset_new_with_stock():
         base, selected_unit_kind = validate_unit_selection(base_raw, franchise_raw, required=(regional != "Matriz"))
     except ValueError as exc:
         flash(str(exc), "warning")
-        return redirect(url_for("admin_assets", regional=regional))
+        return redirect_to_return("admin_assets", regional=regional)
     sector = request.form.get("sector", "").strip()
     manager = request.form.get("manager", "").strip()
     item_names = request.form.getlist("item_name")
@@ -7688,25 +7753,25 @@ def admin_asset_new_with_stock():
 
     if not name or not regional or not sector or not manager or (regional != "Matriz" and not base):
         flash("Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.", "warning")
-        return redirect(url_for("admin_assets"))
+        return redirect_to_return("admin_assets")
     if not regional:
         flash("Selecione uma regional valida para o ativo.", "warning")
-        return redirect(url_for("admin_assets"))
+        return redirect_to_return("admin_assets")
     if regional != "Matriz" and base not in BASE_FRANCHISE_OPTION_SET:
         flash("Selecione uma base ou franquia valida para o ativo.", "warning")
-        return redirect(url_for("admin_assets", regional=regional))
+        return redirect_to_return("admin_assets", regional=regional)
     if regional != "Matriz" and asset_regional_for_base(base) != regional:
         flash("A base/franquia selecionada nao pertence a regional informada.", "warning")
-        return redirect(url_for("admin_assets", regional=regional))
+        return redirect_to_return("admin_assets", regional=regional)
     if missing_product:
         flash("Selecione cada item pela lista de produtos do portal.", "warning")
-        return redirect(url_for("admin_assets", **redirect_args))
+        return redirect_to_return("admin_assets", **redirect_args)
     if invalid_quantity:
         flash("Informe uma quantidade valida para cada item.", "warning")
-        return redirect(url_for("admin_assets", **redirect_args))
+        return redirect_to_return("admin_assets", **redirect_args)
     if not item_rows:
         flash("Adicione pelo menos um item ao ativo.", "warning")
-        return redirect(url_for("admin_assets", **redirect_args))
+        return redirect_to_return("admin_assets", **redirect_args)
 
     try:
         with db_connect() as conn:
@@ -7734,13 +7799,13 @@ def admin_asset_new_with_stock():
             ]
             if missing_ids:
                 flash("Um ou mais produtos selecionados nao existem mais no cadastro.", "warning")
-                return redirect(url_for("admin_assets", **redirect_args))
+                return redirect_to_return("admin_assets", **redirect_args)
             if inactive:
                 flash("Produto(s) inativo(s) nao podem ser vinculados a ativos: " + ", ".join(inactive), "warning")
-                return redirect(url_for("admin_assets", **redirect_args))
+                return redirect_to_return("admin_assets", **redirect_args)
             if insufficient:
                 flash("Estoque insuficiente para: " + "; ".join(insufficient), "warning")
-                return redirect(url_for("admin_assets", **redirect_args))
+                return redirect_to_return("admin_assets", **redirect_args)
 
             current = require_current_user()
             cursor = conn.execute(
@@ -7806,7 +7871,7 @@ def admin_asset_new_with_stock():
     except Exception as exc:
         app.logger.exception("Falha ao adicionar ativo")
         flash(f"Nao consegui adicionar o ativo. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_assets", **redirect_args))
+    return redirect_to_return("admin_assets", **redirect_args)
 
 
 app.view_functions["admin_asset_new"] = admin_required(page_access_required("admin_stock")(admin_asset_new_with_stock))
@@ -7995,7 +8060,7 @@ def admin_assets_period_report():
     all_units = (request.args.get("all_units") or "").strip().lower() in {"1", "true", "on", "all", "todos"}
     if not start_raw or not end_raw:
         flash("Informe a data inicial e a data final para gerar o relatório de ativos.", "warning")
-        return redirect(url_for("admin_assets"))
+        return redirect_to_return("admin_assets")
 
     try:
         if all_units:
@@ -8007,11 +8072,11 @@ def admin_assets_period_report():
         end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
     except ValueError as exc:
         flash(str(exc), "danger")
-        return redirect(url_for("admin_assets"))
+        return redirect_to_return("admin_assets")
 
     if end_dt < start_dt:
         flash("A data final não pode ser menor que a data inicial.", "warning")
-        return redirect(url_for("admin_assets"))
+        return redirect_to_return("admin_assets")
 
     assets = list_assets_between(start_dt, end_dt, selected_unit)
     buffer = build_assets_period_report_pdf(assets, start_dt, end_dt, require_current_user(), selected_unit, selected_kind)
@@ -8051,7 +8116,7 @@ def admin_request_update_items(request_id: int):
         abort(404)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ter quantidades editadas.", "warning")
-        return redirect(url_for("admin_request_detail", request_id=request_id))
+        return redirect_to_return("admin_request_detail", request_id=request_id)
 
     updated = 0
     with db_connect() as conn:
@@ -8059,14 +8124,14 @@ def admin_request_update_items(request_id: int):
             quantity = parse_required_positive_int(request.form.get(f"quantity_{item.id}"))
             if quantity is None:
                 flash("Todas as quantidades precisam ser maiores que zero.", "warning")
-                return redirect(url_for("admin_request_detail", request_id=request_id))
+                return redirect_to_return("admin_request_detail", request_id=request_id)
             if quantity != item.quantity:
                 conn.execute("UPDATE request_items SET quantity = ? WHERE id = ? AND request_id = ?", (quantity, item.id, request_id))
                 updated += 1
         conn.commit()
 
     flash("Quantidades atualizadas." if updated else "Nenhuma quantidade foi alterada.", "success")
-    return redirect(url_for("admin_request_detail", request_id=request_id))
+    return redirect_to_return("admin_request_detail", request_id=request_id)
 
 
 @app.post("/admin/requests/<int:request_id>/approve")
@@ -8081,7 +8146,7 @@ def admin_request_approve(request_id: int):
         abort(404)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser aprovadas.", "warning")
-        return redirect(url_for("admin_request_detail", request_id=request_id))
+        return redirect_to_return("admin_request_detail", request_id=request_id)
 
     insufficient: list[str] = []
     for item in supply_request.items:
@@ -8093,7 +8158,7 @@ def admin_request_approve(request_id: int):
 
     if insufficient:
         flash("Estoque insuficiente para aprovar: " + "; ".join(insufficient), "danger")
-        return redirect(url_for("admin_request_detail", request_id=request_id))
+        return redirect_to_return("admin_request_detail", request_id=request_id)
 
     admin_note = request.form.get("admin_note", "").strip()
     current = require_current_user()
@@ -8125,7 +8190,7 @@ def admin_request_approve(request_id: int):
         conn.commit()
 
     flash("Solicitação aprovada e estoque descontado.", "success")
-    return redirect(url_for("admin_request_detail", request_id=request_id))
+    return redirect_to_return("admin_request_detail", request_id=request_id)
 
 
 @app.post("/admin/requests/<int:request_id>/reject")
@@ -8140,7 +8205,7 @@ def admin_request_reject(request_id: int):
         abort(404)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser recusadas.", "warning")
-        return redirect(url_for("admin_request_detail", request_id=request_id))
+        return redirect_to_return("admin_request_detail", request_id=request_id)
 
     admin_note = request.form.get("admin_note", "").strip()
     current = require_current_user()
@@ -8155,7 +8220,7 @@ def admin_request_reject(request_id: int):
         )
         conn.commit()
     flash("Solicitação recusada.", "success")
-    return redirect(url_for("admin_request_detail", request_id=request_id))
+    return redirect_to_return("admin_request_detail", request_id=request_id)
 
 
 @app.post("/admin/requests/<int:request_id>/delete")
@@ -8177,7 +8242,7 @@ def admin_request_delete(request_id: int):
     except Exception as exc:
         app.logger.exception("Falha ao excluir solicitação definitivamente")
         flash(f"Não consegui excluir a solicitação do banco. Erro: {type(exc).__name__}.", "danger")
-    return redirect(url_for("admin_requests"))
+    return redirect_to_return("admin_requests")
 
 
 @app.errorhandler(403)

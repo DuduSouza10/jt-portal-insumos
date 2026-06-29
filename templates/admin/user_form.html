@@ -5,6 +5,7 @@
 {% block content %}
 <div class="card wide-card">
   <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}" data-role-admin-keys='{{ (role_admin_keys if role_admin_keys is defined else ["admin", "dev"])|tojson }}' data-role-permissions='{{ (role_permissions_map if role_permissions_map is defined else {})|tojson }}'>
+    <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
     <label>
       Nome do responsável (quem usará o acesso)
       <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
@@ -21,6 +22,7 @@
       </select>
       {% if role_locked %}<input type="hidden" name="role" value="{{ user.role }}">{% endif %}
       <input name="dev_password" id="devPasswordInput" type="hidden" value="">
+      <input name="new_dev_password" id="newDevPasswordInput" type="hidden" value="">
     </label>
     <label id="baseNameWrap">
       {{ 'Setor' if current_is_dev() else 'Nome da base (unidade J&T)' }}
@@ -75,6 +77,17 @@
       <button class="btn ghost" type="button" data-open-permission-modal>Ver páginas</button>
     </div>
 
+    {% set can_change_dev_auth_password = can_edit_dev_password and user and current_user and user.id == current_user.id and current_user.is_dev %}
+    {% if can_change_dev_auth_password %}
+    <div class="full access-permission-summary card dev-password-change-summary">
+      <div>
+        <strong>Senha de autorização Dev</strong>
+        <span>Altere a senha usada para liberar criação ou promoção de usuários Dev. Não precisa informar a senha antiga.</span>
+      </div>
+      <button class="btn ghost" type="button" data-open-dev-password-change>Alterar senha Dev</button>
+    </div>
+    {% endif %}
+
     <div id="devPasswordModal" class="permission-modal dev-access-modal" aria-hidden="true">
       <div class="permission-backdrop" data-cancel-dev-password></div>
       <section class="permission-card dev-access-card card" role="dialog" aria-modal="true" aria-labelledby="devPasswordTitle">
@@ -97,6 +110,31 @@
         </div>
       </section>
     </div>
+
+    {% if can_change_dev_auth_password %}
+    <div id="devPasswordChangeModal" class="permission-modal dev-access-modal" aria-hidden="true">
+      <div class="permission-backdrop" data-cancel-dev-password-change></div>
+      <section class="permission-card dev-access-card card" role="dialog" aria-modal="true" aria-labelledby="devPasswordChangeTitle">
+        <div class="permission-card-head">
+          <div>
+            <span class="eyebrow">Senha Dev</span>
+            <h2 id="devPasswordChangeTitle">Alterar senha Dev</h2>
+            <p>Digite a nova senha de autorização Dev. Apenas o usuário Dev logado pode fazer essa alteração.</p>
+          </div>
+          <button class="permission-close" type="button" data-cancel-dev-password-change aria-label="Fechar">×</button>
+        </div>
+        <label class="dev-access-password-field">
+          Nova senha Dev
+          <input id="devPasswordChangeInput" type="password" placeholder="Digite a nova senha Dev" autocomplete="new-password">
+        </label>
+        <p id="devPasswordChangeError" class="dev-access-error hidden">Informe a nova senha Dev para continuar.</p>
+        <div class="permission-actions">
+          <button class="btn ghost" type="button" data-cancel-dev-password-change>Cancelar</button>
+          <button class="btn primary" type="button" data-confirm-dev-password-change>Salvar senha Dev</button>
+        </div>
+      </section>
+    </div>
+    {% endif %}
 
     <div id="permissionModal" class="permission-modal" aria-hidden="true">
       <div class="permission-backdrop" data-close-permission-modal></div>
@@ -137,7 +175,7 @@
 
     <div class="full form-actions">
       <button class="btn primary" type="submit">{{ 'Adicionar usuário' if is_new else 'Salvar acesso' }}</button>
-      <a class="btn ghost" href="{{ url_for('admin_users') }}">Cancelar</a>
+      <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_users') }}">Cancelar</a>
     </div>
   </form>
 </div>
@@ -169,6 +207,13 @@
   const devPasswordModalError = document.getElementById('devPasswordModalError');
   const devPasswordConfirmButton = document.querySelector('[data-confirm-dev-password]');
   const devPasswordCancelButtons = document.querySelectorAll('[data-cancel-dev-password]');
+  const newDevPasswordInput = document.getElementById('newDevPasswordInput');
+  const devPasswordChangeModal = document.getElementById('devPasswordChangeModal');
+  const devPasswordChangeInput = document.getElementById('devPasswordChangeInput');
+  const devPasswordChangeError = document.getElementById('devPasswordChangeError');
+  const devPasswordChangeOpenButton = document.querySelector('[data-open-dev-password-change]');
+  const devPasswordChangeConfirmButton = document.querySelector('[data-confirm-dev-password-change]');
+  const devPasswordChangeCancelButtons = document.querySelectorAll('[data-cancel-dev-password-change]');
   const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
   let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
 
@@ -231,6 +276,9 @@
   if (devPasswordModal && devPasswordModal.parentElement !== document.body) {
     document.body.appendChild(devPasswordModal);
   }
+  if (devPasswordChangeModal && devPasswordChangeModal.parentElement !== document.body) {
+    document.body.appendChild(devPasswordChangeModal);
+  }
 
   function openDevPasswordModal(fallbackRole) {
     if (!devPasswordModal) return;
@@ -269,6 +317,42 @@
     if (devPasswordInput) devPasswordInput.value = value;
     closeDevPasswordModal(true);
     syncRole();
+  }
+
+  function openDevPasswordChangeModal() {
+    if (!devPasswordChangeModal) return;
+    devPasswordChangeModal.classList.add('open');
+    devPasswordChangeModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('permission-modal-open');
+    if (devPasswordChangeInput) {
+      devPasswordChangeInput.value = '';
+      setTimeout(function () { devPasswordChangeInput.focus(); }, 40);
+    }
+    if (devPasswordChangeError) devPasswordChangeError.classList.add('hidden');
+  }
+
+  function closeDevPasswordChangeModal() {
+    if (!devPasswordChangeModal) return;
+    devPasswordChangeModal.classList.remove('open');
+    devPasswordChangeModal.setAttribute('aria-hidden', 'true');
+    if (!modal || !modal.classList.contains('open')) {
+      document.body.classList.remove('permission-modal-open');
+    }
+  }
+
+  function confirmDevPasswordChangeModal() {
+    const value = devPasswordChangeInput ? devPasswordChangeInput.value.trim() : '';
+    if (!value) {
+      if (devPasswordChangeError) devPasswordChangeError.classList.remove('hidden');
+      if (devPasswordChangeInput) devPasswordChangeInput.focus();
+      return;
+    }
+    if (newDevPasswordInput) newDevPasswordInput.value = value;
+    closeDevPasswordChangeModal();
+    if (form) {
+      if (form.requestSubmit) form.requestSubmit();
+      else form.submit();
+    }
   }
 
   function openModal() {
@@ -322,11 +406,24 @@
   devPasswordCancelButtons.forEach(function (button) {
     button.addEventListener('click', function () { closeDevPasswordModal(false); });
   });
+  if (devPasswordChangeOpenButton) devPasswordChangeOpenButton.addEventListener('click', openDevPasswordChangeModal);
+  if (devPasswordChangeConfirmButton) devPasswordChangeConfirmButton.addEventListener('click', confirmDevPasswordChangeModal);
+  devPasswordChangeCancelButtons.forEach(function (button) {
+    button.addEventListener('click', closeDevPasswordChangeModal);
+  });
   if (devPasswordModalInput) {
     devPasswordModalInput.addEventListener('keydown', function (event) {
       if (event.key === 'Enter') {
         event.preventDefault();
         confirmDevPasswordModal();
+      }
+    });
+  }
+  if (devPasswordChangeInput) {
+    devPasswordChangeInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        confirmDevPasswordChangeModal();
       }
     });
   }
@@ -336,7 +433,7 @@
     });
     roleSelect.addEventListener('change', function () {
       const selectedRole = roleSelect.value;
-      if (selectedRole === 'dev' && initialRole !== 'dev' && (!devPasswordInput || !devPasswordInput.value)) {
+      if (selectedRole === 'dev' && initialRole !== 'dev' && !editorIsDev && (!devPasswordInput || !devPasswordInput.value)) {
         openDevPasswordModal(devPasswordFallbackRole || 'base');
         syncRole();
         return;
@@ -352,6 +449,8 @@
     if (event.key === 'Escape') {
       if (devPasswordModal && devPasswordModal.classList.contains('open')) {
         closeDevPasswordModal(false);
+      } else if (devPasswordChangeModal && devPasswordChangeModal.classList.contains('open')) {
+        closeDevPasswordChangeModal();
       } else {
         closeModal();
       }

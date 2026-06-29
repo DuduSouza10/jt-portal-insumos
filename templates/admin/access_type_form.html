@@ -10,14 +10,22 @@
       <h2>{{ access_role.name }}</h2>
       <p>{{ access_role.role_key }}</p>
     </div>
-    <a class="btn ghost" href="{{ url_for('admin_access_types') }}">Voltar</a>
+    <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Voltar</a>
   </div>
 
   <form method="post" class="form-grid two-cols access-type-form">
+    <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
     <label>
       Nome do tipo de acesso
       <input name="name" value="{{ access_role.name }}" required maxlength="80" {% if access_role.is_static %}readonly{% endif %}>
     </label>
+    {% if not access_role.is_static %}
+    <label>
+      Identificador do tipo
+      <input name="role_key" value="{{ access_role.role_key }}" required maxlength="80" placeholder="Ex.: gestao_franquias">
+      <small class="hint">Esse é o código usado internamente e na lista de tipos.</small>
+    </label>
+    {% endif %}
     <label>
       Descrição
       <input name="description" value="{{ access_role.description }}" maxlength="240">
@@ -70,7 +78,7 @@
     </div>
     <div class="full form-actions">
       <button class="btn primary" type="submit">Salvar tipo de acesso</button>
-      <a class="btn ghost" href="{{ url_for('admin_access_types') }}">Cancelar</a>
+      <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Cancelar</a>
     </div>
   </form>
 </div>

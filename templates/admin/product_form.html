@@ -5,6 +5,7 @@
 {% block content %}
 <div class="card wide-card product-form-card">
   <form id="productForm" method="post" class="form-grid" enctype="multipart/form-data">
+    <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
     <section class="product-form-hero full">
       <div class="product-form-hero-copy">
         <span class="product-form-kicker">Cadastro de produto</span>
@@ -267,7 +268,7 @@
 
     <div class="full form-actions product-form-actions">
       <button class="btn primary" type="submit">Salvar produto</button>
-      <a class="btn ghost" href="{{ url_for('admin_products') }}">Cancelar</a>
+      <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_products') }}">Cancelar</a>
     </div>
   </form>
 </div>
@@ -287,6 +288,7 @@
     </div>
     <form method="post" action="{{ url_for('admin_product_categories_update') }}" class="category-edit-form">
       <input type="hidden" name="next" value="{{ request.path }}">
+      <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
       <div class="category-edit-list">
         {% for category in product_categories_manage|default([]) %}
         <div class="category-edit-row">
