@@ -26,6 +26,7 @@
   "Funcionalidades liberadas por página": "按页面开放的功能",
   "Funcionalidades disponíveis": "功能可用",
   "Marque a página para liberar": "勾选页面后开放",
+  "Marque uma página administrativa acima para escolher funcionalidades.": "请先在上方勾选一个管理页面，然后选择功能。",
   "Use essas opções para liberar ações como alterar estoque, preço, unidade de medida, importação e aprovações.": "使用这些选项开放修改库存、价格、计量单位、导入和审批等操作。",
   "Controle ações específicas, como alterar estoque, preço, unidade de medida, importações e aprovações.": "控制具体操作，如修改库存、价格、计量单位、导入和审批。",
   "Funcionalidades": "功能",

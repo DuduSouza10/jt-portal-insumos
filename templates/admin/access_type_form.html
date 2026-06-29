@@ -16,7 +16,7 @@
   <form method="post" class="form-grid two-cols access-type-form">
     <label>
       Nome do tipo de acesso
-      <input name="name" value="{{ access_role.name }}" required maxlength="80">
+      <input name="name" value="{{ access_role.name }}" required maxlength="80" {% if access_role.is_static %}readonly{% endif %}>
     </label>
     <label>
       Descrição
@@ -66,6 +66,7 @@
         </div>
       </section>
       {% endfor %}
+      <div class="access-action-empty empty-state" data-access-action-empty>Marque uma página administrativa acima para escolher funcionalidades.</div>
     </div>
     <div class="full form-actions">
       <button class="btn primary" type="submit">Salvar tipo de acesso</button>
@@ -80,19 +81,23 @@
   function syncActionGroups() {
     const pageInputs = Array.from(document.querySelectorAll('[data-access-page-permissions] input[name="page_permissions"]'));
     const enabledPages = new Set(pageInputs.filter((input) => input.checked).map((input) => input.value));
+    let visibleGroups = 0;
     document.querySelectorAll('[data-access-action-permissions] [data-action-group]').forEach((group) => {
       const pageKey = group.getAttribute('data-action-group');
       const isEnabled = enabledPages.has(pageKey);
-      group.hidden = false;
-      group.classList.toggle('disabled', !isEnabled);
-      group.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+      group.hidden = !isEnabled;
+      group.classList.remove('disabled');
+      group.setAttribute('aria-disabled', 'false');
+      if (isEnabled) visibleGroups += 1;
       const state = group.querySelector('.access-action-state');
-      if (state) state.textContent = isEnabled ? state.dataset.enabledText : state.dataset.disabledText;
+      if (state) state.textContent = state.dataset.enabledText;
       group.querySelectorAll('input[name="action_permissions"]').forEach((input) => {
         input.disabled = !isEnabled;
         if (!isEnabled) input.checked = false;
       });
     });
+    const emptyState = document.querySelector('[data-access-action-empty]');
+    if (emptyState) emptyState.hidden = visibleGroups > 0;
   }
   document.addEventListener('change', function (event) {
     if (event.target && event.target.matches('[data-access-page-permissions] input[name="page_permissions"]')) syncActionGroups();

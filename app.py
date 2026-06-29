@@ -515,6 +515,7 @@ class AccessRoleType:
     action_permissions: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    is_static: bool = False
 
     @property
     def is_admin_like(self) -> bool:
@@ -2016,6 +2017,13 @@ def action_permissions_for_pages(page_keys: list[str] | set[str]) -> list[dict[s
 
 STATIC_ROLE_LABELS = {"dev": "Dev", "admin": "Administrador", "base": "Base", "franchise": "Franquia"}
 STATIC_ROLE_KEYS = set(STATIC_ROLE_LABELS.keys())
+STATIC_ROLE_ORDER = ["dev", "admin", "base", "franchise"]
+STATIC_ROLE_DESCRIPTIONS = {
+    "base": "Tipo padrÃ£o para bases. PermissÃµes administrativas nÃ£o liberadas.",
+    "franchise": "Tipo padrÃ£o para franquias. PermissÃµes administrativas nÃ£o liberadas.",
+    "admin": "Tipo padrÃ£o administrativo com acesso completo Ã s Ã¡reas administrativas.",
+    "dev": "Tipo Dev com controle total do portal, tipos de acesso e permissÃµes.",
+}
 
 
 def page_permission_key_set() -> set[str]:
@@ -2024,6 +2032,34 @@ def page_permission_key_set() -> set[str]:
 
 def admin_page_key_set() -> set[str]:
     return {item["key"] for item in PAGE_PERMISSION_OPTIONS if item["admin_only"]}
+
+
+def default_static_page_permissions(role: str) -> list[str]:
+    key = str(role or "").strip().lower()
+    if key in {"admin", "dev"}:
+        return [item["key"] for item in PAGE_PERMISSION_OPTIONS]
+    return [item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
+
+
+def default_static_action_permissions(role: str) -> list[str]:
+    key = str(role or "").strip().lower()
+    if key in {"admin", "dev"}:
+        return [item["key"] for item in ACTION_PERMISSION_OPTIONS]
+    return []
+
+
+def default_static_access_role(role: str) -> AccessRoleType | None:
+    key = str(role or "").strip().lower()
+    if key not in STATIC_ROLE_KEYS:
+        return None
+    return AccessRoleType(
+        role_key=key,
+        name=STATIC_ROLE_LABELS.get(key, key),
+        description=STATIC_ROLE_DESCRIPTIONS.get(key, "Tipo padrÃ£o do sistema."),
+        permissions=default_static_page_permissions(key),
+        action_permissions=default_static_action_permissions(key),
+        is_static=True,
+    )
 
 
 def custom_access_role_key(value: Any) -> str:
@@ -2079,21 +2115,23 @@ def parse_action_permissions(value: Any, allowed_page_keys: list[str] | set[str]
 def row_to_access_role(row: Any | None) -> AccessRoleType | None:
     if row is None:
         return None
+    role_key = str(row["role_key"] or "").strip().lower()
     return AccessRoleType(
-        role_key=str(row["role_key"] or ""),
+        role_key=role_key,
         name=str(row["name"] or ""),
         description=str(row["description"] or ""),
         permissions=parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]"),
         action_permissions=parse_action_permissions(row["action_permissions_json"] if "action_permissions_json" in row.keys() else "[]", parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]")),
         created_at=parse_dt(row["created_at"]) if "created_at" in row.keys() else None,
         updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
+        is_static=role_key in STATIC_ROLE_KEYS,
     )
 
 
 @lru_cache(maxsize=128)
-def get_custom_access_role(role_key: str | None) -> AccessRoleType | None:
+def get_access_role_override(role_key: str | None) -> AccessRoleType | None:
     key = str(role_key or "").strip().lower()
-    if not key or key in STATIC_ROLE_KEYS:
+    if not key or key == "dev":
         return None
     try:
         with db_connect() as conn:
@@ -2106,13 +2144,36 @@ def get_custom_access_role(role_key: str | None) -> AccessRoleType | None:
         return None
 
 
+@lru_cache(maxsize=128)
+def get_custom_access_role(role_key: str | None) -> AccessRoleType | None:
+    key = str(role_key or "").strip().lower()
+    if not key or key in STATIC_ROLE_KEYS:
+        return None
+    role = get_access_role_override(key)
+    return role if role is not None and not role.is_static else None
+
+
+def get_access_role_definition(role_key: str | None) -> AccessRoleType | None:
+    key = str(role_key or "").strip().lower()
+    if not key:
+        return None
+    if key == "dev":
+        return default_static_access_role("dev")
+    override = get_access_role_override(key)
+    if override is not None:
+        return override
+    if key in STATIC_ROLE_KEYS:
+        return default_static_access_role(key)
+    return get_custom_access_role(key)
+
+
 def list_custom_access_roles() -> list[AccessRoleType]:
     try:
         with db_connect() as conn:
             rows = conn.execute(
                 "SELECT role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at FROM access_role_types ORDER BY name COLLATE NOCASE ASC"
             ).fetchall()
-        return [role for row in rows if (role := row_to_access_role(row)) is not None]
+        return [role for row in rows if (role := row_to_access_role(row)) is not None and not role.is_static]
     except Exception:
         return []
 
@@ -2134,29 +2195,29 @@ def role_permissions_map(options: list[str] | None = None) -> dict[str, list[str
 
 def role_is_admin_like(role: str | None) -> bool:
     key = str(role or "").strip().lower()
-    if key in {"admin", "dev"}:
+    if key == "dev":
         return True
-    custom = get_custom_access_role(key)
-    return bool(custom and custom.is_admin_like)
+    role_definition = get_access_role_definition(key)
+    return bool(role_definition and role_definition.is_admin_like)
 
 
 def default_page_keys_for_role(role: str) -> set[str]:
     role = str(role or "base").strip().lower()
-    if role in {"admin", "dev"}:
+    if role == "dev":
         return {item["key"] for item in PAGE_PERMISSION_OPTIONS}
-    custom = get_custom_access_role(role)
-    if custom is not None:
-        return set(custom.permissions)
+    role_definition = get_access_role_definition(role)
+    if role_definition is not None:
+        return set(role_definition.permissions)
     return {item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]}
 
 
 def permission_options_for_role(role: str) -> list[dict[str, Any]]:
     role = str(role or "base").strip().lower()
-    if role in {"admin", "dev"}:
+    if role == "dev":
         return PAGE_PERMISSION_OPTIONS
-    custom = get_custom_access_role(role)
-    if custom is not None:
-        allowed = set(custom.permissions)
+    role_definition = get_access_role_definition(role)
+    if role_definition is not None:
+        allowed = set(role_definition.permissions)
         return [item for item in PAGE_PERMISSION_OPTIONS if item["key"] in allowed]
     return [item for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
 
@@ -2189,11 +2250,11 @@ def get_user_action_permissions(user: User | None) -> set[str]:
     cache_key = f"_action_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
-    if user.role in {"admin", "dev"}:
+    if user.role == "dev":
         allowed = action_permission_key_set()
     else:
-        custom = get_custom_access_role(user.role)
-        allowed = set(custom.action_permissions) if custom is not None else set()
+        role_definition = get_access_role_definition(user.role)
+        allowed = set(role_definition.action_permissions) if role_definition is not None else set()
         allowed = {key for key in allowed if any(item["key"] == key and item["page_key"] in get_user_page_permissions(user) for item in ACTION_PERMISSION_OPTIONS)}
     if has_request_context():
         setattr(g, cache_key, set(allowed))
@@ -6524,17 +6585,20 @@ def access_role_listing() -> list[dict[str, Any]]:
         "dev": "Tipo Dev com controle total do portal, tipos de acesso e permissões.",
     }
     roles: list[dict[str, Any]] = []
-    for key in ["dev", "admin", "base", "franchise"]:
-        permissions = sorted(default_page_keys_for_role(key), key=lambda item: list(page_labels).index(item) if item in page_labels else 999)
-        actions = sorted(action_permission_key_set(), key=lambda item: list(action_labels).index(item) if item in action_labels else 999) if key in {"admin", "dev"} else []
+    for key in STATIC_ROLE_ORDER:
+        role_definition = get_access_role_definition(key) or default_static_access_role(key)
+        if role_definition is None:
+            continue
+        permissions = sorted(role_definition.permissions, key=lambda item: list(page_labels).index(item) if item in page_labels else 999)
+        actions = sorted(role_definition.action_permissions, key=lambda item: list(action_labels).index(item) if item in action_labels else 999)
         roles.append({
             "role_key": key,
-            "name": STATIC_ROLE_LABELS.get(key, key),
+            "name": role_definition.name,
             "description": default_descriptions.get(key, "Tipo padrão do sistema."),
             "permissions": permissions,
             "action_permissions": actions,
             "is_custom": False,
-            "can_edit": False,
+            "can_edit": key != "dev",
             "can_delete": False,
         })
     for role in list_custom_access_roles():
@@ -6596,6 +6660,7 @@ def admin_access_types():
                 (role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), now_iso(), now_iso()),
             )
             conn.commit()
+        get_access_role_override.cache_clear()
         get_custom_access_role.cache_clear()
         flash("Tipo de acesso criado com sucesso.", "success")
         return redirect(url_for("admin_access_types"))
@@ -6609,29 +6674,39 @@ def admin_access_type_edit(role_key: str):
     current = require_current_user()
     if not current.is_dev:
         abort(403)
-    role = get_custom_access_role(role_key)
-    if role is None:
+    role = get_access_role_definition(role_key)
+    if role is None or role.role_key == "dev":
         abort(404)
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()[:80]
         description = (request.form.get("description") or "").strip()[:240]
+        if role.is_static:
+            name = STATIC_ROLE_LABELS.get(role.role_key, role.name)
+            description = description or STATIC_ROLE_DESCRIPTIONS.get(role.role_key, role.description)
         permissions = normalize_access_role_permissions_from_form(request.form)
         action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
         if not name:
             flash("Informe o nome do tipo de acesso.", "warning")
             return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
         with db_connect() as conn:
+            changed_at = now_iso()
             conn.execute(
                 """
-                UPDATE access_role_types
-                   SET name = ?, description = ?, permissions_json = ?, action_permissions_json = ?, updated_at = ?
-                 WHERE role_key = ?
+                INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(role_key) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    permissions_json = excluded.permissions_json,
+                    action_permissions_json = excluded.action_permissions_json,
+                    updated_at = excluded.updated_at
                 """,
-                (name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), now_iso(), role.role_key),
+                (role.role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), changed_at, changed_at),
             )
             # Usuários desse tipo passam a herdar as permissões novas do tipo.
-            conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (now_iso(), role.role_key))
+            conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, role.role_key))
             conn.commit()
+        get_access_role_override.cache_clear()
         get_custom_access_role.cache_clear()
         flash("Tipo de acesso atualizado.", "success")
         return redirect(url_for("admin_access_types"))
@@ -6665,6 +6740,7 @@ def admin_access_type_delete(role_key: str):
             )
         conn.execute("DELETE FROM access_role_types WHERE role_key = ?", (role.role_key,))
         conn.commit()
+    get_access_role_override.cache_clear()
     get_custom_access_role.cache_clear()
     flash("Tipo de acesso excluído do banco de dados." + (f" {affected} usuário(s) foram movidos para Base." if affected else ""), "success")
     return redirect(url_for("admin_access_types"))
