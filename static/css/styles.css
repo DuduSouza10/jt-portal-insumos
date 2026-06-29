@@ -12412,6 +12412,47 @@ html[data-theme="light"] .access-role-title small {
   }
 }
 
+/* v164 - chips do cargo alinhados no mesmo eixo. */
+.access-type-list-card .access-role-meta {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 7px !important;
+  flex-wrap: wrap !important;
+}
+
+.access-type-list-card .access-role-title small,
+.access-type-list-card .access-role-kind {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 9px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+
+.access-type-list-card .access-role-title small {
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.07) !important;
+  color: var(--muted-2) !important;
+  -webkit-text-fill-color: var(--muted-2) !important;
+}
+
+html[data-theme="light"] .access-type-list-card .access-role-title small {
+  border-color: rgba(17, 24, 39, .10) !important;
+  background: rgba(17, 24, 39, .055) !important;
+  color: #2f343b !important;
+  -webkit-text-fill-color: #2f343b !important;
+}
+
 /* Todo botão vermelho no tema claro fica com texto branco. */
 html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button) {
   background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
