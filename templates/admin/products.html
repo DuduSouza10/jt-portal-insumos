@@ -73,6 +73,7 @@
     </div>
   </form>
 
+  {% if can_do('products_export') %}
   <div id="exportLanguageModal" class="export-language-modal" aria-hidden="true">
     <div class="export-language-backdrop" data-close-export-modal></div>
     <section class="export-language-card card" role="dialog" aria-modal="true" aria-labelledby="exportLanguageTitle">
@@ -96,6 +97,8 @@
       </div>
     </section>
   </div>
+  {% endif %}
+  {% if can_do('products_edit_category') %}
   <div id="categoryEditModal" class="category-edit-modal" aria-hidden="true">
     <div class="category-edit-backdrop" data-close-categories-modal></div>
     <section class="category-edit-card card" role="dialog" aria-modal="true" aria-labelledby="categoryEditTitle">
@@ -132,6 +135,7 @@
       </form>
     </section>
   </div>
+  {% endif %}
 
   {% if can_do('products_import') %}
   <form class="import-form product-import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data" data-product-import-form>

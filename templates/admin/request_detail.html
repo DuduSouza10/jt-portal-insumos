@@ -3,13 +3,16 @@
 {% block page_title %}Solicitação #{{ supply_request.id }}{% endblock %}
 {% block page_subtitle %}{{ supply_request.user.organization_name }} • {{ supply_request.user.responsible_name }}{% endblock %}
 {% block content %}
+{% set can_edit_request_items = supply_request.status == 'pending' and can_do('requests_edit_items') %}
+{% set can_review_request = supply_request.status == 'pending' and can_do('requests_approve_reject') %}
+{% set can_delete_request = can_do('requests_delete') %}
 <section class="admin-split detail-grid">
   <div class="card table-card">
     <div class="section-head">
       <h2>Itens solicitados</h2>
       <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
     </div>
-    {% if supply_request.status == 'pending' %}
+    {% if can_edit_request_items %}
     <form method="post" action="{{ url_for('admin_request_update_items', request_id=supply_request.id) }}">
     {% endif %}
     <table>
@@ -19,7 +22,7 @@
         <tr>
           <td data-label="Produto">{{ item.product_name_snapshot }}</td>
           <td data-label="Qtd.">
-            {% if supply_request.status == 'pending' %}
+            {% if can_edit_request_items %}
               <input class="qty-input" name="quantity_{{ item.id }}" type="number" min="1" value="{{ item.quantity }}" required>
             {% else %}
               <strong>{{ item.quantity }}</strong>
@@ -36,7 +39,7 @@
         <tr><td class="request-total-cell" colspan="6" data-label="Total"><strong>Total</strong><span>{{ format_brl(supply_request.total_cents) }}</span></td></tr>
       </tfoot>
     </table>
-    {% if supply_request.status == 'pending' %}
+    {% if can_edit_request_items %}
       <div class="form-actions table-actions">
         <button class="btn primary" type="submit">Salvar quantidades</button>
         <span class="hint">Edite as quantidades antes de aprovar. O estoque será validado na aprovação.</span>
@@ -58,7 +61,7 @@
     <p><strong>Observação do solicitante:</strong><br>{{ supply_request.user_note or '-' }}</p>
     <p><strong>Observação admin:</strong><br>{{ supply_request.admin_note or '-' }}</p>
 
-    {% if supply_request.status == 'pending' %}
+    {% if can_review_request %}
       <form method="post" action="{{ url_for('admin_request_approve', request_id=supply_request.id) }}" class="form-grid">
         <label>Observação ao aprovar<textarea name="admin_note" rows="3"></textarea></label>
         <button class="btn success" type="submit">Aprovar e descontar estoque</button>
@@ -68,9 +71,11 @@
         <button class="btn danger" type="submit">Recusar solicitação</button>
       </form>
     {% endif %}
+    {% if can_delete_request %}
     <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente esta solicitação do banco de dados?') : 'Excluir definitivamente esta solicitação do banco de dados?')">
       <button class="btn ghost danger" type="submit">Excluir solicitação</button>
     </form>
+    {% endif %}
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Voltar</a>
   </div>
 </section>

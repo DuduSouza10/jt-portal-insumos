@@ -17,6 +17,7 @@
   </div>
 </section>
 
+{% if can_do('stock_reports') %}
 <section class="card monthly-report-card">
   <div class="section-head stock-panel-head">
     <div>
@@ -61,6 +62,7 @@
     <p class="report-form-hint">Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.</p>
   </form>
 </section>
+{% endif %}
 
 <section class="stock-modern-grid">
   <div class="card stock-panel stock-chart-panel">
@@ -69,7 +71,9 @@
         <h2>Estoque atual por produto</h2>
         <p class="hint">Sem pesquisa, o gráfico mostra o estoque agrupado por categoria. Pesquise um produto para visualizar somente ele.</p>
       </div>
-      <a class="btn tiny ghost" href="{{ url_for('admin_products') }}">Editar produtos</a>
+      {% if can_access('admin_products') and (can_do('products_create') or can_do('products_edit_basic') or can_do('products_edit_category') or can_do('products_edit_unit') or can_do('products_edit_price') or can_do('products_edit_stock') or can_do('products_edit_limits') or can_do('products_edit_visibility')) %}
+        <a class="btn tiny ghost" href="{{ url_for('admin_products') }}">Editar produtos</a>
+      {% endif %}
     </div>
     <div class="stock-search-row">
       <div class="stock-search-autocomplete">

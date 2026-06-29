@@ -58,13 +58,16 @@
                 {% endfor %}
               </select>
             </div>
-            <button id="openNewCategory" class="btn ghost category-new-button category-icon-button" type="button" aria-label="Nova categoria">
-              <img src="{{ url_for('static', filename='img/action-plus.svg') }}" alt="">
-            </button>
-            <button id="openEditCategories" class="btn ghost category-edit-existing-button category-icon-button" type="button" aria-label="Editar categorias">
-              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
-            </button>
+            {% if can_do('products_edit_category') %}
+              <button id="openNewCategory" class="btn ghost category-new-button category-icon-button" type="button" aria-label="Nova categoria">
+                <img src="{{ url_for('static', filename='img/action-plus.svg') }}" alt="">
+              </button>
+              <button id="openEditCategories" class="btn ghost category-edit-existing-button category-icon-button" type="button" aria-label="Editar categorias">
+                <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+              </button>
+            {% endif %}
           </div>
+          {% if can_do('products_edit_category') %}
           <div id="newCategoryPanel" class="new-category-panel hidden">
             <label class="new-category-emoji">
               Ícone
@@ -74,7 +77,8 @@
             <button id="confirmNewCategory" class="btn primary" type="button">Adicionar</button>
             <button id="cancelNewCategory" class="btn ghost" type="button">Cancelar</button>
           </div>
-          <small class="hint">Selecione uma categoria já cadastrada ou use o botão + para criar uma nova.</small>
+          {% endif %}
+          <small class="hint">{% if can_do('products_edit_category') %}Selecione uma categoria já cadastrada ou use o botão + para criar uma nova.{% else %}Selecione uma categoria já cadastrada.{% endif %}</small>
         </div>
 
         <div class="product-image-field product-image-field-premium full">
@@ -269,6 +273,7 @@
 </div>
 
 
+{% if can_do('products_edit_category') %}
 <div id="categoryEditModalInline" class="category-edit-modal" aria-hidden="true">
   <div class="category-edit-backdrop" data-close-categories-modal></div>
   <section class="category-edit-card card" role="dialog" aria-modal="true" aria-labelledby="categoryEditTitleInline">
@@ -306,6 +311,7 @@
     </form>
   </section>
 </div>
+{% endif %}
 
 {% endblock %}
 {% block scripts %}

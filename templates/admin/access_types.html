@@ -135,10 +135,8 @@
               </a>
               {% endif %}
               {% if role.can_delete %}
-              {% set delete_title = 'Excluir tipo personalizado' if role.is_custom else 'Restaurar padrão do sistema' %}
-              {% set delete_confirm = 'Excluir este tipo de acesso do banco de dados? Usuários que estiverem usando esse tipo serão movidos para Base.' if role.is_custom else 'Remover a personalização deste tipo de acesso e restaurar o padrão do sistema?' %}
-              <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('{{ delete_confirm }}');">
-                <button class="btn danger icon-action-btn" type="submit" title="{{ delete_title }}" aria-label="{{ delete_title }}">
+              <form method="post" action="{{ url_for('admin_access_type_delete', role_key=role.role_key) }}" onsubmit="return confirm('Excluir este tipo de acesso do banco de dados? Usuários que estiverem usando esse tipo serão movidos para Base.');">
+                <button class="btn danger icon-action-btn" type="submit" title="Excluir tipo de acesso">
                   <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="Excluir">
                 </button>
               </form>

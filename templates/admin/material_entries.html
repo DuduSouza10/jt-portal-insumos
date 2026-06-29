@@ -11,7 +11,7 @@
   </div>
 </section>
 
-<section class="material-entry-grid {{ 'has-import-card' if can_do('stock_material_entries') else 'no-import-card' }}">
+<section class="material-entry-grid">
   <form class="card material-entry-form" method="post" action="{{ url_for('admin_material_entries') }}" enctype="multipart/form-data">
     <div class="section-head compact-section-head">
       <div>
@@ -71,8 +71,7 @@
     </div>
   </form>
 
-  {% if can_do('stock_material_entries') %}
-  <aside class="card material-side-panel import-permission-card">
+  <aside class="card material-side-panel">
     <div class="section-head compact-section-head">
       <div>
         <span class="eyebrow">Importação</span>
@@ -88,9 +87,9 @@
       </form>
     </div>
   </aside>
-  {% endif %}
 </section>
 
+{% if can_do('stock_reports') %}
 <section class="card monthly-report-card material-report-card material-report-card-v66">
   <div class="material-report-topline"></div>
   <div class="material-report-layout">
@@ -119,6 +118,7 @@
     </form>
   </div>
 </section>
+{% endif %}
 
 <section class="card table-card material-history-card">
   <div class="section-head stock-panel-head">

@@ -9,7 +9,11 @@
     <h2>Relatórios de ativos</h2>
     <p>Filtre bases e franquias separadamente, acompanhe os itens cadastrados e gere relatórios por período.</p>
   </div>
-  <button class="btn primary" type="button" data-open-asset-modal>Adicionar Ativos</button>
+  {% if can_do('stock_assets_create') %}
+    <button class="btn primary" type="button" data-open-asset-modal>Adicionar Ativos</button>
+  {% else %}
+    <button class="btn primary hidden" type="button" data-open-asset-modal hidden aria-hidden="true" tabindex="-1">Adicionar Ativos</button>
+  {% endif %}
 </section>
 
 <section class="asset-stats stats-grid">
@@ -76,6 +80,7 @@
   </form>
 </section>
 
+{% if can_do('stock_reports') %}
 <section class="card monthly-report-card asset-monthly-report-card">
   <div class="section-head stock-panel-head">
     <div>
@@ -120,6 +125,7 @@
     <p class="report-form-hint">Selecione uma base, uma franquia ou marque “Selecionar todos” para gerar o relatório completo.</p>
   </form>
 </section>
+{% endif %}
 
 <section class="asset-report-grid">
   {% for asset in assets %}
@@ -145,9 +151,11 @@
         </div>
       {% endfor %}
     </div>
-    <div class="asset-card-actions">
-      <a class="btn tiny primary" href="{{ url_for('asset_pdf', asset_id=asset.id) }}">Gerar PDF</a>
-    </div>
+    {% if can_do('stock_reports') %}
+      <div class="asset-card-actions">
+        <a class="btn tiny primary" href="{{ url_for('asset_pdf', asset_id=asset.id) }}">Gerar PDF</a>
+      </div>
+    {% endif %}
   </article>
   {% else %}
   <div class="empty-state card">Nenhum ativo cadastrado para este filtro.</div>

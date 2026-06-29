@@ -105,7 +105,7 @@
         <input type="radio" name="import_mode" value="replace">
         <span>
           <strong>Substituir cadastros</strong>
-          <small>Usa a planilha como fonte final: campos vazios limpam dados antigos e cadastros fora dela são recusados, exceto o usuário logado.</small>
+          <small>Atualiza a planilha e recusa cadastros que não estiverem nela, exceto o usuário logado.</small>
         </span>
       </label>
     </fieldset>
@@ -114,6 +114,8 @@
   </form>
   {% endif %}
 
+  {% set can_manage_user_status = can_do('users_status_delete') %}
+  {% set can_edit_users = can_do('users_create_edit') %}
   <table>
     <thead>
       <tr>
@@ -148,6 +150,7 @@
         <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
         <td class="actions-cell" data-label="Ações">
           {% if user.status == 'pending' and not user.is_admin %}
+            {% if can_manage_user_status %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
@@ -158,18 +161,27 @@
                 <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
               </button>
             </form>
+            {% endif %}
+            {% if can_edit_users %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
+            {% endif %}
+            {% if can_manage_user_status %}
             <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
               <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
                 <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
               </button>
             </form>
+            {% endif %}
+            {% if not can_manage_user_status and not can_edit_users %}<span class="muted">Sem ações</span>{% endif %}
           {% elif user.status == 'rejected' and not user.is_admin %}
+            {% if can_edit_users %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
+            {% endif %}
+            {% if can_manage_user_status %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
@@ -179,17 +191,22 @@
                 <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
               </button>
             </form>
+            {% endif %}
+            {% if not can_manage_user_status and not can_edit_users %}<span class="muted">Sem ações</span>{% endif %}
           {% else %}
+            {% if can_edit_users %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
-            {% if current_user and user.id != current_user.id %}
+            {% endif %}
+            {% if can_manage_user_status and current_user and user.id != current_user.id %}
               <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
                 <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
                 <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
               </button>
               </form>
             {% endif %}
+            {% if not can_edit_users and not (can_manage_user_status and current_user and user.id != current_user.id) %}<span class="muted">Sem ações</span>{% endif %}
           {% endif %}
         </td>
       </tr>
@@ -259,7 +276,7 @@
     userImportForm.addEventListener('submit', function (event) {
       const selectedMode = userImportForm.querySelector('input[name="import_mode"]:checked');
       if (selectedMode && selectedMode.value === 'replace') {
-        const message = 'Substituir cadastros? Campos vazios na planilha limparão dados antigos. Usuários que não estiverem na planilha serão recusados, exceto o usuário logado.';
+        const message = 'Substituir cadastros? Usuários que não estiverem na planilha serão recusados, exceto o usuário logado.';
         const confirmed = window.confirm(window.jtText ? window.jtText(message) : message);
         if (!confirmed) event.preventDefault();
       }

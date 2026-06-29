@@ -906,7 +906,6 @@ def validate_user_profile_fields(
     franchise_number: Any = "",
     cnpj: Any = "",
     strict_base: bool = True,
-    allow_blank_profile: bool = False,
 ) -> tuple[str, str, str, str]:
     organization = str(organization_name or "").strip()
     franchise = str(franchise_name or "").strip()
@@ -918,8 +917,6 @@ def validate_user_profile_fields(
         if canonical_base:
             return canonical_base, "", "", ""
         if not organization:
-            if allow_blank_profile:
-                return "", "", "", ""
             raise ValueError("Informe o nome da base.")
         if strict_base:
             raise ValueError("Selecione uma base válida.")
@@ -929,8 +926,6 @@ def validate_user_profile_fields(
 
     if role == "franchise":
         if not franchise:
-            if allow_blank_profile:
-                return "", "", phone_digits, cnpj_digits
             raise ValueError("Informe o nome da franquia.")
         if phone_digits and len(phone_digits) not in {10, 11}:
             raise ValueError("Informe um telefone válido com DDD, usando apenas números.")
@@ -940,7 +935,7 @@ def validate_user_profile_fields(
         return franchise_clean, franchise_clean, phone_digits, cnpj_digits
 
     if role in {"admin", "dev"} or get_custom_access_role(role) is not None:
-        setor = organization[:160] if organization else ("" if allow_blank_profile else ADMIN_ORGANIZATION_NAME)
+        setor = organization[:160] if organization else ADMIN_ORGANIZATION_NAME
         return setor, "", phone_digits, cnpj_digits
 
     raise ValueError("Tipo de acesso inválido.")
@@ -2004,6 +1999,7 @@ ACTION_PERMISSION_OPTIONS = [
     {"key": "stock_reports", "page_key": "admin_stock", "label": "Gerar relatórios de estoque", "description": "Permite gerar relatórios de solicitações, entradas e ativos."},
     {"key": "requests_edit_items", "page_key": "admin_requests", "label": "Editar itens de solicitações", "description": "Permite alterar quantidades de pedidos pendentes."},
     {"key": "requests_approve_reject", "page_key": "admin_requests", "label": "Aprovar ou recusar solicitações", "description": "Permite aprovar, recusar e movimentar estoque por solicitação."},
+    {"key": "requests_delete", "page_key": "admin_requests", "label": "Excluir solicitações", "description": "Permite excluir solicitações definitivamente do banco de dados."},
     {"key": "users_create_edit", "page_key": "admin_users", "label": "Criar/editar usuários", "description": "Permite cadastrar usuários e alterar dados de acesso."},
     {"key": "users_import_export", "page_key": "admin_users", "label": "Importar/exportar usuários", "description": "Permite baixar modelos, exportar tabela e importar usuários."},
     {"key": "users_status_delete", "page_key": "admin_users", "label": "Status e exclusão de usuários", "description": "Permite aprovar, recusar, reativar ou excluir usuários."},
@@ -4725,12 +4721,7 @@ def generate_user_import_password_hash(password: str) -> str:
     return generate_password_hash(str(password or ""), method="pbkdf2:sha256:20000", salt_length=12)
 
 
-def parse_user_import_record(
-    row_number: int,
-    row_values: list[Any],
-    header_map: dict[str, int],
-    replace_mode: bool = False,
-) -> UserImportRecord:
+def parse_user_import_record(row_number: int, row_values: list[Any], header_map: dict[str, int]) -> UserImportRecord:
     responsible_name = clean_import_text(get_user_import_value(row_values, header_map, "responsible_name"))
     username = normalize_username(clean_import_text(get_user_import_value(row_values, header_map, "username")))
     password = clean_import_text(get_user_import_value(row_values, header_map, "password"))
@@ -4762,7 +4753,6 @@ def parse_user_import_record(
         franchise_number=get_user_import_value(row_values, header_map, "franchise_number"),
         cnpj=get_user_import_value(row_values, header_map, "cnpj"),
         strict_base=False,
-        allow_blank_profile=replace_mode,
     )
     return UserImportRecord(
         source_row=row_number,
@@ -4947,7 +4937,7 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
                 errors.append(f"limite de {max_import_rows} linhas atingido; divida a planilha para importar o restante")
                 break
             try:
-                record = parse_user_import_record(row_number, row_values, header_map, replace_mode=(import_mode == "replace"))
+                record = parse_user_import_record(row_number, row_values, header_map)
                 if record.role == "dev" and current_user_role != "dev":
                     raise ValueError("somente usuário Dev pode importar usuários com tipo Dev")
                 if record.role not in STATIC_ROLE_KEYS and current_user_role != "dev":
@@ -5691,6 +5681,9 @@ def request_pdf(request_id: int):
 @admin_required
 @page_access_required("admin_stock")
 def asset_pdf(asset_id: int):
+    denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar PDFs de ativos.", "admin_assets")
+    if denied:
+        return denied
     viewer = require_current_user()
     asset = get_asset(asset_id)
     if asset is None:
@@ -6279,10 +6272,10 @@ def admin_users_import():
 @admin_required
 @page_access_required("admin_users")
 def admin_user_new():
+    denied = require_action_permission("users_create_edit", "Seu tipo de acesso não pode criar usuários.", "admin_users")
+    if denied:
+        return denied
     if request.method == "POST":
-        denied = require_action_permission("users_create_edit", "Seu tipo de acesso não pode criar usuários.", "admin_users")
-        if denied:
-            return denied
 
         responsible_name = request.form.get("responsible_name", "").strip()
         username = normalize_username(request.form.get("username", ""))
@@ -6372,6 +6365,9 @@ def admin_user_new():
 @admin_required
 @page_access_required("admin_users")
 def admin_user_edit(user_id: int):
+    denied = require_action_permission("users_create_edit", "Seu tipo de acesso não pode editar usuários.", "admin_users")
+    if denied:
+        return denied
     target = get_user(user_id)
     if target is None:
         abort(404)
@@ -6597,8 +6593,7 @@ def access_role_listing() -> list[dict[str, Any]]:
     }
     roles: list[dict[str, Any]] = []
     for key in STATIC_ROLE_ORDER:
-        role_override = get_access_role_override(key)
-        role_definition = role_override or default_static_access_role(key)
+        role_definition = get_access_role_definition(key) or default_static_access_role(key)
         if role_definition is None:
             continue
         permissions = sorted(role_definition.permissions, key=lambda item: list(page_labels).index(item) if item in page_labels else 999)
@@ -6610,9 +6605,8 @@ def access_role_listing() -> list[dict[str, Any]]:
             "permissions": permissions,
             "action_permissions": actions,
             "is_custom": False,
-            "is_override": role_override is not None,
             "can_edit": key != "dev",
-            "can_delete": key != "dev" and role_override is not None,
+            "can_delete": False,
         })
     for role in list_custom_access_roles():
         roles.append({
@@ -6622,7 +6616,6 @@ def access_role_listing() -> list[dict[str, Any]]:
             "permissions": role.permissions,
             "action_permissions": role.action_permissions,
             "is_custom": True,
-            "is_override": True,
             "can_edit": True,
             "can_delete": True,
         })
@@ -6734,27 +6727,10 @@ def admin_access_type_delete(role_key: str):
     current = require_current_user()
     if not current.is_dev:
         abort(403)
-    role = get_access_role_definition(role_key)
-    if role is None or role.role_key == "dev":
+    role = get_custom_access_role(role_key)
+    if role is None:
         abort(404)
     with db_connect() as conn:
-        if role.is_static:
-            changed_at = now_iso()
-            conn.execute("DELETE FROM access_role_types WHERE role_key = ?", (role.role_key,))
-            conn.execute(
-                "DELETE FROM user_page_permissions WHERE user_id IN (SELECT id FROM users WHERE role = ?)",
-                (role.role_key,),
-            )
-            conn.execute(
-                "UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?",
-                (changed_at, role.role_key),
-            )
-            conn.commit()
-            get_access_role_override.cache_clear()
-            get_custom_access_role.cache_clear()
-            flash("Personalizacao removida. Usuarios desse tipo voltaram a herdar o padrao do sistema.", "success")
-            return redirect(url_for("admin_access_types"))
-
         in_use = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = ?", (role.role_key,)).fetchone()["total"]
         affected = int(in_use or 0)
         if affected > 0:
@@ -8186,6 +8162,9 @@ def admin_request_reject(request_id: int):
 @admin_required
 @page_access_any_required(["admin_requests", "admin_requests_attended"])
 def admin_request_delete(request_id: int):
+    denied = require_action_permission("requests_delete", "Seu tipo de acesso não pode excluir solicitações.", "admin_requests")
+    if denied:
+        return denied
     try:
         with db_connect() as conn:
             deleted = permanently_delete_supply_request(conn, request_id)
