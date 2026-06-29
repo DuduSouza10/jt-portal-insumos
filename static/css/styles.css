@@ -11530,10 +11530,44 @@ html[data-theme="light"] body a.btn.danger:not(:hover):not(:focus-visible):not(:
 }
 
 .access-action-group h3 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
   margin: 0 0 10px !important;
   font-size: 14px !important;
   font-weight: 950 !important;
   color: var(--text-strong) !important;
+}
+
+.access-action-state {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  padding: 5px 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(230, 0, 18, .18) !important;
+  background: rgba(230, 0, 18, .08) !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+  text-align: center !important;
+  white-space: normal !important;
+}
+
+.access-action-group.disabled {
+  opacity: .58 !important;
+  border-style: dashed !important;
+}
+
+.access-action-group.disabled .permission-option {
+  cursor: not-allowed !important;
+}
+
+.access-action-group.disabled .permission-option span {
+  opacity: .72 !important;
 }
 
 .granular-permission-grid {
@@ -12142,6 +12176,45 @@ html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(inpu
 
 body .import-form label.import-mode-option:not(:has(input:checked)) input[type="radio"]::before {
   background: var(--jt-button-black) !important;
+}
+
+/* v156 - cards de modo de importacao no tema escuro. O radio fica com o estilo atual. */
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)),
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) {
+  background: #2b2d31 !important;
+  background-color: #2b2d31 !important;
+  background-image: none !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  border-color: rgba(255, 255, 255, .18) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)) :where(span, strong, small),
+html[data-theme="dark"] body .import-form label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) :where(span, strong, small) {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked),
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active) {
+  background: var(--jt-button-red-bg) !important;
+  background-color: var(--red) !important;
+  background-image: var(--jt-button-red-bg) !important;
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  border-color: rgba(230, 0, 18, .72) !important;
+  box-shadow: 0 16px 30px rgba(230, 0, 18, .18) !important;
+}
+
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked) :where(span, strong, small),
+html[data-theme="dark"] body .import-form label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active) :where(span, strong, small) {
+  color: var(--jt-button-white) !important;
+  -webkit-text-fill-color: var(--jt-button-white) !important;
+  text-shadow: none !important;
+  filter: none !important;
 }
 
 html[data-theme="light"] body .nav-header :where(.top-nav > a, .nav-drop-toggle, .logout, .public-actions .btn, .nav-drop-menu a):not(.active):not(:hover):not(:focus-visible):not(:active) {

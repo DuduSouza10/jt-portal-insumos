@@ -24,6 +24,8 @@
   "Páginas desse tipo": "该类型的页面",
   "Marque as páginas que esse cargo poderá visualizar no portal.": "请选择该职位可以在门户中查看的页面。",
   "Funcionalidades liberadas por página": "按页面开放的功能",
+  "Funcionalidades disponíveis": "功能可用",
+  "Marque a página para liberar": "勾选页面后开放",
   "Use essas opções para liberar ações como alterar estoque, preço, unidade de medida, importação e aprovações.": "使用这些选项开放修改库存、价格、计量单位、导入和审批等操作。",
   "Controle ações específicas, como alterar estoque, preço, unidade de medida, importações e aprovações.": "控制具体操作，如修改库存、价格、计量单位、导入和审批。",
   "Funcionalidades": "功能",
@@ -170,8 +172,8 @@
   "Digite o cargo da pessoa": "请输入此人的职位",
   "Portal de Insumos J&T": "J&T 耗材门户网站",
   "Portal de Insumos": "耗材门户网站",
-  "J&T Express Brazil": "J&T Express 巴西",
-  "J&T Express • Gestão de insumos": "J&T Express • 耗材管理",
+  "J&T Express Brazil": "J&T 速运巴西",
+  "J&T Express • Gestão de insumos": "J&T 速运 • 耗材管理",
   "Solicitação e controle interno de materiais.": "内部物料申请与管控。",
   "Solicitar insumos": "申请耗材",
   "Minhas solicitações": "我的申请",
@@ -194,7 +196,7 @@
   "Alternar idioma entre português e chinês simplificado": "切换语言：葡萄牙语 / 简体中文",
   "Informações de segurança e desenvolvimento": "安全与开发资讯",
   "Developed by: Eduardo Rodrigues & Aleffi Silva": "开发者：Eduardo Rodrigues 与 Aleffi Silva",
-  "J&T Express Brazil • CNPJ: 42.584.754/0092-13": "J&T Express 巴西 • CNPJ：42.584.754/0092-13",
+  "J&T Express Brazil • CNPJ: 42.584.754/0092-13": "J&T 速运巴西 • CNPJ：42.584.754/0092-13",
   "Login": "登入",
   "Acesse o portal com seu nome de usuário e senha.": "使用您的用户名与密码进入门户网站。",
   "Nome de usuário": "用户名",
@@ -719,7 +721,7 @@
 "Nome do responsável": "负责人姓名",
 "Observação opcional": "选填备注",
 "Produto ativo para solicitação": "产品可供申请",
-"Portal de Insumos J&T Express": "J&T Express 耗材门户网站",
+"Portal de Insumos J&T Express": "J&T 速运耗材门户网站",
 "Status do cadastro": "注册状态",
 "Tipo de unidade": "单位类型",
 "Tipo:": "类型：",
@@ -1226,13 +1228,27 @@
       .replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\s]+/u, '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[|•–—-]+/g, ' ')
+      .replace(/&/g, ' ')
+      .replace(/[|•–—/_-]+/g, ' ')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .toLocaleLowerCase('pt-BR');
   }
 
   const dynamicProductTranslations = {
+    'camiseta polo personalizada j t': 'J&T定制Polo衫',
+    'camiseta polo personalizada jt': 'J&T定制Polo衫',
+    'camiseta polo j t': 'J&T Polo衫',
+    'camiseta polo jt': 'J&T Polo衫',
+    'camiseta polo personalizada': '定制Polo衫',
+    'camiseta polo': 'Polo衫',
+    'camiseta basica personalizada j t': 'J&T定制基础T恤',
+    'camiseta basica personalizada jt': 'J&T定制基础T恤',
+    'camiseta personalizada j t': 'J&T定制T恤',
+    'camiseta personalizada jt': 'J&T定制T恤',
+    'colete epi personalizado j t': 'J&T定制防护背心',
+    'colete epi personalizado jt': 'J&T定制防护背心',
     'manga pallet plastica': '塑料托盘缠绕膜',
     'manga pallet plastico': '塑料托盘缠绕膜',
     'manga palete plastica': '塑料托盘缠绕膜',
@@ -1278,6 +1294,14 @@
     if (dynamicProductTranslations[normalized]) return prefix + dynamicProductTranslations[normalized];
 
     const replacements = [
+      [/camiseta\s+polo\s+personalizada\s*(?:\|?\s*)?(?:j\s*&?\s*t|j\s+t|jt)/giu, 'J&T定制Polo衫'],
+      [/camiseta\s+b[aá]sica\s+personalizada\s*(?:\|?\s*)?(?:j\s*&?\s*t|j\s+t|jt)/giu, 'J&T定制基础T恤'],
+      [/camiseta\s+personalizada\s*(?:\|?\s*)?(?:j\s*&?\s*t|j\s+t|jt)/giu, 'J&T定制T恤'],
+      [/colete\s+epi\s+personalizado\s*(?:\|?\s*)?(?:j\s*&?\s*t|j\s+t|jt)/giu, 'J&T定制防护背心'],
+      [/camiseta\s+polo\s+personalizada/giu, '定制Polo衫'],
+      [/camiseta\s+b[aá]sica\s+personalizada/giu, '定制基础T恤'],
+      [/camiseta\s+personalizada/giu, '定制T恤'],
+      [/colete\s+epi\s+personalizado/giu, '定制防护背心'],
       [/manga\s+(?:de\s+)?pal(?:l)?et[e]?\s+pl[aá]stic[oa]/giu, '塑料托盘缠绕膜'],
       [/packtainer\s+pl[aá]stic[oa]/giu, '塑料周转箱'],
       [/lacre[s]?\s+pl[aá]stic[oa]s?/giu, '塑料封条'],
@@ -1296,7 +1320,11 @@
       [/rolo[s]?/giu, '卷'],
       [/unidade[s]?/giu, '单位'],
       [/caixa[s]?/giu, '箱'],
-      [/pacote[s]?/giu, '包']
+      [/pacote[s]?/giu, '包'],
+      [/camiseta[s]?/giu, 'T恤'],
+      [/personalizad[ao]s?/giu, '定制'],
+      [/b[aá]sic[ao]s?/giu, '基础'],
+      [/\bj\s*&?\s*t\b|\bjt\b/giu, 'J&T']
     ];
     let out = clean;
     let changed = false;
@@ -1729,11 +1757,27 @@
     return role + ' • ' + sector;
   }
 
+  function translateProductMessage(core) {
+    let match;
+    if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${translatePiece(match[1])}超出耗材限制。允许限制：${match[2]}。`;
+    if ((match = core.match(/^A quantidade mínima para (.+) é (.+)\.$/))) return `${translatePiece(match[1])}的最低申请数量为 ${match[2]}。`;
+    if ((match = core.match(/^(.+) não está disponível para bases\.$/))) return `${translatePiece(match[1])}不对基地开放。`;
+    if ((match = core.match(/^(.+) não está disponível para franquias\.$/))) return `${translatePiece(match[1])}不对加盟店开放。`;
+    if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${translatePiece(match[1])}已加入申请。`;
+    if ((match = core.match(/^Produto '(.+)' ativado para solicitação\.$/))) return `产品“${translatePiece(match[1])}”已启用，可供申请。`;
+    if ((match = core.match(/^Produto '(.+)' inativado para solicitação\. Ele continua salvo no banco de dados\.$/))) return `产品“${translatePiece(match[1])}”已停用申请，但仍保存在数据库中。`;
+    if ((match = core.match(/^Produto '(.+)' excluído definitivamente do banco de dados\.(.*)$/))) return `产品“${translatePiece(match[1])}”已从数据库中永久删除。${match[2] || ''}`;
+    if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `库存不足，无法批准：${translateFallback(match[1])}`;
+    return null;
+  }
+
   function translateCore(core) {
     if (!core) return core;
     if (core === 'Entre com seu nome de usuário e senha. Se sua conta exigir confirmação, informe o código 用于 concluir o login.') return '请输入用户名和密码。如果您的账号需要确认，请输入代码完成登录。';
     const roleSectorLine = translateRoleAndSectorLine(core);
     if (roleSectorLine) return roleSectorLine;
+    const productMessage = translateProductMessage(core);
+    if (productMessage) return productMessage;
     if (zh[core]) return zh[core];
     const dynamicCore = translateDynamicProductText(core);
     if (dynamicCore) return dynamicCore;
@@ -1769,11 +1813,11 @@
     if ((match = core.match(/^(.+?)\s*•\s*Min\.?:\s*(.+?)\s*•\s*Máx\.?:\s*(.+)$/))) return `${translatePiece(match[1])} • 最低：${translatePiece(match[2])} • 最高：${translatePiece(match[3])}`;
     if ((match = core.match(/^Insira o código para confirmar o seu login:\s*(\d{6})$/))) return `请输入代码以确认您的登入：${match[1]}`;
     if ((match = core.match(/^Solicitação #(\d+) enviada para aprovação\. PDF disponível para download\.$/))) return `申请 #${match[1]} 已送交批准。PDF 可供下载。`;
-    if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${match[1]} 超出耗材限制。允许限制：${match[2]}。`;
-    if ((match = core.match(/^A quantidade mínima para (.+) é (.+)\.$/))) return `${match[1]} 的最低申请数量为 ${match[2]}。`;
-    if ((match = core.match(/^(.+) não está disponível para bases\.$/))) return `${match[1]} 不对基地开放。`;
-    if ((match = core.match(/^(.+) não está disponível para franquias\.$/))) return `${match[1]} 不对加盟店开放。`;
-    if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${match[1]} 已加入申请。`;
+    if ((match = core.match(/^Limite de insumos excedido para (.+)\. Limite permitido: (.+)\.$/))) return `${translatePiece(match[1])}超出耗材限制。允许限制：${match[2]}。`;
+    if ((match = core.match(/^A quantidade mínima para (.+) é (.+)\.$/))) return `${translatePiece(match[1])}的最低申请数量为 ${match[2]}。`;
+    if ((match = core.match(/^(.+) não está disponível para bases\.$/))) return `${translatePiece(match[1])}不对基地开放。`;
+    if ((match = core.match(/^(.+) não está disponível para franquias\.$/))) return `${translatePiece(match[1])}不对加盟店开放。`;
+    if ((match = core.match(/^(.+) adicionado à solicitação\.$/))) return `${translatePiece(match[1])}已加入申请。`;
     if ((match = core.match(/^Estoque:\s*(.+)$/))) return `库存：${match[1]}`;
     if ((match = core.match(/^Limite:\s*(.+)$/))) return `限制：${match[1]}`;
     if ((match = core.match(/^Unidade:\s*(.+)$/))) return `单位：${match[1]}`;
@@ -1811,10 +1855,10 @@
       return `导入完成：新建 ${match[1]} 个，更新 ${match[2]} 个，忽略 ${match[3]} 个。${suffix}`;
     }
     if ((match = core.match(/^Importação concluída:\s*(.+)$/))) return `导入完成：${translateFallback(match[1])}`;
-    if ((match = core.match(/^Produto '(.+)' ativado para solicitação\.$/))) return `产品“${match[1]}”已启用，可供申请。`;
-    if ((match = core.match(/^Produto '(.+)' inativado para solicitação\. Ele continua salvo no banco de dados\.$/))) return `产品“${match[1]}”已停用申请，但仍保存在数据库中。`;
-    if ((match = core.match(/^Produto '(.+)' excluído definitivamente do banco de dados\.(.*)$/))) return `产品“${match[1]}”已从数据库中永久删除。${match[2] || ''}`;
-    if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `库存不足，无法批准：${match[1]}`;
+    if ((match = core.match(/^Produto '(.+)' ativado para solicitação\.$/))) return `产品“${translatePiece(match[1])}”已启用，可供申请。`;
+    if ((match = core.match(/^Produto '(.+)' inativado para solicitação\. Ele continua salvo no banco de dados\.$/))) return `产品“${translatePiece(match[1])}”已停用申请，但仍保存在数据库中。`;
+    if ((match = core.match(/^Produto '(.+)' excluído definitivamente do banco de dados\.(.*)$/))) return `产品“${translatePiece(match[1])}”已从数据库中永久删除。${match[2] || ''}`;
+    if ((match = core.match(/^Estoque insuficiente para aprovar:\s*(.+)$/))) return `库存不足，无法批准：${translateFallback(match[1])}`;
     return translateFallback(core);
   }
 

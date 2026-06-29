@@ -49,7 +49,10 @@
     <div class="full access-action-groups" data-access-action-permissions>
       {% for group in action_permission_groups %}
       <section class="access-action-group" data-action-group="{{ group.page_key }}">
-        <h3>{{ group.page_label }}</h3>
+        <h3>
+          {{ group.page_label }}
+          <small class="access-action-state" data-enabled-text="Funcionalidades disponíveis" data-disabled-text="Marque a página para liberar">Funcionalidades disponíveis</small>
+        </h3>
         <div class="permission-grid access-type-permission-grid granular-permission-grid">
           {% for action in group.actions %}
           <label class="permission-option action-permission-option">
@@ -80,7 +83,11 @@
     document.querySelectorAll('[data-access-action-permissions] [data-action-group]').forEach((group) => {
       const pageKey = group.getAttribute('data-action-group');
       const isEnabled = enabledPages.has(pageKey);
-      group.hidden = !isEnabled;
+      group.hidden = false;
+      group.classList.toggle('disabled', !isEnabled);
+      group.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+      const state = group.querySelector('.access-action-state');
+      if (state) state.textContent = isEnabled ? state.dataset.enabledText : state.dataset.disabledText;
       group.querySelectorAll('input[name="action_permissions"]').forEach((input) => {
         input.disabled = !isEnabled;
         if (!isEnabled) input.checked = false;
