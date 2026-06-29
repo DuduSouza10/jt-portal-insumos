@@ -76,28 +76,35 @@
 </div>
 
 <div class="card table-card access-type-list-card">
-  <div class="section-head">
+  <div class="section-head access-type-list-head">
     <div>
       <span class="eyebrow">Tipos personalizados</span>
       <h2>Tipos cadastrados</h2>
+      <p>Veja os acessos do sistema e os perfis personalizados em um resumo organizado.</p>
     </div>
+    <span class="access-type-count">{{ access_roles|length }} tipo(s)</span>
   </div>
   {% if access_roles %}
-    <table>
+    <table class="access-roles-table">
       <thead>
-        <tr><th>Tipo</th><th>Descrição</th><th>Páginas</th><th>Funcionalidades</th><th>Ações</th></tr>
+        <tr><th>Tipo</th><th>Escopo</th><th>Funcionalidades</th><th>Ações</th></tr>
       </thead>
       <tbody>
         {% for role in access_roles %}
         <tr class="{{ 'system-access-role-row' if not role.is_custom else '' }}">
-          <td>
-            <strong>{{ role.name }}</strong><br>
-            <small>{{ role.role_key }}</small>
-            {% if not role.is_custom %}<span class="access-role-fixed-badge">Sistema</span>{% endif %}
+          <td data-label="Tipo">
+            <div class="access-role-main">
+              <span class="access-role-avatar">{{ role.name[:1] }}</span>
+              <span class="access-role-title">
+                <strong>{{ role.name }}</strong>
+                <small>{{ role.role_key }}</small>
+                <span class="access-role-kind {{ 'custom' if role.is_custom else 'system' }}">{{ 'Personalizado' if role.is_custom else 'Sistema' }}</span>
+              </span>
+            </div>
           </td>
-          <td>{{ role.description or '-' }}</td>
-          <td>
-            <div class="access-role-pages">
+          <td data-label="Escopo">
+            <p class="access-role-description">{{ role.description or '-' }}</p>
+            <div class="access-role-pages access-role-page-chips">
               {% for key in role.permissions %}
                 {% for option in permission_options if option.key == key %}
                   <span>{{ option.label }}</span>
@@ -105,16 +112,20 @@
               {% endfor %}
             </div>
           </td>
-          <td>
+          <td data-label="Funcionalidades">
+            <div class="access-role-action-meta">
+              <strong>{{ role.action_permissions|length }}</strong>
+              <span>{{ 'ação liberada' if role.action_permissions|length == 1 else 'ações liberadas' }}</span>
+            </div>
             <div class="access-role-pages access-role-actions">
               {% for key in role.action_permissions %}
                 <span>{{ action_permission_label_map.get(key, key) }}</span>
               {% else %}
-                <small class="muted">Somente visualização</small>
+                <span class="access-role-readonly">Somente visualização</span>
               {% endfor %}
             </div>
           </td>
-          <td>
+          <td data-label="Ações" class="access-role-actions-cell">
             <div class="table-actions">
               {% if role.can_edit %}
               <a class="btn ghost icon-action-btn" href="{{ url_for('admin_access_type_edit', role_key=role.role_key) }}" title="Editar tipo de acesso">
@@ -129,7 +140,7 @@
               </form>
               {% endif %}
               {% if not role.can_edit and not role.can_delete %}
-                <small class="muted">Tipo padrão</small>
+                <span class="access-role-locked">Protegido</span>
               {% endif %}
             </div>
           </td>

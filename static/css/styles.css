@@ -11636,6 +11636,287 @@ html[data-theme="light"] .system-access-role-row {
   font-weight: 950 !important;
 }
 
+/* v159 - tabela de tipos cadastrados mais legivel. */
+.access-type-list-head {
+  align-items: flex-start !important;
+  gap: 16px !important;
+}
+
+.access-type-list-head p {
+  margin: 6px 0 0 !important;
+  color: var(--muted) !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.access-type-count {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: fit-content !important;
+  padding: 8px 12px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(230, 0, 18, .22) !important;
+  background: rgba(230, 0, 18, .09) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  white-space: nowrap !important;
+}
+
+.access-roles-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 10px !important;
+}
+
+.access-roles-table th {
+  padding: 0 14px 8px !important;
+  border: 0 !important;
+  color: var(--muted) !important;
+  font-size: 10px !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase !important;
+}
+
+.access-roles-table th:nth-child(1) { width: 24% !important; }
+.access-roles-table th:nth-child(2) { width: 34% !important; }
+.access-roles-table th:nth-child(3) { width: 32% !important; }
+.access-roles-table th:nth-child(4) { width: 10% !important; }
+
+.access-roles-table td {
+  padding: 16px 14px !important;
+  border-top: 1px solid rgba(255,255,255,.08) !important;
+  border-bottom: 1px solid rgba(255,255,255,.08) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.018)) !important;
+  vertical-align: top !important;
+}
+
+.access-roles-table td:first-child {
+  border-left: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 16px 0 0 16px !important;
+}
+
+.access-roles-table td:last-child {
+  border-right: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 0 16px 16px 0 !important;
+}
+
+html[data-theme="light"] .access-roles-table td {
+  border-color: rgba(17, 24, 39, .08) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+.access-roles-table .system-access-role-row td {
+  background: linear-gradient(180deg, rgba(230,0,18,.045), rgba(255,255,255,.020)) !important;
+}
+
+html[data-theme="light"] .access-roles-table .system-access-role-row td {
+  background: linear-gradient(180deg, rgba(230,0,18,.045), rgba(255,255,255,.98)) !important;
+}
+
+.access-role-main {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.access-role-avatar {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(230,0,18,.28) !important;
+  background: linear-gradient(145deg, rgba(230,0,18,.22), rgba(255,255,255,.045)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  font-size: 18px !important;
+  font-weight: 950 !important;
+  text-transform: uppercase !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+
+.access-role-title {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+.access-role-title strong {
+  color: var(--text-strong) !important;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+}
+
+.access-role-title small {
+  color: var(--muted) !important;
+  font-size: 11px !important;
+  word-break: break-word !important;
+}
+
+.access-role-kind,
+.access-role-readonly,
+.access-role-locked {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  padding: 5px 8px !important;
+  border-radius: 999px !important;
+  font-size: 10px !important;
+  font-weight: 950 !important;
+  line-height: 1.1 !important;
+}
+
+.access-role-kind.system,
+.access-role-locked {
+  border: 1px solid rgba(230,0,18,.22) !important;
+  background: rgba(230,0,18,.08) !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+}
+
+.access-role-kind.custom {
+  border: 1px solid rgba(255,255,255,.14) !important;
+  background: rgba(255,255,255,.055) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+}
+
+html[data-theme="light"] .access-role-kind.custom {
+  border-color: rgba(17, 24, 39, .10) !important;
+  background: rgba(17, 24, 39, .045) !important;
+}
+
+.access-role-description {
+  margin: 0 0 10px !important;
+  color: var(--muted-2) !important;
+  font-size: 12.5px !important;
+  line-height: 1.45 !important;
+}
+
+.access-role-pages {
+  display: flex !important;
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+
+.access-role-pages span,
+.access-role-readonly {
+  padding: 5px 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.045) !important;
+  color: var(--muted-2) !important;
+  -webkit-text-fill-color: var(--muted-2) !important;
+  font-size: 10.5px !important;
+  font-weight: 900 !important;
+  line-height: 1.15 !important;
+}
+
+html[data-theme="light"] .access-role-pages span,
+html[data-theme="light"] .access-role-readonly {
+  border-color: rgba(17, 24, 39, .09) !important;
+  background: rgba(17, 24, 39, .045) !important;
+  color: #2f343b !important;
+  -webkit-text-fill-color: #2f343b !important;
+}
+
+.access-role-page-chips span {
+  border-color: rgba(230,0,18,.18) !important;
+  background: rgba(230,0,18,.07) !important;
+}
+
+.access-role-action-meta {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 7px !important;
+  margin-bottom: 9px !important;
+}
+
+.access-role-action-meta strong {
+  color: var(--text-strong) !important;
+  font-size: 22px !important;
+  line-height: 1 !important;
+  font-weight: 950 !important;
+}
+
+.access-role-action-meta span {
+  color: var(--muted) !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+}
+
+.access-role-actions {
+  max-height: 86px !important;
+  overflow: auto !important;
+  padding-right: 2px !important;
+}
+
+.access-role-actions::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+.access-role-actions::-webkit-scrollbar-thumb {
+  background: rgba(230,0,18,.34) !important;
+  border-radius: 999px !important;
+}
+
+.access-role-actions span:not(.access-role-readonly) {
+  border-color: rgba(230,0,18,.18) !important;
+  background: rgba(230,0,18,.08) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+}
+
+.access-role-actions-cell {
+  vertical-align: middle !important;
+}
+
+.access-role-actions-cell .table-actions {
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  min-width: 82px !important;
+}
+
+@media (max-width: 760px) {
+  .access-type-list-head {
+    align-items: stretch !important;
+  }
+
+  .access-type-count {
+    justify-content: flex-start !important;
+  }
+
+  .access-roles-table {
+    border-spacing: 0 !important;
+  }
+
+  .access-roles-table td {
+    background: transparent !important;
+    border: 0 !important;
+    padding: 10px 0 !important;
+  }
+
+  .access-roles-table tr {
+    padding: 16px !important;
+  }
+
+  .access-role-actions {
+    max-height: none !important;
+  }
+
+  .access-role-actions-cell .table-actions {
+    justify-content: flex-start !important;
+  }
+}
+
 /* Todo botão vermelho no tema claro fica com texto branco. */
 html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button) {
   background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
