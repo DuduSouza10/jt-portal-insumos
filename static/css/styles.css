@@ -13169,3 +13169,109 @@ html[data-theme="light"] .access-role-meta small {
     white-space: normal !important;
   }
 }
+
+/* v171 - remove fundos herdados das celulas e nivela os chips dos acessos. */
+.access-roles-table tbody tr > td,
+.access-roles-table tbody tr.system-access-role-row > td,
+.access-roles-table tbody tr > td:first-child,
+.access-roles-table tbody tr > td:last-child,
+html[data-theme="light"] .access-roles-table tbody tr > td,
+html[data-theme="light"] .access-roles-table tbody tr.system-access-role-row > td,
+html[data-theme="light"] .access-roles-table tbody tr > td:first-child,
+html[data-theme="light"] .access-roles-table tbody tr > td:last-child {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.access-roles-table tbody tr > td::before,
+.access-roles-table tbody tr > td::after {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.access-role-main,
+.access-role-title,
+.access-role-meta,
+.access-role-pages,
+.access-role-action-meta,
+.access-role-actions-cell .table-actions {
+  isolation: isolate !important;
+}
+
+.access-role-meta {
+  align-items: center !important;
+  row-gap: 6px !important;
+  column-gap: 7px !important;
+}
+
+.access-role-meta small,
+.access-role-kind,
+.access-role-readonly,
+.access-role-pages span {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  margin: 0 !important;
+  padding: 0 9px !important;
+  border-radius: 999px !important;
+  font-size: 10.5px !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+
+.access-role-meta small {
+  max-width: 150px !important;
+}
+
+.access-role-title {
+  gap: 7px !important;
+}
+
+.access-role-pages {
+  align-items: center !important;
+  row-gap: 7px !important;
+  column-gap: 7px !important;
+}
+
+.access-role-action-meta {
+  align-items: center !important;
+  min-height: 26px !important;
+}
+
+.access-role-action-meta strong,
+.access-role-action-meta span {
+  display: inline-flex !important;
+  align-items: center !important;
+  line-height: 1 !important;
+}
+
+.access-role-actions-cell .table-actions {
+  min-height: 42px !important;
+}
+
+.access-role-actions-cell .icon-action-btn,
+.access-role-actions-cell .access-role-locked {
+  align-self: center !important;
+}
+
+@media (max-width: 700px) {
+  .access-role-pages span,
+  .access-role-readonly {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 22px !important;
+    white-space: normal !important;
+    text-align: center !important;
+  }
+}
