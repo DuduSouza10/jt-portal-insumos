@@ -11934,6 +11934,121 @@ html[data-theme="light"] .access-role-readonly {
   }
 }
 
+/* v161 - tabela de tipos cadastrados: tipo e acoes mais alinhados. */
+.access-roles-table th:nth-child(1) { width: 24% !important; }
+.access-roles-table th:nth-child(2) { width: 33% !important; }
+.access-roles-table th:nth-child(3) { width: 31% !important; }
+.access-roles-table th:nth-child(4) { width: 12% !important; }
+
+.access-roles-table td:first-child {
+  padding-left: 18px !important;
+  vertical-align: middle !important;
+}
+
+.access-role-main {
+  display: grid !important;
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.access-role-avatar {
+  width: 40px !important;
+  height: 40px !important;
+  flex-basis: 40px !important;
+  border-radius: 13px !important;
+}
+
+.access-role-title {
+  gap: 7px !important;
+}
+
+.access-role-title strong {
+  display: block !important;
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+}
+
+.access-role-meta {
+  gap: 6px !important;
+}
+
+.access-role-title small {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: fit-content !important;
+  max-width: 100% !important;
+  padding: 4px 7px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.045) !important;
+  color: var(--muted-2) !important;
+  -webkit-text-fill-color: var(--muted-2) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  overflow-wrap: anywhere !important;
+}
+
+html[data-theme="light"] .access-role-title small {
+  border-color: rgba(17, 24, 39, .09) !important;
+  background: rgba(17, 24, 39, .045) !important;
+  color: #2f343b !important;
+  -webkit-text-fill-color: #2f343b !important;
+}
+
+.access-role-actions-cell {
+  padding-left: 10px !important;
+  padding-right: 18px !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.access-role-actions-cell .table-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-width: 96px !important;
+  flex-wrap: nowrap !important;
+}
+
+.access-role-actions-cell form {
+  display: inline-flex !important;
+  margin: 0 !important;
+}
+
+.access-role-actions-cell .icon-action-btn {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  padding: 0 !important;
+  border-radius: 12px !important;
+}
+
+.access-role-actions-cell .access-role-locked {
+  margin-inline: auto !important;
+}
+
+@media (max-width: 760px) {
+  .access-role-main {
+    grid-template-columns: 38px minmax(0, 1fr) !important;
+  }
+
+  .access-role-actions-cell {
+    padding-right: 0 !important;
+    text-align: left !important;
+  }
+
+  .access-role-actions-cell .table-actions {
+    justify-content: flex-start !important;
+    min-width: 0 !important;
+    width: auto !important;
+  }
+}
+
 /* Todo botão vermelho no tema claro fica com texto branco. */
 html[data-theme="light"] body :is(.btn.primary, .btn.danger, button.primary, button.danger, a.btn.primary, a.btn.danger):not(.icon-action-btn):not(.category-icon-button) {
   background: linear-gradient(135deg, var(--red), var(--red-3)) !important;

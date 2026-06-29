@@ -6586,7 +6586,8 @@ def access_role_listing() -> list[dict[str, Any]]:
     }
     roles: list[dict[str, Any]] = []
     for key in STATIC_ROLE_ORDER:
-        role_definition = get_access_role_definition(key) or default_static_access_role(key)
+        role_override = get_access_role_override(key)
+        role_definition = role_override or default_static_access_role(key)
         if role_definition is None:
             continue
         permissions = sorted(role_definition.permissions, key=lambda item: list(page_labels).index(item) if item in page_labels else 999)
@@ -6598,8 +6599,9 @@ def access_role_listing() -> list[dict[str, Any]]:
             "permissions": permissions,
             "action_permissions": actions,
             "is_custom": False,
+            "is_override": role_override is not None,
             "can_edit": key != "dev",
-            "can_delete": False,
+            "can_delete": key != "dev" and role_override is not None,
         })
     for role in list_custom_access_roles():
         roles.append({
@@ -6609,6 +6611,7 @@ def access_role_listing() -> list[dict[str, Any]]:
             "permissions": role.permissions,
             "action_permissions": role.action_permissions,
             "is_custom": True,
+            "is_override": True,
             "can_edit": True,
             "can_delete": True,
         })
@@ -6720,10 +6723,27 @@ def admin_access_type_delete(role_key: str):
     current = require_current_user()
     if not current.is_dev:
         abort(403)
-    role = get_custom_access_role(role_key)
-    if role is None:
+    role = get_access_role_definition(role_key)
+    if role is None or role.role_key == "dev":
         abort(404)
     with db_connect() as conn:
+        if role.is_static:
+            changed_at = now_iso()
+            conn.execute("DELETE FROM access_role_types WHERE role_key = ?", (role.role_key,))
+            conn.execute(
+                "DELETE FROM user_page_permissions WHERE user_id IN (SELECT id FROM users WHERE role = ?)",
+                (role.role_key,),
+            )
+            conn.execute(
+                "UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?",
+                (changed_at, role.role_key),
+            )
+            conn.commit()
+            get_access_role_override.cache_clear()
+            get_custom_access_role.cache_clear()
+            flash("Personalizacao removida. Usuarios desse tipo voltaram a herdar o padrao do sistema.", "success")
+            return redirect(url_for("admin_access_types"))
+
         in_use = conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = ?", (role.role_key,)).fetchone()["total"]
         affected = int(in_use or 0)
         if affected > 0:
