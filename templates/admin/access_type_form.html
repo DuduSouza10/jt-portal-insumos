@@ -3,33 +3,44 @@
 {% block page_title %}Editar tipo de acesso{% endblock %}
 {% block page_subtitle %}Altere o nome, páginas e funcionalidades liberadas para este cargo personalizado.{% endblock %}
 {% block content %}
-<div class="card wide-card access-type-panel">
-  <div class="section-head">
-    <div>
+<div class="card wide-card access-type-panel access-type-edit-panel">
+  <div class="section-head access-type-edit-head">
+    <div class="access-type-heading">
       <span class="eyebrow">Controle Dev</span>
-      <h2>{{ access_role.name }}</h2>
-      <p>{{ access_role.role_key }}</p>
+      <div class="access-type-title-row">
+        <h2>{{ access_role.name }}</h2>
+        <span class="access-type-key-pill">{{ access_role.role_key|replace('custom_', '') }}</span>
+      </div>
+      <p>Configure páginas, funcionalidades e identificação deste tipo de acesso.</p>
     </div>
-    <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Voltar</a>
+    <a class="btn ghost access-type-back" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Voltar</a>
   </div>
 
-  <form method="post" class="form-grid two-cols access-type-form">
+  <form method="post" class="access-type-form access-type-edit-form">
     <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
-    <label>
-      Nome do tipo de acesso
-      <input name="name" value="{{ access_role.name }}" required maxlength="80" {% if access_role.is_static %}readonly{% endif %}>
-    </label>
-    {% if not access_role.is_static %}
-    <label>
-      Identificador do tipo
-      <input name="role_key" value="{{ access_role.role_key }}" required maxlength="80" placeholder="Ex.: gestao_franquias">
-      <small class="hint">Esse é o código usado internamente e na lista de tipos.</small>
-    </label>
-    {% endif %}
-    <label>
-      Descrição
-      <input name="description" value="{{ access_role.description }}" maxlength="240">
-    </label>
+    <div class="access-type-edit-grid {% if access_role.is_static %}static-grid{% endif %}">
+      <label class="access-type-field-card access-type-name-card">
+        <span>Nome do tipo de acesso</span>
+        <input name="name" value="{{ access_role.name }}" required maxlength="80" {% if access_role.is_static %}readonly{% endif %}>
+      </label>
+      <label class="access-type-field-card access-type-description-card">
+        <span>Descrição</span>
+        <input name="description" value="{{ access_role.description }}" maxlength="240">
+      </label>
+      {% if not access_role.is_static %}
+      <label class="access-type-field-card access-type-code-card">
+        <span>Identificador do tipo</span>
+        <input name="role_key" value="{{ access_role.role_key }}" required maxlength="80" placeholder="Ex.: gestao_franquias">
+        <small class="hint">Aparece na lista de tipos e acompanha os usuários desse acesso.</small>
+      </label>
+      {% else %}
+      <div class="access-type-field-card access-type-code-card access-type-readonly-card">
+        <span>Identificador do tipo</span>
+        <strong>{{ access_role.role_key }}</strong>
+        <small class="hint">Tipos do sistema têm identificador protegido.</small>
+      </div>
+      {% endif %}
+    </div>
     <div class="full access-permission-summary card">
       <div>
         <strong>Páginas desse tipo</strong>
