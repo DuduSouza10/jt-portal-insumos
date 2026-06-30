@@ -13564,3 +13564,55 @@ html[data-theme="light"] .access-type-edit-form > .access-permission-summary {
     flex-direction: column !important;
   }
 }
+
+/* v174 - ajustes pontuais de contraste no tema claro.
+   Escopo limitado aos menus do topo e aos avatares da tabela de acessos. */
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible):not(:active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .28) !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:not(.active):not(:hover):not(:focus-visible):not(:active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:not(.active):not(:hover):not(:focus-within):not(.open) > .nav-drop-toggle * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(.active, :hover, :focus-visible, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .42) !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > a:is(.active, :hover, :focus-visible, :active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .top-nav > .nav-dropdown:is(.active, :hover, :focus-within, .open) > .nav-drop-toggle *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(.active, :hover, :focus-visible, :active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .access-roles-table .access-role-avatar {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(230, 0, 18, .46) !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px rgba(230,0,18,.08) !important;
+}
