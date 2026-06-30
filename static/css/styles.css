@@ -13616,3 +13616,74 @@ html[data-theme="light"] body .access-roles-table .access-role-avatar {
   -webkit-text-fill-color: var(--red) !important;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 8px 18px rgba(230,0,18,.08) !important;
 }
+
+/* v175 - contraste das bolinhas de selecao e submenus no tema claro. */
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:not(:hover):not(:focus-visible):not(:active):not(.active) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .26) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:not(:hover):not(:focus-visible):not(:active):not(.active) * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, :focus-visible, :active, .active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .46) !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-drop-menu a:is(:hover, :focus-visible, :active, .active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .report-all-toggle span::before {
+  background: #ffffff !important;
+  border-color: var(--red) !important;
+  box-shadow: inset 0 0 0 2px #ffffff, inset 0 0 0 999px var(--red) !important;
+}
+
+html[data-theme="light"] body .report-all-toggle:not(:has(input:checked)):not(:hover):not(:focus-within) span::before {
+  background: #ffffff !important;
+  border-color: var(--red) !important;
+  box-shadow: inset 0 0 0 5px #ffffff !important;
+}
+
+html[data-theme="light"] body .report-all-toggle:is(:hover, :focus-within) span::before,
+html[data-theme="light"] body .report-all-toggle:has(input:checked):not(:hover):not(:focus-within) span::before {
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+  box-shadow: inset 0 0 0 5px #ffffff !important;
+}
+
+html[data-theme="light"] body .report-all-toggle:has(input:checked):is(:hover, :focus-within) span::before {
+  background: var(--red) !important;
+  border-color: var(--red) !important;
+  box-shadow: inset 0 0 0 4px #ffffff !important;
+}
+
+html[data-theme="light"] body :is(.import-mode-option, .permission-option) input:is([type="radio"], [type="checkbox"]) {
+  accent-color: var(--red) !important;
+}
+
+html[data-theme="light"] body :is(.import-mode-option, .permission-option):is(:hover, :focus-within, :has(input:checked)) input:is([type="radio"], [type="checkbox"]) {
+  accent-color: #ffffff !important;
+}
+
+html[data-theme="light"] body :is(.import-mode-option, .permission-option):has(input:checked):is(:hover, :focus-within) input:is([type="radio"], [type="checkbox"]) {
+  accent-color: var(--red) !important;
+}
