@@ -13687,3 +13687,128 @@ html[data-theme="light"] body :is(.import-mode-option, .permission-option):is(:h
 html[data-theme="light"] body :is(.import-mode-option, .permission-option):has(input:checked):is(:hover, :focus-within) input:is([type="radio"], [type="checkbox"]) {
   accent-color: var(--red) !important;
 }
+
+/* v176 - submenus do topo: repouso branco/vermelho, somente hover ou item ativo em vermelho/branco. */
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.open > .nav-drop-menu > a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:hover > .nav-drop-menu > a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:focus-within > .nav-drop-menu > a,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.active > .nav-drop-menu > a {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  border-color: rgba(230, 0, 18, .28) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.open > .nav-drop-menu > a *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:hover > .nav-drop-menu > a *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:focus-within > .nav-drop-menu > a *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.active > .nav-drop-menu > a * {
+  color: var(--red) !important;
+  -webkit-text-fill-color: var(--red) !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a::before,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a::after {
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+  animation: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a:is(:hover, :focus-visible, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.open > .nav-drop-menu > a:is(:hover, :focus-visible, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:hover > .nav-drop-menu > a:is(:hover, :focus-visible, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:focus-within > .nav-drop-menu > a:is(:hover, :focus-visible, .active),
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.active > .nav-drop-menu > a:is(:hover, :focus-visible, .active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  background-image: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(230, 0, 18, .46) !important;
+  box-shadow: 0 12px 24px rgba(230, 0, 18, .16) !important;
+}
+
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown > .nav-drop-menu > a:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.open > .nav-drop-menu > a:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:hover > .nav-drop-menu > a:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown:focus-within > .nav-drop-menu > a:is(:hover, :focus-visible, .active) *,
+html[data-theme="light"] body .site-header.compact-header .nav-header.premium-topbar .nav-dropdown.active > .nav-drop-menu > a:is(:hover, :focus-visible, .active) * {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+/* v177 - remove flicker/quadradinhos no card de movimentacoes de estoque. */
+.stock-movements-card {
+  position: relative !important;
+  overflow: hidden !important;
+  contain: paint !important;
+  isolation: isolate !important;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+  will-change: auto !important;
+  background: var(--surface-card-solid) !important;
+  background-image: none !important;
+  background-clip: padding-box !important;
+}
+
+html[data-theme="light"] .stock-movements-card {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+.stock-movements-card:hover {
+  transform: none !important;
+}
+
+.stock-movements-card::before,
+.stock-movements-card::after,
+.stock-movements-card table::before,
+.stock-movements-card table::after,
+.stock-movements-card thead::before,
+.stock-movements-card thead::after,
+.stock-movements-card tbody::before,
+.stock-movements-card tbody::after,
+.stock-movements-card tr::before,
+.stock-movements-card tr::after,
+.stock-movements-card th::before,
+.stock-movements-card th::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+.stock-movements-card table,
+.stock-movements-card thead,
+.stock-movements-card tbody,
+.stock-movements-card tr,
+.stock-movements-card th,
+.stock-movements-card td {
+  transform: none !important;
+  animation: none !important;
+  will-change: auto !important;
+}
+
+.stock-movements-card tbody tr {
+  opacity: 1 !important;
+}
