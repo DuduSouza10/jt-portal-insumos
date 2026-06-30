@@ -13813,12 +13813,12 @@ html[data-theme="light"] .stock-movements-card {
   opacity: 1 !important;
 }
 
-/* v178 - corta vazamento das barras do mapa de estoque acima das movimentacoes. */
-.stock-board {
+/* v179 - corta o vazamento visual das barras do mapa de estoque acima das movimentacoes. */
+.stock-board,
+.stock-board-grid {
   position: relative !important;
   overflow: hidden !important;
-  overflow: clip !important;
-  contain: layout paint !important;
+  contain: paint !important;
   isolation: isolate !important;
   transform: none !important;
   animation: none !important;
@@ -13836,35 +13836,29 @@ html[data-theme="light"] .stock-movements-card {
   background-image: none !important;
   box-shadow: none !important;
   animation: none !important;
-}
-
-.stock-board-grid {
-  position: relative !important;
-  overflow: hidden !important;
-  overflow: clip !important;
-  contain: layout paint !important;
-  isolation: isolate !important;
   transform: none !important;
-  animation: none !important;
-  will-change: auto !important;
 }
 
 .stock-board .stock-product-card,
 .stock-board .stock-product-card *,
 .stock-board .stock-meter,
 .stock-board .stock-meter span {
-  backface-visibility: visible !important;
   transform: none !important;
   animation: none !important;
   will-change: auto !important;
+  backface-visibility: visible !important;
 }
 
 .stock-board .stock-product-card {
-  position: relative !important;
   opacity: 1 !important;
-  overflow: hidden !important;
   contain: paint !important;
+  overflow: hidden !important;
   isolation: isolate !important;
+}
+
+.stock-board .stock-product-card:hover,
+.stock-board .stock-product-card.selected {
+  transform: none !important;
 }
 
 .stock-board .stock-meter {
@@ -13873,13 +13867,8 @@ html[data-theme="light"] .stock-movements-card {
   contain: paint !important;
 }
 
-.stock-board + .stock-movements-card {
+.stock-board .stock-meter span {
+  display: block !important;
   position: relative !important;
-  z-index: 2 !important;
-  margin-top: 24px !important;
-  box-shadow: 0 -18px 0 var(--bg), var(--shadow-soft) !important;
-}
-
-html[data-theme="light"] .stock-board + .stock-movements-card {
-  box-shadow: 0 -18px 0 #f7f2f3, 0 18px 44px rgba(17,24,39,.08) !important;
+  overflow: hidden !important;
 }
