@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Gestão de Ativos • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Gestão de Ativos{% endblock %}
-{% block page_subtitle %}Cadastre ativos por base, regional, setor e gestor, com itens e patrimônio ou número de série.{% endblock %}
+{% block page_subtitle %}Cadastre ativos por base, Regional/SC, setor e gestor, com itens e patrimônio ou número de série.{% endblock %}
 {% block content %}
 <section class="asset-toolbar card">
   <div>
@@ -30,8 +30,8 @@
     <strong>{{ totals.bases }}</strong>
   </article>
   <article class="stat-card card">
-    <span>MG / SPN / Matriz</span>
-    <strong>{{ totals.mg }} / {{ totals.spn }} / {{ totals.matriz }}</strong>
+    <span>MG / SPN / Matriz / SC</span>
+    <strong>{{ totals.mg }} / {{ totals.spn }} / {{ totals.matriz }} / {{ totals.sc }}</strong>
   </article>
 </section>
 
@@ -65,7 +65,7 @@
       </select>
     </label>
     <label>
-      Regional
+      Regional/SC
       <select name="regional" id="assetFilterRegional">
         <option value="">Todas as regionais</option>
         {% for regional in asset_regional_options %}
@@ -201,7 +201,7 @@
           </select>
         </label>
         <label>
-          Regional
+          Regional/SC
           <select name="regional" id="assetModalRegional" required>
             <option value="" selected disabled>Selecione</option>
             {% for regional in asset_regional_options %}
@@ -276,32 +276,49 @@
   const modalBase = document.getElementById('assetModalBase');
   const modalFranchise = document.getElementById('assetModalFranchise');
   const assetForm = modal ? modal.querySelector('form.asset-form') : null;
+  const specialRegionals = new Set(['MATRIZ', 'SC CGE', 'SC RAO']);
   if (!modal || !openButton || !itemRows || !addItemButton) return;
 
   if (modal.parentElement !== document.body) {
     document.body.appendChild(modal);
   }
 
+  function normalizeRegionalKey(value) {
+    return (value || '').trim().toUpperCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ');
+  }
+
+  function isSpecialRegional(value) {
+    return specialRegionals.has(normalizeRegionalKey(value));
+  }
+
+  function setUnitSelectDisabled(select, disabled) {
+    if (!select) return;
+    select.disabled = disabled;
+    select.required = disabled ? false : select.hasAttribute('data-required-when-base');
+    select.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    const label = select.closest('label');
+    if (label) label.classList.toggle('asset-unit-disabled', disabled);
+  }
+
   function filterBaseSelect(baseSelect, regionalValue) {
     if (!baseSelect) return;
-    const regional = (regionalValue || '').trim().toUpperCase();
+    const regional = normalizeRegionalKey(regionalValue);
     const options = Array.from(baseSelect.options);
     const emptyOption = options.find((option) => option.hasAttribute('data-empty-base-option'));
     let visibleCount = 0;
-    const isMatriz = regional === 'MATRIZ';
+    const specialRegional = isSpecialRegional(regional);
 
-    baseSelect.disabled = false;
-    baseSelect.required = baseSelect.hasAttribute('data-required-when-base');
+    setUnitSelectDisabled(baseSelect, false);
 
-    if (isMatriz) {
+    if (specialRegional) {
       options.forEach(function (option) {
         const isEmpty = option.hasAttribute('data-empty-base-option');
-        option.hidden = !isEmpty;
-        option.disabled = !isEmpty;
-        option.selected = isEmpty;
+        option.hidden = isEmpty || !!option.value;
+        option.disabled = true;
+        option.selected = !option.value && !isEmpty;
       });
-      baseSelect.disabled = true;
-      baseSelect.required = false;
+      baseSelect.value = '';
+      setUnitSelectDisabled(baseSelect, true);
       return;
     }
 
@@ -312,7 +329,7 @@
         option.disabled = option.defaultSelected && option.hasAttribute('disabled');
         return;
       }
-      const optionRegional = (option.dataset.assetRegional || '').toUpperCase();
+      const optionRegional = normalizeRegionalKey(option.dataset.assetRegional || '');
       const shouldShow = !regional || optionRegional === regional;
       option.hidden = !shouldShow;
       option.disabled = !shouldShow;
@@ -490,7 +507,7 @@
   if (assetForm) {
     assetForm.addEventListener('submit', function (event) {
       const regional = (modalRegional && modalRegional.value || '').trim();
-      if (regional && regional.toUpperCase() === 'MATRIZ') return;
+      if (regional && isSpecialRegional(regional)) return;
       const hasBase = !!(modalBase && modalBase.value);
       const hasFranchise = !!(modalFranchise && modalFranchise.value);
       if (hasBase && hasFranchise) {

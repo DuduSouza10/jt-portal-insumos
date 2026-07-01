@@ -9,6 +9,7 @@
     <div class="product-tools">
       <a class="btn ghost" href="{{ url_for('admin_stock') }}">Gestão de Insumos</a>
       {% if can_do('products_edit_category') %}<button class="btn ghost" type="button" data-open-categories-modal>Editar categorias</button>{% endif %}
+      {% if current_can_manage_stock_tags() %}<button class="btn ghost" type="button" data-open-stock-tags-modal>Tags de estoque</button>{% endif %}
       {% if can_do('products_export') %}<button class="btn ghost" type="button" data-open-export-modal>Exportar planilha</button>{% endif %}
       {% if can_do('products_create') %}<a class="btn primary" href="{{ url_for('admin_product_new') }}">Novo produto</a>{% endif %}
     </div>
@@ -35,6 +36,15 @@
           <option value="">Todas</option>
           {% for category in product_categories_filter|default([]) %}
           <option value="{{ category }}" {{ 'selected' if product_filters.category == category else '' }}>{{ category }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="product-filter-field field-stock-tag">
+        Filtrar tag
+        <select id="productStockTagFilter" name="stock_tag">
+          <option value="">Todas</option>
+          {% for tag in product_stock_tags|default([]) %}
+          <option value="{{ tag.slug }}" {{ 'selected' if product_filters.stock_tag == tag.slug else '' }}>{{ tag.name }}</option>
           {% endfor %}
         </select>
       </label>
@@ -137,6 +147,60 @@
   </div>
   {% endif %}
 
+  {% if current_can_manage_stock_tags() %}
+  <div id="stockTagEditModal" class="category-edit-modal stock-tag-edit-modal" aria-hidden="true">
+    <div class="category-edit-backdrop" data-close-stock-tags-modal></div>
+    <section class="category-edit-card card" role="dialog" aria-modal="true" aria-labelledby="stockTagEditTitle">
+      <div class="category-edit-head">
+        <div>
+          <span class="eyebrow">Tags de estoque</span>
+          <h3 id="stockTagEditTitle">Separação de estoque por tags</h3>
+          <p>Defina quais produtos pertencem ao estoque de insumos, ao estoque de ativos ou a novas separações internas.</p>
+        </div>
+        <button class="permission-close" type="button" data-close-stock-tags-modal aria-label="Fechar">×</button>
+      </div>
+      <form method="post" action="{{ url_for('admin_product_stock_tags_update') }}" class="category-edit-form stock-tag-edit-form">
+        <input type="hidden" name="return_to" value="{{ request.full_path }}">
+        <div class="category-edit-list stock-tag-edit-list">
+          {% for tag in product_stock_tags|default([]) %}
+          <div class="category-edit-row stock-tag-edit-row">
+            <input type="hidden" name="tag_slug" value="{{ tag.slug }}">
+            <label class="category-edit-name">
+              Nome da tag
+              <input name="tag_name" value="{{ tag.name }}" required maxlength="80">
+            </label>
+            <label class="category-edit-name">
+              Descrição
+              <input name="tag_description" value="{{ tag.description }}" maxlength="240" placeholder="Uso desta tag">
+            </label>
+            <label class="checkbox-line stock-tag-active-option">
+              <input type="checkbox" name="tag_active" value="{{ tag.slug }}" {% if tag.active %}checked{% endif %} {% if tag.system_key %}disabled{% endif %}>
+              <span>{{ 'Sistema' if tag.system_key else 'Ativa' }}</span>
+            </label>
+          </div>
+          {% else %}
+          <div class="empty-state">Nenhuma tag cadastrada ainda.</div>
+          {% endfor %}
+        </div>
+        <div class="stock-tag-new-panel">
+          <label class="category-edit-name">
+            Nova tag
+            <input name="new_tag_name" maxlength="80" placeholder="Ex.: Uniformes internos">
+          </label>
+          <label class="category-edit-name">
+            Descrição da nova tag
+            <input name="new_tag_description" maxlength="240" placeholder="Opcional">
+          </label>
+        </div>
+        <div class="category-edit-actions">
+          <button class="btn primary" type="submit">Salvar tags</button>
+          <button class="btn ghost" type="button" data-close-stock-tags-modal>Cancelar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  {% endif %}
+
   {% if can_do('products_import') %}
   <form class="import-form product-import-form" method="post" action="{{ url_for('admin_products_import') }}" enctype="multipart/form-data" data-product-import-form>
     <label>
@@ -161,14 +225,14 @@
       </label>
     </fieldset>
     <button class="btn primary" type="submit">Importar dados</button>
-    <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Kit, Quantidade por kit, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo e Ativo.</small>
+    <small>Colunas aceitas: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Kit, Quantidade por kit, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo, Tag de estoque e Ativo.</small>
   </form>
   {% endif %}
   <div class="products-table-wrap">
   <table class="products-admin-table">
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Público</th><th>Unidade</th><th>Kit</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Tag</th><th>Público</th><th>Unidade</th><th>Kit</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="productTableBody">
@@ -178,11 +242,12 @@
         data-product-id="{{ product.id }}"
         data-name="{{ product.name|e }}"
         data-category="{{ (product.category or '')|e }}"
+        data-stock-tag="{{ product.stock_tag|e }}"
         data-status="{{ 'active' if product.active else 'inactive' }}"
         data-stock="{{ product.stock_quantity or 0 }}"
         data-price="{{ product.price_cents or 0 }}"
         data-unit="{{ (product.unit_measure or 'un')|e }}"
-        data-search="{{ (product.name ~ ' ' ~ (product.category or '') ~ ' ' ~ (product.description or '') ~ ' ' ~ (product.unit_measure or 'un'))|e }}"
+        data-search="{{ (product.name ~ ' ' ~ (product.category or '') ~ ' ' ~ (product.stock_tag_name or '') ~ ' ' ~ (product.description or '') ~ ' ' ~ (product.unit_measure or 'un'))|e }}"
       >
         <td data-label="Produto">
           <div class="admin-product-main">
@@ -195,6 +260,7 @@
           </div>
         </td>
         <td data-label="Categoria"><span>{{ product.category_emoji }} {{ product.category or '-' }}</span></td>
+        <td data-label="Tag"><span class="stock-tag-pill">{{ product.stock_tag_name or product.stock_tag }}</span></td>
         <td data-label="Público">
           {% if product.internal %}
             <span class="audience-pill internal">Interno</span>
@@ -238,10 +304,10 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="15" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="16" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
       {% if products %}
-      <tr id="productLiveEmpty" class="hidden"><td colspan="15" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      <tr id="productLiveEmpty" class="hidden"><td colspan="16" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
       {% endif %}
     </tbody>
   </table>
@@ -302,6 +368,9 @@
   const categoryModal = document.getElementById('categoryEditModal');
   const openCategoriesButton = document.querySelector('[data-open-categories-modal]');
   const closeCategoriesButtons = document.querySelectorAll('[data-close-categories-modal]');
+  const stockTagModal = document.getElementById('stockTagEditModal');
+  const openStockTagsButton = document.querySelector('[data-open-stock-tags-modal]');
+  const closeStockTagsButtons = document.querySelectorAll('[data-close-stock-tags-modal]');
 
   if (categoryModal) {
     if (categoryModal.parentElement !== document.body) {
@@ -339,6 +408,37 @@
     });
   }
 
+  if (stockTagModal) {
+    if (stockTagModal.parentElement !== document.body) {
+      document.body.appendChild(stockTagModal);
+    }
+    function refreshStockTagModalLanguage() {
+      if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
+        window.JT_I18N.refresh(stockTagModal);
+        window.setTimeout(function () { window.JT_I18N.refresh(stockTagModal); }, 90);
+      }
+    }
+    function openStockTagsModal() {
+      stockTagModal.classList.add('open');
+      stockTagModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('category-edit-modal-open');
+      refreshStockTagModalLanguage();
+    }
+    function closeStockTagsModal() {
+      stockTagModal.classList.remove('open');
+      stockTagModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('category-edit-modal-open');
+    }
+    if (openStockTagsButton) openStockTagsButton.addEventListener('click', openStockTagsModal);
+    closeStockTagsButtons.forEach((button) => button.addEventListener('click', closeStockTagsModal));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && stockTagModal.classList.contains('open')) closeStockTagsModal();
+    });
+    window.addEventListener('jt-language-change', function () {
+      if (stockTagModal.classList.contains('open')) refreshStockTagModalLanguage();
+    });
+  }
+
   if (!modal || !openButton) return;
   if (modal.parentElement !== document.body) {
     document.body.appendChild(modal);
@@ -368,7 +468,7 @@
       params.set('lang', link.dataset.productExportLang || 'pt');
       if (filterForm) {
         const formData = new FormData(filterForm);
-        ['q', 'status', 'category', 'sort', 'limit', 'page'].forEach(function (key) {
+        ['q', 'status', 'category', 'stock_tag', 'sort', 'limit', 'page'].forEach(function (key) {
           const value = String(formData.get(key) || '').trim();
           if (value && !(key === 'status' && value === 'all')) params.set(key, value);
         });
@@ -392,6 +492,7 @@
   const search = document.getElementById('productLiveSearch');
   const statusFilter = document.getElementById('productStatusFilter');
   const categoryFilter = document.getElementById('productCategoryFilter');
+  const stockTagFilter = document.getElementById('productStockTagFilter');
   const sortFilter = document.getElementById('productSortFilter');
   const limitFilter = document.getElementById('productLimitFilter');
   const pageInput = document.getElementById('productPageInput');
@@ -467,7 +568,7 @@
     }
 
     form.addEventListener('submit', function () {});
-    [statusFilter, categoryFilter, sortFilter, limitFilter].forEach(function (select) {
+    [statusFilter, categoryFilter, stockTagFilter, sortFilter, limitFilter].forEach(function (select) {
       if (select) select.addEventListener('change', function () { submitServerFilters(true); });
     });
     if (search) {
@@ -484,6 +585,7 @@
         if (search) search.value = '';
         if (statusFilter) statusFilter.value = 'all';
         if (categoryFilter) categoryFilter.value = '';
+        if (stockTagFilter) stockTagFilter.value = '';
         if (sortFilter) sortFilter.value = 'default';
         if (limitFilter) limitFilter.value = '25';
         submitServerFilters();
@@ -498,6 +600,7 @@
   function applyFilters() {
     const status = statusFilter ? statusFilter.value : 'all';
     const category = categoryFilter ? normalize(categoryFilter.value) : '';
+    const stockTag = stockTagFilter ? normalize(stockTagFilter.value) : '';
     const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
     let shown = 0;
     let active = 0;
@@ -506,11 +609,13 @@
     sortedRows().forEach(function (row) {
       const rowStatus = row.dataset.status || '';
       const rowCategory = normalize(row.dataset.category || '');
+      const rowStockTag = normalize(row.dataset.stockTag || '');
       const searchable = normalize(row.dataset.search || row.textContent || '');
       const matchesStatus = !status || status === 'all' || rowStatus === status;
       const matchesCategory = !category || rowCategory === category;
+      const matchesStockTag = !stockTag || rowStockTag === stockTag;
       const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
-      const visible = matchesStatus && matchesCategory && matchesSearch;
+      const visible = matchesStatus && matchesCategory && matchesStockTag && matchesSearch;
 
       row.classList.toggle('product-live-hidden', !visible);
       tbody.appendChild(row);
@@ -541,6 +646,7 @@
     if (search) search.value = '';
     if (statusFilter) statusFilter.value = 'all';
     if (categoryFilter) categoryFilter.value = '';
+    if (stockTagFilter) stockTagFilter.value = '';
     if (sortFilter) sortFilter.value = 'default';
     if (limitFilter) limitFilter.value = '25';
     applyFilters();
@@ -551,7 +657,7 @@
     applyFilters();
   });
   if (search) search.addEventListener('input', applyFilters);
-  [statusFilter, categoryFilter, sortFilter].forEach(function (select) {
+  [statusFilter, categoryFilter, stockTagFilter, sortFilter].forEach(function (select) {
     if (select) select.addEventListener('change', applyFilters);
   });
   if (applyButton) applyButton.addEventListener('click', applyFilters);

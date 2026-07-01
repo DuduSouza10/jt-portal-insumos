@@ -13813,62 +13813,186 @@ html[data-theme="light"] .stock-movements-card {
   opacity: 1 !important;
 }
 
-/* v179 - corta o vazamento visual das barras do mapa de estoque acima das movimentacoes. */
-.stock-board,
-.stock-board-grid {
-  position: relative !important;
-  overflow: hidden !important;
-  contain: paint !important;
-  isolation: isolate !important;
-  transform: none !important;
-  animation: none !important;
-  will-change: auto !important;
+/* v180 - Matriz/SC bloqueiam base e franquia com visual inativo. */
+.asset-unit-disabled {
+  opacity: .56 !important;
+  filter: grayscale(.2) saturate(.72) !important;
 }
 
-.stock-board::before,
-.stock-board::after,
-.stock-board-grid::before,
-.stock-board-grid::after {
+.asset-unit-disabled select,
+.asset-unit-disabled select:disabled {
+  cursor: not-allowed !important;
+  background-color: color-mix(in srgb, var(--surface-card-solid) 82%, #111 18%) !important;
+  border-color: rgba(120, 120, 120, .28) !important;
+  color: color-mix(in srgb, var(--muted) 80%, transparent) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] .asset-unit-disabled select,
+html[data-theme="light"] .asset-unit-disabled select:disabled {
+  background-color: #f0f0f0 !important;
+  border-color: rgba(0, 0, 0, .12) !important;
+  color: #8a8a8a !important;
+}
+
+/* v180 - remove a grade da pagina de estoque e evita quadrados acima da tabela. */
+body.stock-admin-page::before {
   content: none !important;
   display: none !important;
   opacity: 0 !important;
   background: none !important;
   background-image: none !important;
-  box-shadow: none !important;
-  animation: none !important;
+}
+
+body.stock-admin-page .stock-board,
+body.stock-admin-page .stock-board-grid {
+  overflow: visible !important;
+  contain: none !important;
+  min-height: 0 !important;
+}
+
+body.stock-admin-page .stock-board {
+  margin-bottom: 18px !important;
+}
+
+body.stock-admin-page .stock-product-card,
+body.stock-admin-page .stock-product-card:hover,
+body.stock-admin-page .stock-product-card.selected {
   transform: none !important;
 }
 
-.stock-board .stock-product-card,
-.stock-board .stock-product-card *,
-.stock-board .stock-meter,
-.stock-board .stock-meter span {
-  transform: none !important;
+body.stock-admin-page .stock-product-card,
+body.stock-admin-page .stock-product-card *,
+body.stock-admin-page .stock-meter,
+body.stock-admin-page .stock-meter span {
   animation: none !important;
   will-change: auto !important;
   backface-visibility: visible !important;
 }
 
-.stock-board .stock-product-card {
-  opacity: 1 !important;
-  contain: paint !important;
-  overflow: hidden !important;
-  isolation: isolate !important;
+body.stock-admin-page .stock-meter {
+  display: none !important;
 }
 
-.stock-board .stock-product-card:hover,
-.stock-board .stock-product-card.selected {
-  transform: none !important;
+/* v181 - tags de estoque para separar insumos e ativos. */
+.product-filter-main {
+  grid-template-columns: minmax(260px, 1.35fr) minmax(140px, .66fr) minmax(170px, .82fr) minmax(150px, .72fr) minmax(150px, .72fr) minmax(112px, .5fr) !important;
 }
 
-.stock-board .stock-meter {
-  position: relative !important;
-  overflow: hidden !important;
-  contain: paint !important;
+.product-filter-actions {
+  grid-column: 1 / -1 !important;
+  justify-content: flex-end !important;
 }
 
-.stock-board .stock-meter span {
-  display: block !important;
-  position: relative !important;
-  overflow: hidden !important;
+.product-admin-card.no-import-card .product-filter-main {
+  grid-template-columns: minmax(260px, 1.35fr) minmax(140px, .66fr) minmax(170px, .82fr) minmax(150px, .72fr) minmax(150px, .72fr) minmax(112px, .5fr) !important;
+}
+
+.stock-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+  background: linear-gradient(180deg, rgba(230, 0, 18, .16), rgba(230, 0, 18, .08));
+  border: 1px solid rgba(230, 0, 18, .32);
+}
+
+html[data-theme="light"] .stock-tag-pill {
+  color: var(--red);
+  background: #ffffff;
+  border-color: rgba(230, 0, 18, .24);
+}
+
+.stock-tag-edit-modal .category-edit-card {
+  width: min(960px, 94vw);
+}
+
+.stock-tag-edit-form {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+
+.stock-tag-edit-row {
+  grid-template-columns: minmax(180px, .85fr) minmax(260px, 1.3fr) auto;
+  align-items: end;
+}
+
+.stock-tag-active-option {
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  white-space: nowrap;
+}
+
+.stock-tag-new-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr);
+  gap: 12px;
+  padding: 0 22px 18px;
+}
+
+.stock-tag-new-panel input,
+.stock-tag-select-field select {
+  min-height: 50px;
+  border-radius: 16px;
+}
+
+.stock-tag-select-field {
+  align-self: stretch;
+}
+
+html[data-theme="light"] .stock-tag-active-option {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(17,24,39,.08);
+}
+
+@media (max-width: 1280px) {
+  .product-filter-main,
+  .product-admin-card.no-import-card .product-filter-main {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .product-filter-search,
+  .product-admin-card.no-import-card .product-filter-search {
+    grid-column: span 2 !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .product-filter-main,
+  .product-admin-card.no-import-card .product-filter-main,
+  .stock-tag-edit-row,
+  .stock-tag-new-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .product-filter-search,
+  .product-filter-actions,
+  .product-admin-card.no-import-card .product-filter-search,
+  .product-admin-card.no-import-card .product-filter-actions {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .product-filter-main,
+  .product-admin-card.no-import-card .product-filter-main {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .product-filter-actions {
+    justify-content: stretch !important;
+  }
+
+  .product-filter-actions .btn {
+    width: 100%;
+  }
 }

@@ -460,12 +460,20 @@ def canonical_unit_option(value: Any, options: list[str], lookup: dict[str, str]
     if len(unique_matches) == 1:
         return unique_matches[0]
     return ""
-ASSET_REGIONAL_OPTIONS = ["MG", "SPN", "Matriz"]
+ASSET_SPECIAL_REGIONAL_OPTIONS = {"Matriz", "SC CGE", "SC RAO"}
+ASSET_REGIONAL_OPTIONS = ["MG", "SPN", "Matriz", "SC CGE", "SC RAO"]
 ASSET_REGIONAL_OPTION_SET = {option.upper() for option in ASSET_REGIONAL_OPTIONS}
 ADMIN_ORGANIZATION_NAME = "ADMINISTRAÇÃO"
 ADMIN_ORGANIZATION_OPTIONS = [ADMIN_ORGANIZATION_NAME]
 DEV_ACCESS_PASSWORD_KEY = "dev_access_password"
 DEFAULT_DEV_ACCESS_PASSWORD = os.getenv("DEV_ACCESS_PASSWORD", "DevJet2026")
+SUPPLY_STOCK_TAG = "insumos"
+ASSET_STOCK_TAG = "ativos"
+DEFAULT_STOCK_TAG = SUPPLY_STOCK_TAG
+SYSTEM_STOCK_TAGS = [
+    (SUPPLY_STOCK_TAG, "Insumos", "Estoque usado nas solicitacoes de insumos."),
+    (ASSET_STOCK_TAG, "Ativos", "Estoque usado no cadastro e baixa de ativos."),
+]
 
 
 @dataclass
@@ -524,6 +532,17 @@ class AccessRoleType:
 
 
 @dataclass
+class StockTag:
+    slug: str
+    name: str
+    description: str = ""
+    active: bool = True
+    system_key: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = None
+
+
+@dataclass
 class Product:
     id: int = 0
     name: str = ""
@@ -548,6 +567,8 @@ class Product:
     visible_base: bool = True
     visible_franchise: bool = True
     internal: bool = False
+    stock_tag: str = DEFAULT_STOCK_TAG
+    stock_tag_name: str = "Insumos"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
 
@@ -994,10 +1015,80 @@ def clean_category_emoji(value: Any, category: str = "") -> str:
     return emoji[:16] if emoji else default_category_emoji(category)
 
 
+def normalize_stock_tag_slug(value: Any, default: str = DEFAULT_STOCK_TAG) -> str:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return default
+    text_value = "".join(ch for ch in unicodedata.normalize("NFD", text_value) if unicodedata.category(ch) != "Mn")
+    text_value = re.sub(r"[^A-Za-z0-9]+", "-", text_value).strip("-").lower()
+    return text_value or default
+
+
+def default_stock_tag_name(slug: str) -> str:
+    normalized = normalize_stock_tag_slug(slug)
+    for system_slug, name, _description in SYSTEM_STOCK_TAGS:
+        if system_slug == normalized:
+            return name
+    return normalized.replace("-", " ").title()
+
+
+def can_manage_stock_tags(user: User | None = None) -> bool:
+    user = user if user is not None else current_user()
+    return bool(user and user.role in {"admin", "dev"})
+
+
+def row_to_stock_tag(row: Any | None) -> StockTag | None:
+    if row is None:
+        return None
+    return StockTag(
+        slug=normalize_stock_tag_slug(row["slug"]),
+        name=(row["name"] or default_stock_tag_name(row["slug"])).strip(),
+        description=(row["description"] if "description" in row.keys() else "") or "",
+        active=bool(row["active"]) if "active" in row.keys() else True,
+        system_key=bool(row["system_key"]) if "system_key" in row.keys() else False,
+        created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
+        updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
+    )
+
+
+def list_stock_tags(active_only: bool = False, include_slug: str = "") -> list[StockTag]:
+    clauses = []
+    params: list[Any] = []
+    if active_only:
+        include_normalized = normalize_stock_tag_slug(include_slug, "") if include_slug else ""
+        if include_normalized:
+            clauses.append("(active = 1 OR slug = ?)")
+            params.append(include_normalized)
+        else:
+            clauses.append("active = 1")
+    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with db_connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM stock_tags{where_sql} ORDER BY system_key DESC, name COLLATE NOCASE ASC",
+            params,
+        ).fetchall()
+    return [tag for row in rows if (tag := row_to_stock_tag(row)) is not None]
+
+
+def stock_tag_label(slug: str) -> str:
+    normalized = normalize_stock_tag_slug(slug)
+    for tag in list_stock_tags(active_only=False):
+        if tag.slug == normalized:
+            return tag.name
+    return default_stock_tag_name(normalized)
+
+
+def allowed_product_stock_tag(slug: str, current_slug: str = "") -> str:
+    normalized = normalize_stock_tag_slug(slug)
+    allowed = {tag.slug for tag in list_stock_tags(active_only=True, include_slug=current_slug)}
+    return normalized if normalized in allowed else normalize_stock_tag_slug(current_slug or DEFAULT_STOCK_TAG)
+
+
 def row_to_product(row: Any | None) -> Product | None:
     if row is None:
         return None
     category = row["category"] or ""
+    stock_tag_slug = normalize_stock_tag_slug(row["stock_tag"] if "stock_tag" in row.keys() else DEFAULT_STOCK_TAG)
     return Product(
         id=int(row["id"]),
         name=row["name"] or "",
@@ -1025,6 +1116,8 @@ def row_to_product(row: Any | None) -> Product | None:
         visible_base=bool(row["visible_base"]) if "visible_base" in row.keys() else True,
         visible_franchise=bool(row["visible_franchise"]) if "visible_franchise" in row.keys() else True,
         internal=bool(row["internal"]) if "internal" in row.keys() else False,
+        stock_tag=stock_tag_slug,
+        stock_tag_name=(row["stock_tag_name"] if "stock_tag_name" in row.keys() and row["stock_tag_name"] else default_stock_tag_name(stock_tag_slug)),
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
     )
@@ -1143,9 +1236,17 @@ def normalize_asset_regional(value: str) -> str:
     normalized = (value or "").strip().upper()
     if normalized == "MATRIZ":
         return "Matriz"
+    if normalized in {"SC CGE", "SC-CGE", "SC_CGE", "SCCGE"}:
+        return "SC CGE"
+    if normalized in {"SC RAO", "SC-RAO", "SC_RAO", "SCRAO"}:
+        return "SC RAO"
     if normalized in {"MG", "SPN"}:
         return normalized
     return ""
+
+
+def is_special_asset_regional(regional: str) -> bool:
+    return normalize_asset_regional(regional) in ASSET_SPECIAL_REGIONAL_OPTIONS
 
 
 def asset_regional_for_base(base: str) -> str:
@@ -1167,7 +1268,7 @@ def base_options_for_asset_regional(regional: str = "") -> list[str]:
     normalized = normalize_asset_regional(regional)
     if not normalized:
         return BASE_FRANCHISE_OPTIONS
-    if normalized == "Matriz":
+    if is_special_asset_regional(normalized):
         return []
     return [unit for unit in BASE_FRANCHISE_OPTIONS if asset_regional_for_base(unit) == normalized]
 
@@ -1175,9 +1276,9 @@ def base_options_for_asset_regional(regional: str = "") -> list[str]:
 def base_unit_options_for_asset_regional(regional: str = "") -> list[str]:
     normalized = normalize_asset_regional(regional)
     options = BASE_UNIT_OPTIONS
-    if normalized and normalized != "Matriz":
+    if normalized and not is_special_asset_regional(normalized):
         options = [unit for unit in options if asset_regional_for_base(unit) == normalized]
-    elif normalized == "Matriz":
+    elif is_special_asset_regional(normalized):
         options = []
     return options
 
@@ -1185,9 +1286,9 @@ def base_unit_options_for_asset_regional(regional: str = "") -> list[str]:
 def franchise_unit_options_for_asset_regional(regional: str = "") -> list[str]:
     normalized = normalize_asset_regional(regional)
     options = FRANCHISE_UNIT_OPTIONS
-    if normalized and normalized != "Matriz":
+    if normalized and not is_special_asset_regional(normalized):
         options = [unit for unit in options if asset_regional_for_base(unit) == normalized]
-    elif normalized == "Matriz":
+    elif is_special_asset_regional(normalized):
         options = []
     return options
 
@@ -1265,6 +1366,17 @@ def init_db() -> None:
                 visible_base INTEGER NOT NULL DEFAULT 1,
                 visible_franchise INTEGER NOT NULL DEFAULT 1,
                 internal INTEGER NOT NULL DEFAULT 0,
+                stock_tag TEXT NOT NULL DEFAULT 'insumos',
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS stock_tags (
+                slug TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                active INTEGER NOT NULL DEFAULT 1,
+                system_key INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1397,6 +1509,8 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_products_catalog_active_name ON products(catalog_archived, active, name);
             CREATE INDEX IF NOT EXISTS idx_products_catalog_category ON products(catalog_archived, category);
             CREATE INDEX IF NOT EXISTS idx_products_stock ON products(catalog_archived, stock_quantity);
+            CREATE INDEX IF NOT EXISTS idx_products_stock_tag ON products(stock_tag, catalog_archived, active);
+            CREATE INDEX IF NOT EXISTS idx_stock_tags_name ON stock_tags(name COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_status_created ON supply_requests(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_user_created ON supply_requests(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_request_items_request ON request_items(request_id);
@@ -1480,6 +1594,21 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN is_kit INTEGER NOT NULL DEFAULT 0")
         if "kit_quantity" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1")
+        if "stock_tag" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN stock_tag TEXT NOT NULL DEFAULT 'insumos'")
+        for stock_tag_slug, stock_tag_name, stock_tag_description in SYSTEM_STOCK_TAGS:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO stock_tags (slug, name, description, active, system_key, created_at)
+                VALUES (?, ?, ?, 1, 1, ?)
+                """,
+                (stock_tag_slug, stock_tag_name, stock_tag_description, now_iso()),
+            )
+            conn.execute(
+                "UPDATE stock_tags SET system_key = 1, active = 1 WHERE slug = ?",
+                (stock_tag_slug,),
+            )
+        conn.execute("UPDATE products SET stock_tag = ? WHERE stock_tag IS NULL OR TRIM(stock_tag) = ''", (DEFAULT_STOCK_TAG,))
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
@@ -1929,6 +2058,7 @@ def inject_globals():
         "current_can_edit_dev_password": current_can_edit_dev_password,
         "current_allowed_role_options": current_allowed_role_options,
         "current_can_edit_admin_role": current_can_edit_admin_role,
+        "current_can_manage_stock_tags": can_manage_stock_tags,
     }
 
 
@@ -2940,6 +3070,8 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         product = get_product(product_id)
         if product is None or not product.active:
             return [], "Um dos insumos selecionados não está disponível."
+        if normalize_stock_tag_slug(product.stock_tag) != SUPPLY_STOCK_TAG:
+            return [], f"{product.name} pertence a outro estoque e nao esta disponivel para solicitacao de insumos."
         if not user.is_admin and product.stock_quantity <= 0:
             return [], f"{product.name} está sem estoque no momento."
         if not user.is_admin and product.internal:
@@ -2996,6 +3128,9 @@ def fill_product_from_form(product: Product) -> Product:
     if product.internal:
         product.visible_base = False
         product.visible_franchise = False
+    if can_manage_stock_tags():
+        product.stock_tag = allowed_product_stock_tag(request.form.get("stock_tag"), product.stock_tag or DEFAULT_STOCK_TAG)
+        product.stock_tag_name = stock_tag_label(product.stock_tag)
     return product
 
 
@@ -3016,25 +3151,35 @@ def product_update_missing_action_permissions(old_product: Product, new_product:
     return missing
 
 
-def list_product_categories(user: User | None = None) -> list[dict[str, str]]:
-    visibility_clause = ""
-    if user is not None and user.role == "base":
-        visibility_clause = " AND visible_base = 1 AND COALESCE(internal, 0) = 0 AND active = 1 AND stock_quantity > 0"
-    elif user is not None and user.role == "franchise":
-        visibility_clause = " AND visible_franchise = 1 AND COALESCE(internal, 0) = 0 AND active = 1 AND stock_quantity > 0"
+def list_product_categories(user: User | None = None, stock_tag: str = "") -> list[dict[str, str]]:
+    clauses = [
+        "category IS NOT NULL",
+        "TRIM(category) <> ''",
+        "catalog_archived = 0",
+    ]
+    params: list[Any] = []
+    tag_filter = normalize_stock_tag_slug(stock_tag, "") if stock_tag else ""
+    if user is not None:
+        tag_filter = SUPPLY_STOCK_TAG
+        if user.role == "base":
+            clauses.extend(["visible_base = 1", "COALESCE(internal, 0) = 0", "active = 1", "stock_quantity > 0"])
+        elif user.role == "franchise":
+            clauses.extend(["visible_franchise = 1", "COALESCE(internal, 0) = 0", "active = 1", "stock_quantity > 0"])
+    if tag_filter:
+        clauses.append("stock_tag = ?")
+        params.append(tag_filter)
+    where_sql = " AND ".join(clauses)
     with db_connect() as conn:
         rows = conn.execute(
-            f"""
+            """
             SELECT TRIM(category) AS category,
                    MAX(NULLIF(TRIM(category_emoji), '')) AS category_emoji
              FROM products
-             WHERE category IS NOT NULL
-               AND TRIM(category) <> ''
-               AND catalog_archived = 0
-               {visibility_clause}
+             WHERE """ + where_sql + """
              GROUP BY LOWER(TRIM(category))
              ORDER BY category COLLATE NOCASE ASC
-            """
+            """,
+            params,
         ).fetchall()
     return [
         {
@@ -4031,6 +4176,7 @@ PRODUCT_EXPORT_HEADERS_PT = [
     "Quantidade mínima por pedido",
     "Estoque mínimo",
     "Estoque máximo",
+    "Tag de estoque",
     "Ativo",
 ]
 
@@ -4133,6 +4279,7 @@ def product_row_for_excel(product: Product) -> list[Any]:
         product.min_order_quantity,
         product.min_stock,
         product.max_stock,
+        product.stock_tag_name,
         "Sim" if product.active else "Não",
     ]
 
@@ -4172,6 +4319,9 @@ PRODUCT_IMPORT_HEADER_ALIASES = {
     "max_stock": ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "Max", "最高库存", "最高庫存"],
     "active": ["Ativo", "Status", "Produto ativo", "启用", "啟用", "状态", "狀態"],
 }
+
+
+PRODUCT_IMPORT_HEADER_ALIASES["stock_tag"] = ["Tag de estoque", "Tag", "Tipo de estoque", "Separacao de estoque", "Separação de estoque"]
 
 
 def normalize_product_lookup_key(value: Any) -> str:
@@ -4215,6 +4365,7 @@ class ProductImportRecord:
     min_order_quantity: int | None
     min_stock: int | None
     max_stock: int | None
+    stock_tag: str
     active: bool
 
 
@@ -4242,6 +4393,7 @@ def parse_product_import_record(row_number: int, row_values: list[Any], header_m
         min_order_quantity=parse_optional_int(get_import_value(row_values, header_map, "min_order_quantity")),
         min_stock=parse_optional_int(get_import_value(row_values, header_map, "min_stock")),
         max_stock=parse_optional_int(get_import_value(row_values, header_map, "max_stock")),
+        stock_tag=normalize_stock_tag_slug(get_import_value(row_values, header_map, "stock_tag")),
         active=parse_bool_value(get_import_value(row_values, header_map, "active"), default=True),
     )
 
@@ -4265,17 +4417,18 @@ def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
         record.min_order_quantity,
         record.min_stock,
         record.max_stock,
+        record.stock_tag,
         bool(record.active),
     )
 
 
 def dedupe_import_records(records: list[ProductImportRecord]) -> tuple[list[ProductImportRecord], int]:
     """Mantém apenas a última linha de cada nome para impedir produtos duplicados."""
-    positions: dict[str, int] = {}
+    positions: dict[tuple[str, str], int] = {}
     result: list[ProductImportRecord] = []
     duplicates = 0
     for record in records:
-        key = normalize_product_lookup_key(record.name)
+        key = (normalize_stock_tag_slug(record.stock_tag), normalize_product_lookup_key(record.name))
         if key in positions:
             duplicates += 1
             result[positions[key]] = record
@@ -4364,6 +4517,7 @@ def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
         record.min_order_quantity,
         record.min_stock,
         record.max_stock,
+        record.stock_tag,
         1 if record.active else 0,
     )
 
@@ -4405,6 +4559,7 @@ def product_upsert_sql_rows(rows: list[tuple[int | None, ProductImportRecord]], 
             record.min_order_quantity,
             record.min_stock,
             record.max_stock,
+            record.stock_tag,
             1 if record.active else 0,
             0,
             created_at,
@@ -4423,7 +4578,7 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
     created = sum(1 for target_id, _record in rows if target_id is None)
     updated = len(rows) - created
     skipped = 0
-    fields = "id, name, category, category_emoji, unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, active, catalog_archived, created_at, updated_at"
+    fields = "id, name, category, category_emoji, unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, stock_tag, active, catalog_archived, created_at, updated_at"
     update_set = """
         name = excluded.name,
         category = excluded.category,
@@ -4439,6 +4594,7 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
         min_order_quantity = excluded.min_order_quantity,
         min_stock = excluded.min_stock,
         max_stock = excluded.max_stock,
+        stock_tag = excluded.stock_tag,
         active = excluded.active,
         catalog_archived = 0,
         updated_at = excluded.updated_at
@@ -4526,6 +4682,7 @@ def ensure_product_import_columns(conn: Any) -> None:
         ("internal", "ALTER TABLE products ADD COLUMN internal INTEGER NOT NULL DEFAULT 0"),
         ("is_kit", "ALTER TABLE products ADD COLUMN is_kit INTEGER NOT NULL DEFAULT 0"),
         ("kit_quantity", "ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1"),
+        ("stock_tag", "ALTER TABLE products ADD COLUMN stock_tag TEXT NOT NULL DEFAULT 'insumos'"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -4535,20 +4692,52 @@ def ensure_product_import_columns(conn: Any) -> None:
                 print(f"[IMPORTAÇÃO PRODUTOS] Migração ignorada para {column_name}: {exc}")
 
 
+def product_import_key_from_values(name: Any, stock_tag: Any = DEFAULT_STOCK_TAG) -> tuple[str, str]:
+    return (normalize_stock_tag_slug(stock_tag), normalize_product_lookup_key(name))
+
+
+def product_import_record_key(record: ProductImportRecord) -> tuple[str, str]:
+    return product_import_key_from_values(record.name, record.stock_tag)
+
+
+def prepare_import_stock_tags(conn: Any, records: list[ProductImportRecord]) -> None:
+    known = {
+        normalize_stock_tag_slug(row["slug"])
+        for row in conn.execute("SELECT slug FROM stock_tags").fetchall()
+    }
+    can_manage = can_manage_stock_tags()
+    for record in records:
+        record.stock_tag = normalize_stock_tag_slug(record.stock_tag)
+        if record.stock_tag in known:
+            continue
+        if not can_manage:
+            record.stock_tag = DEFAULT_STOCK_TAG
+            continue
+        label = default_stock_tag_name(record.stock_tag)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO stock_tags (slug, name, description, active, system_key, created_at)
+            VALUES (?, ?, ?, 1, 0, ?)
+            """,
+            (record.stock_tag, label, "Criada pela importacao de produtos.", now_iso()),
+        )
+        known.add(record.stock_tag)
+
+
 def archive_products_outside_import(
     conn: Any,
-    imported_names: set[str],
-    preferred_ids: dict[str, int],
+    imported_keys: set[tuple[str, str]],
+    preferred_ids: dict[tuple[str, str], int],
     visible_before: set[int],
 ) -> int:
-    rows = conn.execute("SELECT id, name FROM products").fetchall()
+    rows = conn.execute("SELECT id, name, stock_tag FROM products").fetchall()
     keep_ids: set[int] = set()
-    grouped: dict[str, list[int]] = {}
+    grouped: dict[tuple[str, str], list[int]] = {}
     for row in rows:
-        key = normalize_product_lookup_key(row["name"])
+        key = product_import_key_from_values(row["name"], row["stock_tag"] if "stock_tag" in row.keys() else DEFAULT_STOCK_TAG)
         grouped.setdefault(key, []).append(int(row["id"]))
 
-    for key in imported_names:
+    for key in imported_keys:
         ids = sorted(grouped.get(key, []))
         if not ids:
             continue
@@ -4631,25 +4820,26 @@ def import_products_from_workbook_bytes(
 
     with db_connect() as conn:
         ensure_product_import_columns(conn)
+        prepare_import_stock_tags(conn, parsed_records)
         existing_rows = conn.execute(
-            "SELECT id, name, catalog_archived FROM products ORDER BY catalog_archived ASC, id ASC"
+            "SELECT id, name, stock_tag, catalog_archived FROM products ORDER BY catalog_archived ASC, id ASC"
         ).fetchall()
         visible_before = {
             int(row["id"])
             for row in existing_rows
             if not bool(row["catalog_archived"])
         }
-        existing_by_name: dict[str, Any] = {}
+        existing_by_key: dict[tuple[str, str], Any] = {}
         for row in existing_rows:
-            key = normalize_product_lookup_key(row["name"])
-            if key and key not in existing_by_name:
-                existing_by_name[key] = row
+            key = product_import_key_from_values(row["name"], row["stock_tag"] if "stock_tag" in row.keys() else DEFAULT_STOCK_TAG)
+            if key[1] and key not in existing_by_key:
+                existing_by_key[key] = row
 
         upsert_rows: list[tuple[int | None, ProductImportRecord]] = []
-        preferred_ids: dict[str, int] = {}
+        preferred_ids: dict[tuple[str, str], int] = {}
         for record in parsed_records:
-            key = normalize_product_lookup_key(record.name)
-            existing_row = existing_by_name.get(key)
+            key = product_import_record_key(record)
+            existing_row = existing_by_key.get(key)
             target_id = int(existing_row["id"]) if existing_row is not None else None
             if target_id is not None:
                 preferred_ids[key] = target_id
@@ -4659,8 +4849,8 @@ def import_products_from_workbook_bytes(
         skipped += skipped_upsert
         archived = 0
         if import_mode == "replace" and not row_errors:
-            imported_names = {normalize_product_lookup_key(record.name) for record in parsed_records}
-            archived = archive_products_outside_import(conn, imported_names, preferred_ids, visible_before)
+            imported_keys = {product_import_record_key(record) for record in parsed_records}
+            archived = archive_products_outside_import(conn, imported_keys, preferred_ids, visible_before)
         category_emojis = {
             normalize_product_lookup_key(record.category): (record.category, record.category_emoji)
             for record in parsed_records
@@ -5107,22 +5297,23 @@ def row_to_material_entry(row: Any | None, product: Product | None = None) -> Ma
     )
 
 
-def find_product_by_name(conn: Any, name: str) -> Product | None:
+def find_product_by_name(conn: Any, name: str, stock_tag: str = DEFAULT_STOCK_TAG) -> Product | None:
     cleaned_name = (name or "").strip()
     if not cleaned_name:
         return None
+    normalized_stock_tag = normalize_stock_tag_slug(stock_tag)
     # Primeiro tenta busca exata para evitar varrer a tabela inteira no D1 a cada entrada.
     row = conn.execute(
-        "SELECT * FROM products WHERE catalog_archived = 0 AND name = ? LIMIT 1",
-        (cleaned_name,),
+        "SELECT * FROM products WHERE catalog_archived = 0 AND stock_tag = ? AND name = ? LIMIT 1",
+        (normalized_stock_tag, cleaned_name),
     ).fetchone()
     product = row_to_product(row) if row is not None else None
     if product is not None:
         return product
     # Fallback sem varrer a tabela inteira no Cloudflare D1.
     row = conn.execute(
-        "SELECT * FROM products WHERE catalog_archived = 0 AND lower(name) = lower(?) LIMIT 1",
-        (cleaned_name,),
+        "SELECT * FROM products WHERE catalog_archived = 0 AND stock_tag = ? AND lower(name) = lower(?) LIMIT 1",
+        (normalized_stock_tag, cleaned_name),
     ).fetchone()
     product = row_to_product(row) if row is not None else None
     if product is not None:
@@ -5134,7 +5325,7 @@ def find_product_by_name(conn: Any, name: str) -> Product | None:
         return None
 
     key = normalize_product_lookup_key(cleaned_name)
-    rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0").fetchall()
+    rows = conn.execute("SELECT * FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (normalized_stock_tag,)).fetchall()
     for row in rows:
         product = row_to_product(row)
         if product and normalize_product_lookup_key(product.name) == key:
@@ -5156,15 +5347,15 @@ def create_or_update_product_from_material_entry(
     unit_measure = (unit_measure or "un").strip()[:40] or "un"
     quantity = int(quantity or 0)
     unit_price_cents = int(unit_price_cents or 0)
-    product = find_product_by_name(conn, item_name)
+    product = find_product_by_name(conn, item_name, SUPPLY_STOCK_TAG)
     now_value = now_iso()
     if product is None:
         cursor = conn.execute(
             """
-            INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (name, category, unit_measure, description, stock_quantity, price_cents, limit_base, limit_franchise, min_stock, max_stock, active, stock_tag, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (item_name, "Entrada de Materiais", unit_measure, "Produto criado automaticamente pela entrada de materiais.", quantity, unit_price_cents, None, None, None, None, 1, now_value),
+            (item_name, "Entrada de Materiais", unit_measure, "Produto criado automaticamente pela entrada de materiais.", quantity, unit_price_cents, None, None, None, None, 1, SUPPLY_STOCK_TAG, now_value),
         )
         product_id = int(get_cursor_lastrowid(cursor) or 0)
         record_stock_movement(conn, product_id, quantity, 0, quantity, movement_type, note, created_by_id=created_by_id)
@@ -5557,10 +5748,11 @@ def api_products():
                unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
                limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
                active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
-          FROM products
+         FROM products
          WHERE active = 1 AND catalog_archived = 0
+           AND stock_tag = ?
     """
-    params: list[Any] = []
+    params: list[Any] = [SUPPLY_STOCK_TAG]
     if not user.is_admin:
         sql += " AND stock_quantity > 0 AND COALESCE(internal, 0) = 0"
     if user.role == "base":
@@ -6826,6 +7018,8 @@ def admin_products():
     status_filter = (request.args.get("status") or "all").strip().lower()
     sort_filter = (request.args.get("sort") or "default").strip().lower()
     category_filter = (request.args.get("category") or "").strip()
+    stock_tag_filter_raw = (request.args.get("stock_tag") or "").strip()
+    stock_tag_filter = normalize_stock_tag_slug(stock_tag_filter_raw, "") if stock_tag_filter_raw else ""
     if status_filter not in {"all", "active", "inactive"}:
         status_filter = "all"
     if sort_filter not in {"default", "category", "category_desc", "name", "name_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
@@ -6843,10 +7037,13 @@ def admin_products():
     if category_filter:
         clauses.append("LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))")
         params.append(category_filter)
+    if stock_tag_filter:
+        clauses.append("stock_tag = ?")
+        params.append(stock_tag_filter)
     if search:
         like = like_term(search)
-        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)")
-        params.extend([like, like, like, like])
+        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ? OR stock_tag LIKE ?)")
+        params.extend([like, like, like, like, like])
 
     sort_map = {
         "default": "active DESC, category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
@@ -6873,7 +7070,9 @@ def admin_products():
             SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
                    unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
                    limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
-                   active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+                   active, visible_base, visible_franchise, internal, stock_tag,
+                   (SELECT name FROM stock_tags WHERE slug = products.stock_tag) AS stock_tag_name,
+                   catalog_archived, created_at, updated_at
               FROM products
               {where_sql}
              ORDER BY {sort_map.get(sort_filter, sort_map["default"])}
@@ -6908,6 +7107,8 @@ def admin_products():
             args["sort"] = sort_filter
         if category_filter:
             args["category"] = category_filter
+        if stock_tag_filter:
+            args["stock_tag"] = stock_tag_filter
         return url_for("admin_products", **args)
 
     visible_page_numbers: set[int] = {1, total_pages}
@@ -6946,7 +7147,8 @@ def admin_products():
         products=products,
         product_categories_filter=categories,
         product_categories_manage=category_items,
-        product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter, "limit": per_page, "page": page},
+        product_stock_tags=list_stock_tags(active_only=False),
+        product_filters={"q": search, "status": status_filter, "sort": sort_filter, "category": category_filter, "stock_tag": stock_tag_filter, "limit": per_page, "page": page},
         product_counts={"total": total_products, "active": active_products, "inactive": inactive_products, "shown": len(products), "page": page, "limit": per_page, "low_read": low_row_read_mode()},
         product_pagination=product_pagination,
     )
@@ -6997,6 +7199,74 @@ def admin_product_categories_update():
     next_url = (request.form.get("next") or request.referrer or "").strip()
     return redirect(safe_local_redirect_target(request.form.get("return_to") or next_url, "admin_products"))
 
+
+@app.post("/admin/products/stock-tags/update")
+@admin_required
+@page_access_required("admin_products")
+def admin_product_stock_tags_update():
+    if not can_manage_stock_tags():
+        flash("Somente Admin e Dev podem criar ou editar tags de estoque.", "warning")
+        return redirect_to_return("admin_products")
+
+    slugs = request.form.getlist("tag_slug")
+    names = request.form.getlist("tag_name")
+    descriptions = request.form.getlist("tag_description")
+    active_slugs = {normalize_stock_tag_slug(value, "") for value in request.form.getlist("tag_active")}
+    updated = 0
+    created = 0
+
+    with db_connect() as conn:
+        existing_rows = conn.execute("SELECT slug, system_key FROM stock_tags").fetchall()
+        system_keys = {normalize_stock_tag_slug(row["slug"]) for row in existing_rows if bool(row["system_key"])}
+        existing_slugs = {normalize_stock_tag_slug(row["slug"]) for row in existing_rows}
+
+        for index, raw_slug in enumerate(slugs):
+            slug = normalize_stock_tag_slug(raw_slug, "")
+            if not slug:
+                continue
+            name = (names[index] if index < len(names) else "").strip()[:80]
+            description = (descriptions[index] if index < len(descriptions) else "").strip()[:240]
+            if not name:
+                conn.rollback()
+                flash("Nenhuma tag pode ficar sem nome.", "warning")
+                return redirect_to_return("admin_products")
+            active = 1 if slug in system_keys or slug in active_slugs else 0
+            conn.execute(
+                """
+                UPDATE stock_tags
+                   SET name = ?, description = ?, active = ?, updated_at = ?
+                 WHERE slug = ?
+                """,
+                (name, description, active, now_iso(), slug),
+            )
+            updated += 1
+
+        new_name = (request.form.get("new_tag_name") or "").strip()[:80]
+        new_description = (request.form.get("new_tag_description") or "").strip()[:240]
+        if new_name:
+            new_slug = normalize_stock_tag_slug(new_name, "")
+            if not new_slug:
+                conn.rollback()
+                flash("Informe um nome valido para a nova tag.", "warning")
+                return redirect_to_return("admin_products")
+            if new_slug in existing_slugs:
+                conn.rollback()
+                flash("Ja existe uma tag com esse nome.", "warning")
+                return redirect_to_return("admin_products")
+            conn.execute(
+                """
+                INSERT INTO stock_tags (slug, name, description, active, system_key, created_at)
+                VALUES (?, ?, ?, 1, 0, ?)
+                """,
+                (new_slug, new_name, new_description, now_iso()),
+            )
+            created += 1
+
+        conn.commit()
+
+    flash(f"Tags de estoque salvas: {updated} atualizada(s), {created} criada(s).", "success")
+    return redirect_to_return("admin_products")
+
 @app.get("/admin/products/export")
 @admin_required
 @page_access_required("admin_products")
@@ -7014,6 +7284,8 @@ def admin_products_export():
     status_filter = (request.args.get("status") or "all").strip().lower()
     sort_filter = (request.args.get("sort") or "default").strip().lower()
     category_filter = (request.args.get("category") or "").strip()
+    stock_tag_filter_raw = (request.args.get("stock_tag") or "").strip()
+    stock_tag_filter = normalize_stock_tag_slug(stock_tag_filter_raw, "") if stock_tag_filter_raw else ""
     if status_filter not in {"all", "active", "inactive"}:
         status_filter = "all"
     if sort_filter not in {"default", "category", "category_desc", "name", "name_desc", "value_asc", "value_desc", "stock_asc", "stock_desc"}:
@@ -7028,10 +7300,13 @@ def admin_products_export():
     if category_filter:
         clauses.append("LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))")
         params.append(category_filter)
+    if stock_tag_filter:
+        clauses.append("stock_tag = ?")
+        params.append(stock_tag_filter)
     if search:
         like = like_term(search)
-        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)")
-        params.extend([like, like, like, like])
+        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ? OR stock_tag LIKE ?)")
+        params.extend([like, like, like, like, like])
 
     sort_map = {
         "default": "active DESC, category COLLATE NOCASE ASC, name COLLATE NOCASE ASC",
@@ -7058,7 +7333,13 @@ def admin_products_export():
 
     with db_connect() as conn:
         rows = conn.execute(
-            f"SELECT * FROM products{where_sql} ORDER BY {sort_map.get(sort_filter, sort_map['default'])}{limit_sql}",
+            f"""
+            SELECT products.*,
+                   (SELECT name FROM stock_tags WHERE slug = products.stock_tag) AS stock_tag_name
+              FROM products
+              {where_sql}
+             ORDER BY {sort_map.get(sort_filter, sort_map['default'])}{limit_sql}
+            """,
             query_params,
         ).fetchall()
     products = [product for row in rows if (product := row_to_product(row)) is not None]
@@ -7086,7 +7367,7 @@ def admin_products_export():
             cell.alignment = Alignment(vertical="center")
         if len(row) >= 8:
             row[7].number_format = 'R$ #,##0.00'
-    widths = [10, 38, 24, 16, 24, 12, 18, 48, 18, 18, 22, 24, 24, 18, 18, 14]
+    widths = [10, 38, 24, 16, 24, 12, 18, 48, 18, 18, 22, 24, 24, 18, 18, 20, 14]
     for idx, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(idx)].width = width
     worksheet.freeze_panes = "A2"
@@ -7218,9 +7499,9 @@ def admin_product_new():
                     name, category, category_emoji, image_name, image_key, image_content_type,
                     unit_measure, is_kit, kit_quantity, description, stock_quantity,
                     price_cents, limit_base, limit_franchise, min_order_quantity,
-                    min_stock, max_stock, active, visible_base, visible_franchise, internal, created_at
+                    min_stock, max_stock, active, visible_base, visible_franchise, internal, stock_tag, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
@@ -7244,6 +7525,7 @@ def admin_product_new():
                     1 if product.visible_base else 0,
                     1 if product.visible_franchise else 0,
                     1 if product.internal else 0,
+                    product.stock_tag,
                     now_iso(),
                 ),
             )
@@ -7261,7 +7543,13 @@ def admin_product_new():
     if not user_has_action_access(current_user(), "products_create"):
         flash("Seu tipo de acesso não pode criar produtos.", "warning")
         return redirect_to_return("admin_products")
-    return render_template("admin/product_form.html", product=None, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
+    return render_template(
+        "admin/product_form.html",
+        product=None,
+        product_categories=list_product_categories(),
+        product_categories_manage=list_product_categories(),
+        stock_tags=list_stock_tags(active_only=True, include_slug=DEFAULT_STOCK_TAG),
+    )
 
 
 @app.route("/admin/products/<int:product_id>/edit", methods=["GET", "POST"])
@@ -7303,7 +7591,7 @@ def admin_product_edit(product_id: int):
                     image_content_type = ?, unit_measure = ?, is_kit = ?, kit_quantity = ?, description = ?,
                     stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
                     min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
-                    visible_base = ?, visible_franchise = ?, internal = ?, updated_at = ?
+                    visible_base = ?, visible_franchise = ?, internal = ?, stock_tag = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -7328,6 +7616,7 @@ def admin_product_edit(product_id: int):
                     1 if product.visible_base else 0,
                     1 if product.visible_franchise else 0,
                     1 if product.internal else 0,
+                    product.stock_tag,
                     now_iso(),
                     product_id,
                 ),
@@ -7344,7 +7633,13 @@ def admin_product_edit(product_id: int):
             remove_local_product_image(old_image_key)
         flash("Produto atualizado.", "success")
         return redirect_to_return("admin_products")
-    return render_template("admin/product_form.html", product=product, product_categories=list_product_categories(), product_categories_manage=list_product_categories())
+    return render_template(
+        "admin/product_form.html",
+        product=product,
+        product_categories=list_product_categories(),
+        product_categories_manage=list_product_categories(),
+        stock_tags=list_stock_tags(active_only=True, include_slug=product.stock_tag),
+    )
 
 
 @app.post("/admin/products/<int:product_id>/toggle-active")
@@ -7608,7 +7903,10 @@ def admin_assets():
     selected_unit = selected_base or selected_franchise
     assets = list_assets(base=selected_unit, regional=selected_regional)
     with db_connect() as conn:
-        product_rows = conn.execute("SELECT * FROM products WHERE active = 1 AND catalog_archived = 0 ORDER BY category ASC, name ASC").fetchall()
+        product_rows = conn.execute(
+            "SELECT * FROM products WHERE active = 1 AND catalog_archived = 0 AND stock_tag = ? ORDER BY category ASC, name ASC",
+            (ASSET_STOCK_TAG,),
+        ).fetchall()
     asset_product_options = [
         {
             "id": product.id,
@@ -7627,6 +7925,7 @@ def admin_assets():
         "mg": sum(1 for asset in assets if asset.regional == "MG"),
         "spn": sum(1 for asset in assets if asset.regional == "SPN"),
         "matriz": sum(1 for asset in assets if asset.regional == "Matriz"),
+        "sc": sum(1 for asset in assets if asset.regional in {"SC CGE", "SC RAO"}),
     }
     return render_template(
         "admin/assets.html",
@@ -7714,8 +8013,9 @@ def admin_asset_new_with_stock():
     base_raw = request.form.get("base", "").strip()
     franchise_raw = request.form.get("franchise", "").strip()
     regional = normalize_asset_regional(request.form.get("regional", ""))
+    is_special_regional = is_special_asset_regional(regional)
     try:
-        base, selected_unit_kind = validate_unit_selection(base_raw, franchise_raw, required=(regional != "Matriz"))
+        base, selected_unit_kind = validate_unit_selection(base_raw, franchise_raw, required=not is_special_regional)
     except ValueError as exc:
         flash(str(exc), "warning")
         return redirect_to_return("admin_assets", regional=regional)
@@ -7744,23 +8044,24 @@ def admin_asset_new_with_stock():
         serial_number = (serial_numbers[index] if index < len(serial_numbers) else "").strip()
         item_rows.append({"product_id": product_id, "quantity": quantity, "serial_number": serial_number[:120]})
 
-    if regional == "Matriz":
-        base = "Matriz"
+    if is_special_regional:
+        base = regional
+        selected_unit_kind = ""
 
     redirect_args = {"regional": regional}
-    if regional != "Matriz" and base:
+    if not is_special_regional and base:
         redirect_args["franchise" if selected_unit_kind == "franchise" else "base"] = base
 
-    if not name or not regional or not sector or not manager or (regional != "Matriz" and not base):
+    if not name or not regional or not sector or not manager or (not is_special_regional and not base):
         flash("Preencha nome, base/franquia, regional, setor e gestor para adicionar o ativo.", "warning")
         return redirect_to_return("admin_assets")
     if not regional:
         flash("Selecione uma regional valida para o ativo.", "warning")
         return redirect_to_return("admin_assets")
-    if regional != "Matriz" and base not in BASE_FRANCHISE_OPTION_SET:
+    if not is_special_regional and base not in BASE_FRANCHISE_OPTION_SET:
         flash("Selecione uma base ou franquia valida para o ativo.", "warning")
         return redirect_to_return("admin_assets", regional=regional)
-    if regional != "Matriz" and asset_regional_for_base(base) != regional:
+    if not is_special_regional and asset_regional_for_base(base) != regional:
         flash("A base/franquia selecionada nao pertence a regional informada.", "warning")
         return redirect_to_return("admin_assets", regional=regional)
     if missing_product:
@@ -7782,8 +8083,8 @@ def admin_asset_new_with_stock():
             product_ids_unique = sorted(requested_by_product)
             placeholders = ", ".join(["?"] * len(product_ids_unique))
             product_rows = conn.execute(
-                f"SELECT * FROM products WHERE catalog_archived = 0 AND id IN ({placeholders})",
-                product_ids_unique,
+                f"SELECT * FROM products WHERE catalog_archived = 0 AND stock_tag = ? AND id IN ({placeholders})",
+                [ASSET_STOCK_TAG, *product_ids_unique],
             ).fetchall()
             product_map = {
                 int(row["id"]): product
@@ -7847,12 +8148,10 @@ def admin_asset_new_with_stock():
                 product.stock_quantity = stock_after
             conn.commit()
             try:
-                asset_link = public_url_for(
-                    "admin_assets",
-                    regional=regional,
-                    **({"franchise": base} if selected_unit_kind == "franchise" else {"base": base}),
-                    _anchor=f"asset-{asset_id}",
-                )
+                asset_link_args = {"regional": regional, "_anchor": f"asset-{asset_id}"}
+                if not is_special_regional and base:
+                    asset_link_args["franchise" if selected_unit_kind == "franchise" else "base"] = base
+                asset_link = public_url_for("admin_assets", **asset_link_args)
                 notify_feishu_asset_created(
                     int(asset_id),
                     name,
@@ -7888,12 +8187,12 @@ def admin_stock():
                    unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
                    limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
                    active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
-              FROM products
-             WHERE catalog_archived = 0
+             FROM products
+             WHERE catalog_archived = 0 AND stock_tag = ?
              ORDER BY active DESC, category ASC, name ASC
              LIMIT ?
             """,
-            (bounded_int(os.getenv("D1_STOCK_PRODUCT_LIMIT"), 250 if low_row_read_mode() else 1000, 50, 1000),),
+            (SUPPLY_STOCK_TAG, bounded_int(os.getenv("D1_STOCK_PRODUCT_LIMIT"), 250 if low_row_read_mode() else 1000, 50, 1000),),
         ).fetchall()
         movement_rows = conn.execute(
             """
@@ -7905,19 +8204,20 @@ def admin_stock():
               FROM stock_movements sm
               LEFT JOIN products p ON p.id = sm.product_id
               LEFT JOIN users u ON u.id = sm.created_by_id
-              LEFT JOIN supply_requests sr ON sr.id = sm.request_id
-              LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
+             LEFT JOIN supply_requests sr ON sr.id = sm.request_id
+             LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
+             WHERE COALESCE(p.stock_tag, ?) = ?
              ORDER BY sm.created_at DESC, sm.id DESC
              LIMIT ?
             """,
-            (DEFAULT_TABLE_PAGE_SIZE,),
+            (SUPPLY_STOCK_TAG, SUPPLY_STOCK_TAG, DEFAULT_TABLE_PAGE_SIZE),
         ).fetchall()
         if exact_counts_enabled():
             totals = {
-                "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-                "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
-                "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND min_stock IS NOT NULL AND stock_quantity <= min_stock").fetchone()["total"],
-                "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements").fetchone()["total"],
+                "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
+                "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
+                "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ? AND min_stock IS NOT NULL AND stock_quantity <= min_stock", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
+                "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements sm LEFT JOIN products p ON p.id = sm.product_id WHERE COALESCE(p.stock_tag, ?) = ?", (SUPPLY_STOCK_TAG, SUPPLY_STOCK_TAG)).fetchone()["total"],
             }
         else:
             totals = {

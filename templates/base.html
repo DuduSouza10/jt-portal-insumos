@@ -7,9 +7,9 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=179">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=181">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <div class="bg-orb orb-one"></div>
   <div class="bg-orb orb-two"></div>
 

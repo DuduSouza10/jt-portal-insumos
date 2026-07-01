@@ -82,6 +82,19 @@
           <small class="hint">{% if can_do('products_edit_category') %}Selecione uma categoria já cadastrada ou use o botão + para criar uma nova.{% else %}Selecione uma categoria já cadastrada.{% endif %}</small>
         </div>
 
+        {% if current_can_manage_stock_tags() %}
+        <label class="field-card stock-tag-select-field">
+          <span class="field-label">Tag de estoque</span>
+          {% set selected_stock_tag = product.stock_tag if product else 'insumos' %}
+          <select name="stock_tag" required>
+            {% for tag in stock_tags|default([]) %}
+            <option value="{{ tag.slug }}" {% if tag.slug == selected_stock_tag %}selected{% endif %}>{{ tag.name }}</option>
+            {% endfor %}
+          </select>
+          <small class="hint">Insumos aparecem nas solicitações. Ativos aparecem no cadastro de ativos.</small>
+        </label>
+        {% endif %}
+
         <div class="product-image-field product-image-field-premium full">
           <label for="productImage">Imagem do produto</label>
           <div class="product-image-editor product-image-editor-premium">
