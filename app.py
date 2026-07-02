@@ -1506,10 +1506,6 @@ def init_db() -> None:
                 value TEXT NOT NULL DEFAULT '',
                 updated_at TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_products_catalog_active_name ON products(catalog_archived, active, name);
-            CREATE INDEX IF NOT EXISTS idx_products_catalog_category ON products(catalog_archived, category);
-            CREATE INDEX IF NOT EXISTS idx_products_stock ON products(catalog_archived, stock_quantity);
-            CREATE INDEX IF NOT EXISTS idx_products_stock_tag ON products(stock_tag, catalog_archived, active);
             CREATE INDEX IF NOT EXISTS idx_stock_tags_name ON stock_tags(name COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_status_created ON supply_requests(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_user_created ON supply_requests(user_id, created_at DESC);
@@ -1609,6 +1605,10 @@ def init_db() -> None:
                 (stock_tag_slug,),
             )
         conn.execute("UPDATE products SET stock_tag = ? WHERE stock_tag IS NULL OR TRIM(stock_tag) = ''", (DEFAULT_STOCK_TAG,))
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_catalog_active_name ON products(catalog_archived, active, name)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_catalog_category ON products(catalog_archived, category)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_stock ON products(catalog_archived, stock_quantity)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_products_stock_tag ON products(stock_tag, catalog_archived, active)")
         asset_item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(asset_items)").fetchall()}
         if "product_id" not in asset_item_columns:
             conn.execute("ALTER TABLE asset_items ADD COLUMN product_id INTEGER")
