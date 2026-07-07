@@ -87,28 +87,33 @@
   </form>
 
   {% if can_do('users_import_export') %}
-  <form class="import-form user-import-form user-import-form-v185 user-import-form-v186 user-import-form-v187" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
-    <div class="user-import-file-panel">
+  <form class="import-form user-import-form user-import-form-clean-v188 {{ 'has-password-option' if current_is_dev() else 'no-password-option' }}" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
+    <div class="user-import-clean-head">
+      <div>
+        <span class="eyebrow">Importação XLSX</span>
+        <h3>Cadastro em massa de usuários</h3>
+      </div>
+      <small>Atualize usuários pelo login ou substitua a base atual pela planilha.</small>
+    </div>
+    <div class="user-import-clean-body">
       <label class="user-import-file-label">
-        Cadastro em massa de usuários (.xlsx)
+        Planilha
         <input type="file" name="spreadsheet" accept=".xlsx" required>
       </label>
-    </div>
-    <div class="user-import-options-panel">
       <fieldset class="import-mode-fieldset user-import-mode-fieldset">
-        <legend>Como deseja importar?</legend>
+        <legend>Modo de importação</legend>
         <label class="import-mode-option">
           <input type="radio" name="import_mode" value="merge" checked>
           <span>
-            <strong>Adicionar ou atualizar</strong>
-            <small>Cria novos usuários e atualiza usuários existentes pelo login.</small>
+            <strong>Adicionar/atualizar</strong>
+            <small>Cria novos e atualiza existentes pelo login.</small>
           </span>
         </label>
         <label class="import-mode-option danger-option">
           <input type="radio" name="import_mode" value="replace">
           <span>
             <strong>Substituir cadastros</strong>
-            <small>Atualiza a planilha e recusa cadastros que não estiverem nela, exceto o usuário logado.</small>
+            <small>Recusa quem não estiver na planilha, exceto você.</small>
           </span>
         </label>
       </fieldset>
@@ -116,14 +121,11 @@
       <label class="bulk-password-option user-import-password-option">
         <input type="checkbox" name="update_existing_passwords">
         <span>
-          <strong>Atualizar senhas existentes</strong>
-          <small>Quando marcado, a coluna Senha/Nova senha da planilha troca a senha dos usuários já cadastrados. Novos usuários continuam precisando de senha.</small>
+          <strong>Atualizar senhas</strong>
+          <small>Usa a coluna Senha/Nova senha para usuários existentes.</small>
         </span>
       </label>
       {% endif %}
-    </div>
-    <div class="user-import-footer">
-      <small class="user-import-note">Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
       <button class="btn primary user-import-submit" type="submit">Importar usuários</button>
     </div>
   </form>

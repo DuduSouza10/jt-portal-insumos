@@ -14999,3 +14999,536 @@ html[data-theme="light"] body .import-form.user-import-form.user-import-form-v18
     grid-template-columns: 1fr !important;
   }
 }
+
+/* v188 - redesenho limpo do cadastro em massa de usuarios. */
+.import-form.user-import-form-clean-v188,
+html[data-theme="light"] .import-form.user-import-form-clean-v188,
+html[data-theme="dark"] .import-form.user-import-form-clean-v188 {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 16px 0 20px !important;
+  padding: 18px !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+.user-import-form-clean-v188 .user-import-clean-head {
+  display: flex !important;
+  align-items: end !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  min-width: 0 !important;
+  padding-bottom: 2px !important;
+}
+
+.user-import-form-clean-v188 .user-import-clean-head h3 {
+  margin: 4px 0 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 18px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+}
+
+.user-import-form-clean-v188 .user-import-clean-head small {
+  max-width: 520px !important;
+  color: var(--muted-2) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.35 !important;
+  text-align: right !important;
+}
+
+.user-import-form-clean-v188 .user-import-clean-body {
+  display: grid !important;
+  grid-template-columns: minmax(280px, 360px) minmax(420px, 1fr) minmax(230px, 300px) minmax(160px, 180px) !important;
+  gap: 12px !important;
+  align-items: end !important;
+  min-width: 0 !important;
+}
+
+.user-import-form-clean-v188.no-password-option .user-import-clean-body {
+  grid-template-columns: minmax(280px, 360px) minmax(420px, 1fr) minmax(160px, 180px) !important;
+}
+
+.user-import-form-clean-v188 .user-import-file-label,
+.user-import-form-clean-v188 .user-import-mode-fieldset {
+  display: grid !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+}
+
+.user-import-form-clean-v188 .user-import-mode-fieldset legend {
+  margin: 0 !important;
+  padding: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+}
+
+.user-import-form-clean-v188 .user-import-mode-fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.user-import-form-clean-v188 .user-import-mode-fieldset legend {
+  grid-column: 1 / -1 !important;
+}
+
+.user-import-form-clean-v188 .file-picker-shell,
+html[data-theme="light"] .user-import-form-clean-v188 .file-picker-shell,
+html[data-theme="dark"] .user-import-form-clean-v188 .file-picker-shell {
+  min-height: 58px !important;
+  height: 58px !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  align-content: center !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+html[data-theme="light"] .user-import-form-clean-v188 .file-picker-shell {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+.user-import-form-clean-v188 .file-picker-name {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+}
+
+.user-import-form-clean-v188 .file-picker-actions {
+  flex: 0 0 auto !important;
+  gap: 8px !important;
+}
+
+.user-import-form-clean-v188 .file-picker-button,
+.user-import-form-clean-v188 .file-picker-clear {
+  min-height: 36px !important;
+  height: 36px !important;
+  border-radius: 12px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option,
+.user-import-form-clean-v188 label.import-mode-option:is(:hover, :focus, :focus-within, :active),
+.user-import-form-clean-v188 label.import-mode-option:not(:has(input:checked)),
+.user-import-form-clean-v188 label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+  transform: none !important;
+}
+
+html[data-theme="light"] .user-import-form-clean-v188 label.import-mode-option:not(:has(input:checked)),
+html[data-theme="light"] .user-import-form-clean-v188 label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option:has(input:checked),
+.user-import-form-clean-v188 label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  border-color: rgba(230,0,18,.58) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(230,0,18,.17) !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option span {
+  display: grid !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option strong {
+  font-size: 12.8px !important;
+  line-height: 1.15 !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option small {
+  font-size: 10.5px !important;
+  line-height: 1.2 !important;
+  opacity: .86 !important;
+}
+
+.user-import-form-clean-v188 label.import-mode-option input[type="radio"] {
+  width: 17px !important;
+  height: 17px !important;
+  min-width: 17px !important;
+  min-height: 17px !important;
+  margin: 0 !important;
+}
+
+.user-import-form-clean-v188 .user-import-password-option,
+.user-import-form-clean-v188 .user-import-password-option:is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] .user-import-form-clean-v188 .user-import-password-option,
+html[data-theme="dark"] .user-import-form-clean-v188 .user-import-password-option {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+}
+
+html[data-theme="light"] .user-import-form-clean-v188 .user-import-password-option {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+.user-import-form-clean-v188 .user-import-password-option input[type="checkbox"] {
+  width: 19px !important;
+  height: 19px !important;
+  flex: 0 0 19px !important;
+  margin: 0 !important;
+}
+
+.user-import-form-clean-v188 .user-import-password-option span {
+  display: grid !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+.user-import-form-clean-v188 .user-import-password-option strong {
+  font-size: 12.8px !important;
+  line-height: 1.15 !important;
+}
+
+.user-import-form-clean-v188 .user-import-password-option small {
+  font-size: 10.5px !important;
+  line-height: 1.2 !important;
+}
+
+.user-import-form-clean-v188 .user-import-submit,
+html[data-theme="light"] body .user-import-form-clean-v188 .user-import-submit {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 14px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+}
+
+@media (max-width: 1320px) {
+  .user-import-form-clean-v188 .user-import-clean-body,
+  .user-import-form-clean-v188.no-password-option .user-import-clean-body {
+    grid-template-columns: minmax(260px, 1fr) minmax(420px, 1.35fr) minmax(160px, 190px) !important;
+  }
+
+  .user-import-form-clean-v188 .user-import-password-option {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .user-import-form-clean-v188 .user-import-clean-head {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+
+  .user-import-form-clean-v188 .user-import-clean-head small {
+    text-align: left !important;
+  }
+
+  .user-import-form-clean-v188 .user-import-clean-body,
+  .user-import-form-clean-v188.no-password-option .user-import-clean-body,
+  .user-import-form-clean-v188 .user-import-mode-fieldset {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* v188.1 - camada final para impedir regras antigas de deformarem a importacao de usuarios. */
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-areas: none !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 16px 0 20px !important;
+  padding: 18px !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-head {
+  display: flex !important;
+  align-items: end !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  min-width: 0 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-head h3 {
+  margin: 4px 0 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 18px !important;
+  line-height: 1.15 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-head small {
+  max-width: 520px !important;
+  color: var(--muted-2) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.35 !important;
+  text-align: right !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-body {
+  display: grid !important;
+  grid-template-columns: minmax(280px, 360px) minmax(430px, 1fr) minmax(230px, 300px) minmax(160px, 180px) !important;
+  grid-template-areas: none !important;
+  gap: 12px !important;
+  align-items: end !important;
+  min-width: 0 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188.no-password-option .user-import-clean-body {
+  grid-template-columns: minmax(280px, 360px) minmax(430px, 1fr) minmax(160px, 180px) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-file-label,
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-mode-fieldset {
+  display: grid !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-mode-fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-mode-fieldset legend {
+  grid-column: 1 / -1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  line-height: 1.15 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-shell {
+  min-height: 58px !important;
+  height: 58px !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  align-content: center !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  transform: none !important;
+}
+
+html[data-theme="light"] body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-shell {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-name {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-actions {
+  flex: 0 0 auto !important;
+  gap: 8px !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-button,
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .file-picker-clear {
+  min-height: 36px !important;
+  height: 36px !important;
+  border-radius: 12px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  transform: none !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  transform: none !important;
+}
+
+html[data-theme="light"] body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option:not(:has(input:checked)) {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option:has(input:checked) {
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  border-color: rgba(230,0,18,.58) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  box-shadow: 0 12px 24px rgba(230,0,18,.17) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option span,
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option span {
+  display: grid !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option strong,
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option strong {
+  font-size: 12.8px !important;
+  line-height: 1.15 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option small,
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option small {
+  margin: 0 !important;
+  font-size: 10.5px !important;
+  line-height: 1.2 !important;
+  opacity: .86 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option:has(input:checked) :where(span, strong, small) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 label.import-mode-option input[type="radio"] {
+  width: 17px !important;
+  height: 17px !important;
+  min-width: 17px !important;
+  min-height: 17px !important;
+  margin: 0 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border-radius: 15px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+html[data-theme="light"] body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option input[type="checkbox"] {
+  width: 19px !important;
+  height: 19px !important;
+  flex: 0 0 19px !important;
+  margin: 0 !important;
+}
+
+html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-submit {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 0 14px !important;
+  border-radius: 14px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+}
+
+@media (max-width: 1320px) {
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-body,
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188.no-password-option .user-import-clean-body {
+    grid-template-columns: minmax(260px, 1fr) minmax(420px, 1.35fr) minmax(160px, 190px) !important;
+  }
+
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-password-option {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 860px) {
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-head {
+    align-items: flex-start !important;
+    flex-direction: column !important;
+  }
+
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-head small {
+    text-align: left !important;
+  }
+
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-clean-body,
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188.no-password-option .user-import-clean-body,
+  html body .card.table-card.users-table-card form.import-form.user-import-form.user-import-form-clean-v188 .user-import-mode-fieldset {
+    grid-template-columns: 1fr !important;
+  }
+}
