@@ -4,29 +4,42 @@
 {% block page_subtitle %}Controle geral de cadastros, solicitações, produtos e estoque.{% endblock %}
 {% block content %}
 <section class="stats-grid">
+  {% if can_access('admin_users') %}
   <a class="stat-card card" href="{{ url_for('admin_users', status='pending') }}">
     <span>Cadastros pendentes</span>
     <strong>{{ counts.users_pending }}</strong>
   </a>
+  {% endif %}
+  {% if can_access('admin_requests') %}
   <a class="stat-card card" href="{{ url_for('admin_requests', status='pending') }}">
     <span>Solicitações pendentes</span>
     <strong>{{ counts.requests_pending }}</strong>
   </a>
+  {% endif %}
+  {% if can_access('admin_products') %}
   <a class="stat-card card" href="{{ url_for('admin_products') }}">
     <span>Produtos cadastrados</span>
     <strong>{{ counts.products }}</strong>
   </a>
-  <a class="stat-card card" href="{{ url_for('admin_products') }}">
+  {% endif %}
+  {% if can_access('admin_stock') %}
+  <a class="stat-card card" href="{{ url_for('admin_stock') }}">
     <span>Estoque total</span>
     <strong>{{ counts.stock_total }}</strong>
   </a>
+  {% endif %}
 </section>
 
 <section class="admin-split">
+  {% if can_access_any(['admin_requests','admin_requests_attended']) %}
   <div class="card table-card">
     <div class="section-head">
       <h2>Últimas solicitações</h2>
+      {% if can_access('admin_requests') %}
       <a href="{{ url_for('admin_requests') }}">Ver todas</a>
+      {% elif can_access('admin_requests_attended') %}
+      <a href="{{ url_for('admin_requests_attended') }}">Ver atendidas</a>
+      {% endif %}
     </div>
     <table>
       <thead><tr><th>#</th><th>Unidade</th><th>Status</th><th>Data</th></tr></thead>
@@ -44,11 +57,17 @@
       </tbody>
     </table>
   </div>
+  {% endif %}
 
+  {% if can_access('admin_products') or can_access('admin_stock') %}
   <div class="card table-card">
     <div class="section-head">
       <h2>Estoque baixo</h2>
+      {% if can_access('admin_products') %}
       <a href="{{ url_for('admin_products') }}">Gerenciar</a>
+      {% elif can_access('admin_stock') %}
+      <a href="{{ url_for('admin_stock') }}">Ver estoque</a>
+      {% endif %}
     </div>
     <table>
       <thead><tr><th>Produto</th><th>Estoque</th></tr></thead>
@@ -64,5 +83,6 @@
       </tbody>
     </table>
   </div>
+  {% endif %}
 </section>
 {% endblock %}

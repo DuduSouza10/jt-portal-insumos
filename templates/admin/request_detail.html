@@ -76,7 +76,11 @@
       <button class="btn ghost danger" type="submit">Excluir solicitação</button>
     </form>
     {% endif %}
+    {% if can_access('admin_requests') %}
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Voltar</a>
+    {% elif can_access('admin_requests_attended') %}
+    <a class="btn ghost" href="{{ url_for('admin_requests_attended') }}">Voltar</a>
+    {% endif %}
   </div>
 </section>
 {% endblock %}

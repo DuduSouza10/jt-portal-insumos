@@ -6176,7 +6176,13 @@ def admin_dashboard():
             """
         ).fetchall()
     low_stock = [product for row in low_rows if (product := row_to_product(row)) is not None]
-    latest_requests = list_supply_requests(limit=8)
+    dashboard_pages = get_user_page_permissions(current_user())
+    if "admin_requests" in dashboard_pages:
+        latest_requests = list_supply_requests(limit=8)
+    elif "admin_requests_attended" in dashboard_pages:
+        latest_requests = list_supply_requests(status="approved", limit=8)
+    else:
+        latest_requests = []
     return render_template("admin/dashboard.html", counts=counts, low_stock=low_stock, latest_requests=latest_requests)
 
 

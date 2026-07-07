@@ -7,7 +7,9 @@
   <div class="section-head product-tools-head">
     <h2>Produtos cadastrados</h2>
     <div class="product-tools">
+      {% if can_access('admin_stock') %}
       <a class="btn ghost" href="{{ url_for('admin_stock') }}">Gestão de Insumos</a>
+      {% endif %}
       {% if can_do('products_edit_category') %}<button class="btn ghost" type="button" data-open-categories-modal>Editar categorias</button>{% endif %}
       {% if current_can_manage_stock_tags() %}<button class="btn ghost" type="button" data-open-stock-tags-modal>Tags de estoque</button>{% endif %}
       {% if can_do('products_export') %}<button class="btn ghost" type="button" data-open-export-modal>Exportar planilha</button>{% endif %}

@@ -6,7 +6,9 @@
 <div class="card table-card">
   <div class="section-head">
     <h2>Pedidos atendidos</h2>
+    {% if can_access('admin_requests') %}
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Ver todas as solicitações</a>
+    {% endif %}
   </div>
   <table>
     <thead>

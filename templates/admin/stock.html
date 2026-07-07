@@ -182,7 +182,15 @@
         <td data-label="Mov."><span class="movement-delta {{ 'positive' if mov.quantity_delta > 0 else 'negative' }}">{{ '+' if mov.quantity_delta > 0 else '' }}{{ mov.quantity_delta }}</span></td>
         <td data-label="Antes">{{ mov.stock_before }}</td>
         <td data-label="Depois">{{ mov.stock_after }}</td>
-        <td data-label="Solicitacao">{% if mov.request_id %}<a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>{% else %}-{% endif %}</td>
+        <td data-label="Solicitacao">
+          {% if mov.request_id and can_access_any(['admin_requests','admin_requests_attended']) %}
+            <a href="{{ url_for('admin_request_detail', request_id=mov.request_id) }}">#{{ mov.request_id }}</a>
+          {% elif mov.request_id %}
+            #{{ mov.request_id }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
         <td data-label="Movimentado por">
           {% if mov.created_by_name %}
             <strong>{{ mov.created_by_name }}</strong>
