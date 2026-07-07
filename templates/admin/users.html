@@ -87,13 +87,12 @@
   </form>
 
   {% if can_do('users_import_export') %}
-  <form class="import-form user-import-form user-import-form-v185" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
+  <form class="import-form user-import-form user-import-form-v185 user-import-form-v186" method="post" action="{{ url_for('admin_users_import') }}" enctype="multipart/form-data" data-user-import-form>
     <div class="user-import-file-panel">
       <label class="user-import-file-label">
         Cadastro em massa de usuários (.xlsx)
         <input type="file" name="spreadsheet" accept=".xlsx" required>
       </label>
-      <button class="btn primary user-import-submit" type="submit">Importar usuários</button>
     </div>
     <div class="user-import-options-panel">
       <fieldset class="import-mode-fieldset user-import-mode-fieldset">
@@ -123,7 +122,10 @@
       </label>
       {% endif %}
     </div>
-    <small class="user-import-note">Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
+    <div class="user-import-footer">
+      <small class="user-import-note">Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
+      <button class="btn primary user-import-submit" type="submit">Importar usuários</button>
+    </div>
   </form>
   {% endif %}
 

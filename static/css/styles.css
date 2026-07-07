@@ -14135,6 +14135,257 @@ html[data-theme="light"] .access-type-bulk-password-card {
   }
 }
 
+/* v186 - painel compacto de importacao de usuarios. */
+.import-form.user-import-form.user-import-form-v186,
+html[data-theme="light"] .import-form.user-import-form.user-import-form-v186,
+html[data-theme="dark"] .import-form.user-import-form.user-import-form-v186 {
+  display: grid !important;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) !important;
+  grid-template-areas:
+    "file options"
+    "footer footer" !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+  padding: 18px !important;
+  margin: 18px 0 22px !important;
+  border-radius: 22px !important;
+  overflow: hidden !important;
+}
+
+.user-import-form-v186 .user-import-file-panel {
+  grid-area: file !important;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto !important;
+  align-content: stretch !important;
+  min-width: 0 !important;
+  gap: 0 !important;
+}
+
+.import-form.user-import-form-v186 .user-import-file-label {
+  display: grid !important;
+  align-content: start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  margin: 0 !important;
+  color: var(--text-strong) !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  line-height: 1.2 !important;
+}
+
+.import-form.user-import-form-v186 .file-picker-shell {
+  min-height: 110px !important;
+  height: 100% !important;
+  padding: 14px !important;
+  align-content: center !important;
+}
+
+.import-form.user-import-form-v186 .file-picker-name {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.user-import-form-v186 .user-import-options-panel {
+  grid-area: options !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px) !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+
+.import-form.user-import-form-v186 .user-import-mode-fieldset {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+.import-form.user-import-form-v186 .user-import-mode-fieldset legend {
+  grid-column: 1 / -1 !important;
+  margin: 0 !important;
+  padding: 0 0 5px !important;
+  color: var(--text-strong) !important;
+  font-size: 14px !important;
+  font-weight: 950 !important;
+  line-height: 1.1 !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option,
+.import-form.user-import-form-v186 label.import-mode-option:is(:hover, :focus, :focus-within, :active),
+.import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)),
+.import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)),
+html[data-theme="dark"] body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) {
+  min-height: 86px !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 14px !important;
+  border-radius: 16px !important;
+  align-items: flex-start !important;
+  border-color: rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  background-color: transparent !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  transform: none !important;
+}
+
+html[data-theme="light"] body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)),
+html[data-theme="light"] body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)):is(:hover, :focus, :focus-within, :active) {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.045), inset 0 1px 0 rgba(255,255,255,.75) !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option:has(input:checked),
+.import-form.user-import-form-v186 label.import-mode-option:has(input:checked):is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] body .import-form.user-import-form-v186 label.import-mode-option:has(input:checked),
+html[data-theme="dark"] body .import-form.user-import-form-v186 label.import-mode-option:has(input:checked) {
+  min-height: 86px !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 14px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, var(--red), var(--red-3)) !important;
+  background-color: var(--red) !important;
+  border-color: rgba(230,0,18,.55) !important;
+  box-shadow: 0 14px 26px rgba(230,0,18,.18) !important;
+  transform: none !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option span {
+  display: grid !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option strong {
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option small {
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+}
+
+html[data-theme="dark"] body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) :where(strong, small, span),
+body .import-form.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) :where(strong, small, span) {
+  color: var(--text-strong) !important;
+  -webkit-text-fill-color: var(--text-strong) !important;
+}
+
+.import-form.user-import-form-v186 label.import-mode-option:has(input:checked) :where(strong, small, span) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.import-form.user-import-form-v186 .user-import-password-option,
+.import-form.user-import-form-v186 .user-import-password-option:is(:hover, :focus, :focus-within, :active),
+html[data-theme="light"] .import-form.user-import-form-v186 .user-import-password-option,
+html[data-theme="dark"] .import-form.user-import-form-v186 .user-import-password-option {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 116px !important;
+  margin: 0 !important;
+  padding: 15px !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+  cursor: pointer !important;
+}
+
+html[data-theme="light"] .import-form.user-import-form-v186 .user-import-password-option {
+  border-color: rgba(17,24,39,.10) !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.045), inset 0 1px 0 rgba(255,255,255,.75) !important;
+}
+
+.import-form.user-import-form-v186 .user-import-password-option strong {
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+}
+
+.import-form.user-import-form-v186 .user-import-password-option small {
+  font-size: 11.5px !important;
+  line-height: 1.35 !important;
+}
+
+.user-import-form-v186 .user-import-footer {
+  grid-area: footer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  min-width: 0 !important;
+  padding-top: 2px !important;
+}
+
+.import-form.user-import-form-v186 .user-import-note,
+html[data-theme="light"] .import-form.user-import-form-v186 .user-import-note {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted-2) !important;
+  -webkit-text-fill-color: var(--muted-2) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.35 !important;
+}
+
+.import-form.user-import-form-v186 .user-import-submit {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 220px !important;
+  min-height: 50px !important;
+  margin: 0 !important;
+  border-radius: 15px !important;
+}
+
+@media (max-width: 1280px) {
+  .import-form.user-import-form.user-import-form-v186 {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "file"
+      "options"
+      "footer" !important;
+  }
+
+  .user-import-form-v186 .user-import-options-panel {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 740px) {
+  .import-form.user-import-form-v186 .user-import-mode-fieldset {
+    grid-template-columns: 1fr !important;
+  }
+
+  .user-import-form-v186 .user-import-footer {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .import-form.user-import-form-v186 .user-import-submit {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
 /* v185 - layout limpo da importacao em massa de usuarios. */
 .import-form.user-import-form.user-import-form-v185 {
   display: grid !important;
@@ -14348,5 +14599,146 @@ html[data-theme="light"] .import-form.user-import-form.user-import-form-v185 .us
 
   .import-form.user-import-form.user-import-form-v185 .user-import-submit {
     min-height: 52px !important;
+  }
+}
+
+/* v186 final - vence as regras antigas da v185 neste bloco especifico. */
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 {
+  display: grid !important;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) !important;
+  grid-template-areas:
+    "file options"
+    "footer footer" !important;
+  gap: 16px !important;
+  padding: 18px !important;
+  margin: 18px 0 22px !important;
+  border-radius: 22px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-file-panel {
+  grid-area: file !important;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto !important;
+  gap: 0 !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .file-picker-shell {
+  min-height: 110px !important;
+  height: 100% !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-options-panel {
+  grid-area: options !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-mode-fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option,
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option:has(input:checked),
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) {
+  min-height: 86px !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 14px !important;
+  border-radius: 16px !important;
+  transform: none !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option:not(:has(input:checked)),
+html[data-theme="dark"] body .import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) {
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025)) !important;
+  border-color: rgba(255,255,255,.10) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+html[data-theme="light"] body .import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option:not(:has(input:checked)) {
+  background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(248,248,248,.94)) !important;
+  border-color: rgba(17,24,39,.10) !important;
+  box-shadow: 0 10px 22px rgba(17,24,39,.045), inset 0 1px 0 rgba(255,255,255,.75) !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option strong {
+  font-size: 14px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 label.import-mode-option small {
+  font-size: 11.5px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-password-option {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 116px !important;
+  margin: 0 !important;
+  padding: 15px !important;
+  border-radius: 16px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-password-option small {
+  font-size: 11.5px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-footer {
+  grid-area: footer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-note {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  font-size: 12px !important;
+}
+
+.import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-submit {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 220px !important;
+  min-height: 50px !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 1280px) {
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "file"
+      "options"
+      "footer" !important;
+  }
+
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-options-panel {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 740px) {
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-mode-fieldset,
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-file-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-footer {
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .import-form.user-import-form.user-import-form-v185.user-import-form-v186 .user-import-submit {
+    width: 100% !important;
+    min-width: 0 !important;
   }
 }
