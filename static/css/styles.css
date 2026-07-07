@@ -15673,3 +15673,62 @@ html[data-theme="light"] .access-user-edit-scope-grid .user-edit-scope-card {
     grid-template-columns: 1fr;
   }
 }
+
+/* v190 - mantem o blur atras dos modais e preserva nitidez das janelas. */
+.permission-modal,
+.role-password-modal,
+.export-language-modal,
+.asset-modal,
+.category-edit-modal,
+.product-image-modal {
+  isolation: isolate !important;
+}
+
+body .role-password-modal {
+  z-index: 2147483200 !important;
+}
+
+body .permission-modal,
+body .export-language-modal,
+body .asset-modal,
+body .category-edit-modal,
+body .product-image-modal {
+  z-index: 2147483000 !important;
+}
+
+.permission-backdrop,
+.role-password-backdrop,
+.export-language-backdrop,
+.asset-modal-backdrop,
+.category-edit-backdrop,
+.product-image-modal-backdrop {
+  z-index: 0 !important;
+  pointer-events: auto !important;
+}
+
+.permission-card,
+.role-password-card,
+.export-language-card,
+.asset-modal-card,
+.category-edit-card,
+.product-image-modal-dialog {
+  position: relative !important;
+  z-index: 2 !important;
+  filter: none !important;
+  pointer-events: auto !important;
+}
+
+body.role-password-modal-open .role-password-modal,
+body.role-password-modal-open .role-password-modal *,
+body.permission-modal-open .permission-modal,
+body.permission-modal-open .permission-modal *,
+body.export-modal-open .export-language-modal,
+body.export-modal-open .export-language-modal *,
+body.asset-modal-open .asset-modal,
+body.asset-modal-open .asset-modal *,
+body.category-edit-modal-open .category-edit-modal,
+body.category-edit-modal-open .category-edit-modal *,
+body.product-image-modal-open .product-image-modal,
+body.product-image-modal-open .product-image-modal * {
+  filter: none !important;
+}

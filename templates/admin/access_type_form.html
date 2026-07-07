@@ -201,6 +201,9 @@
   const cancelButtons = document.querySelectorAll('[data-cancel-role-password]');
   const form = modal ? modal.querySelector('form') : null;
   if (!modal || !openButton || !form) return;
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
   function openModal() {
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
