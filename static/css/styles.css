@@ -15732,3 +15732,85 @@ body.product-image-modal-open .product-image-modal,
 body.product-image-modal-open .product-image-modal * {
   filter: none !important;
 }
+
+/* v192 - dashboards se reorganizam quando permissoes escondem blocos. */
+.dashboard-stats {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: stretch;
+}
+
+.dashboard-stats .stat-card {
+  min-height: 126px;
+}
+
+.dashboard-stats.stats-count-1 {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-stats.stats-count-2 {
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+}
+
+.dashboard-stats.stats-count-3 {
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+}
+
+.dashboard-panels {
+  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  width: 100%;
+}
+
+.dashboard-panels.panel-count-1 {
+  grid-template-columns: 1fr;
+}
+
+.dashboard-panel {
+  min-width: 0;
+}
+
+.dashboard-panel table {
+  width: 100%;
+}
+
+.dashboard-panels.panel-count-1 .dashboard-panel {
+  grid-column: 1 / -1;
+}
+
+.dashboard-panels.panel-count-1 .dashboard-stock-panel table {
+  table-layout: fixed;
+}
+
+.dashboard-panels.panel-count-1 .dashboard-stock-panel th:first-child,
+.dashboard-panels.panel-count-1 .dashboard-stock-panel td:first-child {
+  width: auto;
+}
+
+.dashboard-panels.panel-count-1 .dashboard-stock-panel th:last-child,
+.dashboard-panels.panel-count-1 .dashboard-stock-panel td:last-child {
+  width: 160px;
+  text-align: right;
+}
+
+.dashboard-empty-state {
+  display: grid;
+  gap: 8px;
+  padding: 28px;
+}
+
+.dashboard-empty-state h2,
+.dashboard-empty-state p {
+  margin: 0;
+}
+
+.dashboard-empty-state p {
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .dashboard-stats,
+  .dashboard-stats.stats-count-2,
+  .dashboard-stats.stats-count-3,
+  .dashboard-panels {
+    grid-template-columns: 1fr;
+  }
+}

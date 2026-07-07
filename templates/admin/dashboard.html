@@ -3,36 +3,48 @@
 {% block page_title %}Painel administrativo{% endblock %}
 {% block page_subtitle %}Controle geral de cadastros, solicitações, produtos e estoque.{% endblock %}
 {% block content %}
-<section class="stats-grid">
-  {% if can_access('admin_users') %}
+{% set show_user_stats = can_access('admin_users') %}
+{% set show_request_stats = can_access('admin_requests') %}
+{% set show_product_stats = can_access('admin_products') %}
+{% set show_stock_stats = can_access('admin_stock') %}
+{% set stats_count = (1 if show_user_stats else 0) + (1 if show_request_stats else 0) + (1 if show_product_stats else 0) + (1 if show_stock_stats else 0) %}
+{% set show_requests_panel = can_access_any(['admin_requests','admin_requests_attended']) %}
+{% set show_stock_panel = can_access('admin_products') or can_access('admin_stock') %}
+{% set panel_count = (1 if show_requests_panel else 0) + (1 if show_stock_panel else 0) %}
+
+{% if stats_count %}
+<section class="stats-grid dashboard-stats stats-count-{{ stats_count }}">
+  {% if show_user_stats %}
   <a class="stat-card card" href="{{ url_for('admin_users', status='pending') }}">
     <span>Cadastros pendentes</span>
     <strong>{{ counts.users_pending }}</strong>
   </a>
   {% endif %}
-  {% if can_access('admin_requests') %}
+  {% if show_request_stats %}
   <a class="stat-card card" href="{{ url_for('admin_requests', status='pending') }}">
     <span>Solicitações pendentes</span>
     <strong>{{ counts.requests_pending }}</strong>
   </a>
   {% endif %}
-  {% if can_access('admin_products') %}
+  {% if show_product_stats %}
   <a class="stat-card card" href="{{ url_for('admin_products') }}">
     <span>Produtos cadastrados</span>
     <strong>{{ counts.products }}</strong>
   </a>
   {% endif %}
-  {% if can_access('admin_stock') %}
+  {% if show_stock_stats %}
   <a class="stat-card card" href="{{ url_for('admin_stock') }}">
     <span>Estoque total</span>
     <strong>{{ counts.stock_total }}</strong>
   </a>
   {% endif %}
 </section>
+{% endif %}
 
-<section class="admin-split">
-  {% if can_access_any(['admin_requests','admin_requests_attended']) %}
-  <div class="card table-card">
+{% if panel_count %}
+<section class="admin-split dashboard-panels panel-count-{{ panel_count }}">
+  {% if show_requests_panel %}
+  <div class="card table-card dashboard-panel dashboard-requests-panel">
     <div class="section-head">
       <h2>Últimas solicitações</h2>
       {% if can_access('admin_requests') %}
@@ -59,8 +71,8 @@
   </div>
   {% endif %}
 
-  {% if can_access('admin_products') or can_access('admin_stock') %}
-  <div class="card table-card">
+  {% if show_stock_panel %}
+  <div class="card table-card dashboard-panel dashboard-stock-panel">
     <div class="section-head">
       <h2>Estoque baixo</h2>
       {% if can_access('admin_products') %}
@@ -85,4 +97,11 @@
   </div>
   {% endif %}
 </section>
+{% else %}
+<section class="card dashboard-empty-state">
+  <span class="eyebrow">Sem módulos administrativos</span>
+  <h2>Nenhum painel liberado para este acesso</h2>
+  <p>As páginas administrativas aparecem aqui conforme as permissões do tipo de acesso.</p>
+</section>
+{% endif %}
 {% endblock %}
