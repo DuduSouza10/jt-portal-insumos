@@ -15,7 +15,7 @@
       {% if current_is_dev() %}<a class="btn ghost" href="{{ url_for('admin_access_types') }}">Criar tipo de acesso</a>{% endif %}
       {% if can_do('users_import_export') %}<a class="btn ghost" href="{{ url_for('admin_users_template') }}">Baixar modelo XLSX</a>{% endif %}
       {% if can_do('users_import_export') %}<a class="btn ghost" id="userExportCurrentButton" href="{{ url_for('admin_users_export') }}">Exportar tabela atual</a>{% endif %}
-      {% if can_do('users_create_edit') %}<a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>{% endif %}
+      {% if can_do('users_create_edit') and current_can_create_users() %}<a class="btn primary" href="{{ url_for('admin_user_new') }}">Adicionar usuário</a>{% endif %}
     </div>
   </div>
 
@@ -141,6 +141,7 @@
     </thead>
     <tbody id="userTableBody">
       {% for user in users %}
+      {% set row_can_edit = current_can_edit_user(user) %}
       <tr
         data-user-row
         data-user-id="{{ user.id }}"
@@ -167,7 +168,7 @@
         <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
         <td class="actions-cell" data-label="Ações">
           {% if user.status == 'pending' and not user.is_admin %}
-            {% if can_manage_user_status %}
+            {% if can_manage_user_status and row_can_edit %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
@@ -179,26 +180,26 @@
               </button>
             </form>
             {% endif %}
-            {% if can_edit_users %}
+            {% if can_edit_users and row_can_edit %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
             {% endif %}
-            {% if can_manage_user_status %}
+            {% if can_manage_user_status and row_can_edit %}
             <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
               <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
                 <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
               </button>
             </form>
             {% endif %}
-            {% if not can_manage_user_status and not can_edit_users %}<span class="muted">Sem ações</span>{% endif %}
+            {% if not (can_manage_user_status and row_can_edit) and not (can_edit_users and row_can_edit) %}<span class="muted">Sem ações</span>{% endif %}
           {% elif user.status == 'rejected' and not user.is_admin %}
-            {% if can_edit_users %}
+            {% if can_edit_users and row_can_edit %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
             {% endif %}
-            {% if can_manage_user_status %}
+            {% if can_manage_user_status and row_can_edit %}
             <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
               <input type="hidden" name="action" value="approved">
               <button class="btn tiny success" type="submit">Aprovar</button>
@@ -209,21 +210,21 @@
               </button>
             </form>
             {% endif %}
-            {% if not can_manage_user_status and not can_edit_users %}<span class="muted">Sem ações</span>{% endif %}
+            {% if not (can_manage_user_status and row_can_edit) and not (can_edit_users and row_can_edit) %}<span class="muted">Sem ações</span>{% endif %}
           {% else %}
-            {% if can_edit_users %}
+            {% if can_edit_users and row_can_edit %}
             <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
               <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
             </a>
             {% endif %}
-            {% if can_manage_user_status and current_user and user.id != current_user.id %}
+            {% if can_manage_user_status and row_can_edit and current_user and user.id != current_user.id %}
               <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
                 <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
                 <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
               </button>
               </form>
             {% endif %}
-            {% if not can_edit_users and not (can_manage_user_status and current_user and user.id != current_user.id) %}<span class="muted">Sem ações</span>{% endif %}
+            {% if not (can_edit_users and row_can_edit) and not (can_manage_user_status and row_can_edit and current_user and user.id != current_user.id) %}<span class="muted">Sem ações</span>{% endif %}
           {% endif %}
         </td>
       </tr>

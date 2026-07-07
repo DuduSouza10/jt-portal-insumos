@@ -143,6 +143,8 @@ CREATE TABLE IF NOT EXISTS access_role_types (
     description TEXT NOT NULL DEFAULT '',
     permissions_json TEXT NOT NULL DEFAULT '[]',
     action_permissions_json TEXT NOT NULL DEFAULT '[]',
+    editable_roles_json TEXT NOT NULL DEFAULT '[]',
+    editable_user_fields_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT
 );

@@ -521,6 +521,8 @@ class AccessRoleType:
     description: str = ""
     permissions: list[str] = field(default_factory=list)
     action_permissions: list[str] = field(default_factory=list)
+    editable_roles: list[str] = field(default_factory=list)
+    editable_user_fields: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     is_static: bool = False
@@ -1529,6 +1531,8 @@ def init_db() -> None:
                 description TEXT NOT NULL DEFAULT '',
                 permissions_json TEXT NOT NULL DEFAULT '[]',
                 action_permissions_json TEXT NOT NULL DEFAULT '[]',
+                editable_roles_json TEXT NOT NULL DEFAULT '[]',
+                editable_user_fields_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -1557,6 +1561,18 @@ def init_db() -> None:
         access_role_columns = {row["name"] for row in conn.execute("PRAGMA table_info(access_role_types)").fetchall()}
         if "action_permissions_json" not in access_role_columns:
             conn.execute("ALTER TABLE access_role_types ADD COLUMN action_permissions_json TEXT NOT NULL DEFAULT '[]'")
+        if "editable_roles_json" not in access_role_columns:
+            conn.execute("ALTER TABLE access_role_types ADD COLUMN editable_roles_json TEXT NOT NULL DEFAULT '[]'")
+            conn.execute(
+                "UPDATE access_role_types SET editable_roles_json = ? WHERE role_key = 'admin' AND editable_roles_json = '[]'",
+                (json.dumps(["base", "franchise", "admin"], ensure_ascii=False),),
+            )
+        if "editable_user_fields_json" not in access_role_columns:
+            conn.execute("ALTER TABLE access_role_types ADD COLUMN editable_user_fields_json TEXT NOT NULL DEFAULT '[]'")
+            conn.execute(
+                "UPDATE access_role_types SET editable_user_fields_json = ? WHERE role_key = 'admin' AND editable_user_fields_json = '[]'",
+                (json.dumps(["responsible_name", "username", "password", "role", "status", "organization_name", "franchise_name", "franchise_number", "cnpj", "page_permissions"], ensure_ascii=False),),
+            )
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         user_migrations = [
@@ -1968,7 +1984,11 @@ def redirect_to_return(default_endpoint: str, **fallback_values: Any) -> Any:
     return redirect(return_target(default_endpoint, **fallback_values))
 
 def can_change_admin_role(current: User | None, target: User | None = None) -> bool:
-    return can_manage_dev_roles(current)
+    if can_manage_dev_roles(current):
+        return True
+    if target is None:
+        return False
+    return target.role != "dev" and target.role in get_user_editable_roles(current)
 
 def can_assign_dev_role(current: User | None, supplied_password: Any, conn: Any | None = None) -> bool:
     if can_manage_dev_roles(current):
@@ -1978,10 +1998,11 @@ def can_assign_dev_role(current: User | None, supplied_password: Any, conn: Any 
     return bool(current and current.is_admin and current.is_approved and not dev_user_exists(conn))
 
 def allowed_role_options_for_editor(current: User | None, target: User | None = None) -> list[str]:
-    options = ["base", "franchise", "admin"]
     if can_manage_dev_roles(current):
-        options.extend([role.role_key for role in list_custom_access_roles()])
-    if can_manage_dev_roles(current) or not dev_user_exists():
+        options = all_role_options()
+    else:
+        options = [role for role in all_role_options() if role in get_user_editable_roles(current) and role != "dev"]
+    if (can_manage_dev_roles(current) or not dev_user_exists()) and "dev" not in options:
         options.append("dev")
     # Mantém o tipo atual visível mesmo que o editor não possa escolher outros personalizados.
     if target is not None and target.role not in options:
@@ -2006,7 +2027,10 @@ def safe_role_for_update(current: User, target: User | None, requested_role: str
     if requested == "dev" and not can_assign_dev_role(current, supplied_dev_password, conn):
         fallback = target.role if target is not None else "admin"
         return fallback, "Para aplicar o acesso Dev, informe a senha Dev correta. Apenas Dev pode promover outros usuários quando já existir Dev aprovado."
-    if requested not in STATIC_ROLE_KEYS and not can_manage_dev_roles(current):
+    if not can_manage_dev_roles(current) and requested not in get_user_editable_roles(current):
+        fallback = target.role if target is not None else "base"
+        return fallback, "Seu tipo de acesso nao pode aplicar esse cargo."
+    if requested not in STATIC_ROLE_KEYS and not can_manage_dev_roles(current) and requested not in get_user_editable_roles(current):
         fallback = target.role if target is not None else "base"
         return fallback, "Somente usuários Dev podem aplicar tipos de acesso personalizados."
     return requested, None
@@ -2096,6 +2120,11 @@ def inject_globals():
         "current_can_edit_dev_password": current_can_edit_dev_password,
         "current_allowed_role_options": current_allowed_role_options,
         "current_can_edit_admin_role": current_can_edit_admin_role,
+        "current_can_edit_user": lambda target: can_edit_user_target(user, target),
+        "current_can_create_users": current_can_create_users,
+        "current_can_edit_user_field": lambda target, field_key, is_new=False: can_edit_user_field(user, target, field_key, bool(is_new)),
+        "current_editable_user_roles": lambda: sorted(get_user_editable_roles(user)),
+        "current_editable_user_fields": lambda: sorted(get_user_editable_fields(user)),
         "current_can_manage_stock_tags": can_manage_stock_tags,
     }
 
@@ -2191,8 +2220,26 @@ ACTION_PERMISSION_OPTIONS = [
 ]
 
 
+USER_EDIT_FIELD_OPTIONS = [
+    {"key": "responsible_name", "label": "Nome do responsavel", "description": "Permite alterar quem usa o acesso."},
+    {"key": "username", "label": "Nome de usuario", "description": "Permite alterar o login."},
+    {"key": "password", "label": "Senha individual", "description": "Permite definir ou trocar a senha do usuario."},
+    {"key": "role", "label": "Tipo de acesso", "description": "Permite trocar o cargo do usuario entre os cargos autorizados."},
+    {"key": "status", "label": "Status do cadastro", "description": "Permite aprovar, recusar ou deixar pendente pela tela de edicao."},
+    {"key": "organization_name", "label": "Base ou setor", "description": "Permite alterar base, setor ou unidade vinculada."},
+    {"key": "franchise_name", "label": "Nome da franquia", "description": "Permite alterar a franquia exibida no portal."},
+    {"key": "franchise_number", "label": "Telefone da franquia", "description": "Permite alterar o telefone da franquia."},
+    {"key": "cnpj", "label": "CNPJ", "description": "Permite alterar o CNPJ da franquia."},
+    {"key": "page_permissions", "label": "Paginas liberadas", "description": "Permite ajustar as paginas individuais do usuario."},
+]
+
+
 def action_permission_key_set() -> set[str]:
     return {item["key"] for item in ACTION_PERMISSION_OPTIONS}
+
+
+def user_edit_field_key_set() -> set[str]:
+    return {item["key"] for item in USER_EDIT_FIELD_OPTIONS}
 
 
 def action_permissions_for_pages(page_keys: list[str] | set[str]) -> list[dict[str, Any]]:
@@ -2234,6 +2281,22 @@ def default_static_action_permissions(role: str) -> list[str]:
     return []
 
 
+def default_static_user_edit_roles(role: str) -> list[str]:
+    key = str(role or "").strip().lower()
+    if key == "dev":
+        return all_role_options()
+    if key == "admin":
+        return [role_key for role_key in all_role_options() if role_key != "dev"]
+    return []
+
+
+def default_static_user_edit_fields(role: str) -> list[str]:
+    key = str(role or "").strip().lower()
+    if key in {"admin", "dev"}:
+        return [item["key"] for item in USER_EDIT_FIELD_OPTIONS]
+    return []
+
+
 def default_static_access_role(role: str) -> AccessRoleType | None:
     key = str(role or "").strip().lower()
     if key not in STATIC_ROLE_KEYS:
@@ -2244,6 +2307,8 @@ def default_static_access_role(role: str) -> AccessRoleType | None:
         description=STATIC_ROLE_DESCRIPTIONS.get(key, "Tipo padrÃ£o do sistema."),
         permissions=default_static_page_permissions(key),
         action_permissions=default_static_action_permissions(key),
+        editable_roles=default_static_user_edit_roles(key),
+        editable_user_fields=default_static_user_edit_fields(key),
         is_static=True,
     )
 
@@ -2317,6 +2382,41 @@ def parse_action_permissions(value: Any, allowed_page_keys: list[str] | set[str]
     return seen
 
 
+def parse_user_edit_roles(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        try:
+            decoded = json.loads(str(value or "[]"))
+            raw_items = decoded if isinstance(decoded, list) else []
+        except Exception:
+            raw_items = []
+    seen: list[str] = []
+    for item in raw_items:
+        key = str(item or "").strip().lower()
+        if key and re.fullmatch(r"[a-z0-9_]+", key) and key not in seen:
+            seen.append(key[:80])
+    return seen
+
+
+def parse_user_edit_fields(value: Any) -> list[str]:
+    valid = user_edit_field_key_set()
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        try:
+            decoded = json.loads(str(value or "[]"))
+            raw_items = decoded if isinstance(decoded, list) else []
+        except Exception:
+            raw_items = []
+    seen: list[str] = []
+    for item in raw_items:
+        key = str(item or "").strip()
+        if key in valid and key not in seen:
+            seen.append(key)
+    return seen
+
+
 def row_to_access_role(row: Any | None) -> AccessRoleType | None:
     if row is None:
         return None
@@ -2327,6 +2427,8 @@ def row_to_access_role(row: Any | None) -> AccessRoleType | None:
         description=str(row["description"] or ""),
         permissions=parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]"),
         action_permissions=parse_action_permissions(row["action_permissions_json"] if "action_permissions_json" in row.keys() else "[]", parse_role_permissions(row["permissions_json"] if "permissions_json" in row.keys() else "[]")),
+        editable_roles=parse_user_edit_roles(row["editable_roles_json"] if "editable_roles_json" in row.keys() else "[]"),
+        editable_user_fields=parse_user_edit_fields(row["editable_user_fields_json"] if "editable_user_fields_json" in row.keys() else "[]"),
         created_at=parse_dt(row["created_at"]) if "created_at" in row.keys() else None,
         updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
         is_static=role_key in STATIC_ROLE_KEYS,
@@ -2341,7 +2443,7 @@ def get_access_role_override(role_key: str | None) -> AccessRoleType | None:
     try:
         with db_connect() as conn:
             row = conn.execute(
-                "SELECT role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at FROM access_role_types WHERE role_key = ?",
+                "SELECT role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at FROM access_role_types WHERE role_key = ?",
                 (key,),
             ).fetchone()
         return row_to_access_role(row)
@@ -2376,7 +2478,7 @@ def list_custom_access_roles() -> list[AccessRoleType]:
     try:
         with db_connect() as conn:
             rows = conn.execute(
-                "SELECT role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at FROM access_role_types ORDER BY name COLLATE NOCASE ASC"
+                "SELECT role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at FROM access_role_types ORDER BY name COLLATE NOCASE ASC"
             ).fetchall()
         return [role for row in rows if (role := row_to_access_role(row)) is not None and not role.is_static]
     except Exception:
@@ -2468,6 +2570,72 @@ def get_user_action_permissions(user: User | None) -> set[str]:
 
 def user_has_action_access(user: User | None, action_key: str) -> bool:
     return str(action_key or "").strip() in get_user_action_permissions(user)
+
+
+def get_user_editable_roles(user: User | None) -> set[str]:
+    if user is None:
+        return set()
+    if user.role == "dev":
+        return set(all_role_options())
+    role_definition = get_access_role_definition(user.role)
+    roles = set(role_definition.editable_roles if role_definition is not None else [])
+    roles.discard("dev")
+    return {role for role in roles if role in set(all_role_options())}
+
+
+def get_user_editable_fields(user: User | None) -> set[str]:
+    if user is None:
+        return set()
+    if user.role == "dev":
+        return user_edit_field_key_set()
+    role_definition = get_access_role_definition(user.role)
+    fields = set(role_definition.editable_user_fields if role_definition is not None else [])
+    return fields & user_edit_field_key_set()
+
+
+def can_edit_user_target(current: User | None, target: User | None) -> bool:
+    if current is None or target is None:
+        return False
+    if current.is_dev and current.is_approved:
+        return True
+    if not user_has_action_access(current, "users_create_edit"):
+        return False
+    if target.role == "dev":
+        return False
+    return target.role in get_user_editable_roles(current)
+
+
+def can_create_user_role(current: User | None, role: str | None) -> bool:
+    role_key = str(role or "").strip().lower()
+    if current is None:
+        return False
+    if current.is_dev and current.is_approved:
+        return True
+    if not user_has_action_access(current, "users_create_edit"):
+        return False
+    if role_key == "dev":
+        return bool(current.is_admin and not dev_user_exists())
+    return role_key in get_user_editable_roles(current)
+
+
+def can_edit_user_field(current: User | None, target: User | None, field_key: str, is_new: bool = False) -> bool:
+    key = str(field_key or "").strip()
+    if key not in user_edit_field_key_set():
+        return False
+    if current is None:
+        return False
+    if current.is_dev and current.is_approved:
+        return True
+    if not user_has_action_access(current, "users_create_edit"):
+        return False
+    if not is_new and target is not None and not can_edit_user_target(current, target):
+        return False
+    return key in get_user_editable_fields(current)
+
+
+def current_can_create_users() -> bool:
+    user = current_user()
+    return user_has_action_access(user, "users_create_edit") and bool(get_user_editable_roles(user) or (user and user.is_dev))
 
 
 def require_action_permission(action_key: str, message: str | None = None, redirect_endpoint: str = "admin_products"):
@@ -6554,6 +6722,13 @@ def admin_user_new():
         password = request.form.get("password", "")
         current = require_current_user()
         requested_role = normalize_user_role(request.form.get("role", "base"), allow_admin=True) or "base"
+        if not can_create_user_role(current, requested_role):
+            flash("Seu tipo de acesso nao pode criar usuarios com esse cargo.", "warning")
+            return redirect_to_return("admin_users")
+        required_create_fields = {"responsible_name", "username", "password", "role", "status"}
+        if not current.is_dev and not required_create_fields.issubset(get_user_editable_fields(current)):
+            flash("Seu tipo de acesso nao tem todos os campos necessarios para criar usuarios.", "warning")
+            return redirect_to_return("admin_users")
         role_warning = None
         with db_connect() as role_conn:
             role, role_warning = safe_role_for_update(current, None, requested_role, request.form.get("dev_password", ""), role_conn)
@@ -6644,6 +6819,9 @@ def admin_user_edit(user_id: int):
         abort(404)
 
     current = require_current_user()
+    if not can_edit_user_target(current, target):
+        flash("Seu tipo de acesso nao pode editar esse usuario.", "warning")
+        return redirect_to_return("admin_users")
 
     if request.method == "POST":
         responsible_name = request.form.get("responsible_name", "").strip()
@@ -6664,6 +6842,21 @@ def admin_user_edit(user_id: int):
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         password = request.form.get("password", "")
         selected_pages = request.form.getlist("page_permissions")
+        editable_fields = get_user_editable_fields(current) if not current.is_dev else user_edit_field_key_set()
+
+        if "responsible_name" not in editable_fields:
+            responsible_name = target.responsible_name
+        if "username" not in editable_fields:
+            username = target.username
+            email = target.email or synthetic_email_for_username(username)
+        if "password" not in editable_fields:
+            password = ""
+        if "role" not in editable_fields:
+            role = target.role
+        if "status" not in editable_fields:
+            status = target.status
+        if "page_permissions" not in editable_fields:
+            selected_pages = list(get_user_page_permissions(target))
 
         # Segurança: o usuário logado não pode remover o próprio acesso administrativo
         # nem bloquear a própria conta sem querer. Se ele estiver criando o primeiro Dev
@@ -6674,13 +6867,26 @@ def admin_user_edit(user_id: int):
             status = "approved"
             selected_pages = list(default_page_keys_for_role(role))
 
+        organization_value = request.form.get("organization_name", "")
+        franchise_name_value = request.form.get("franchise_name", "")
+        franchise_number_value = request.form.get("franchise_number", "")
+        cnpj_value = request.form.get("cnpj", "")
+        if "organization_name" not in editable_fields:
+            organization_value = target.organization_name
+        if "franchise_name" not in editable_fields:
+            franchise_name_value = target.franchise_name
+        if "franchise_number" not in editable_fields:
+            franchise_number_value = target.franchise_number
+        if "cnpj" not in editable_fields:
+            cnpj_value = target.cnpj
+
         try:
             organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
                 role,
-                organization_name=request.form.get("organization_name", ""),
-                franchise_name=request.form.get("franchise_name", ""),
-                franchise_number=request.form.get("franchise_number", ""),
-                cnpj=request.form.get("cnpj", ""),
+                organization_name=organization_value,
+                franchise_name=franchise_name_value,
+                franchise_number=franchise_number_value,
+                cnpj=cnpj_value,
                 strict_base=not current.is_dev,
             )
         except ValueError as exc:
@@ -6773,7 +6979,10 @@ def admin_user_status(user_id: int):
         abort(404)
     action = request.form.get("action")
     current = require_current_user()
-    if target.is_admin and target.id != current.id and not current.is_dev:
+    if not can_edit_user_target(current, target):
+        flash("Seu tipo de acesso nao pode alterar esse usuario.", "warning")
+        return redirect_to_return("admin_users")
+    if target.role == "dev" and target.id != current.id and not current.is_dev:
         flash("Somente usuário Dev pode alterar status de administradores.", "warning")
         return redirect_to_return("admin_users")
     if target.is_admin and target.id == current.id and action != "approved":
@@ -6799,10 +7008,13 @@ def admin_user_delete(user_id: int):
     if target is None:
         abort(404)
     current = require_current_user()
+    if not can_edit_user_target(current, target):
+        flash("Seu tipo de acesso nao pode excluir esse usuario.", "warning")
+        return redirect_to_return("admin_users")
     if target.is_admin and target.id == current.id:
         flash("Você não pode excluir seu próprio usuário admin.", "warning")
         return redirect_to_return("admin_users")
-    if target.is_admin and not current.is_dev:
+    if target.role == "dev" and not current.is_dev:
         flash("Somente usuário Dev pode excluir administradores.", "warning")
         return redirect_to_return("admin_users")
 
@@ -6840,6 +7052,18 @@ def normalize_access_role_action_permissions_from_form(form: Any, page_permissio
     return list(dict.fromkeys([key for key in selected if key in valid]))
 
 
+def normalize_access_role_editable_roles_from_form(form: Any) -> list[str]:
+    selected = [str(key or "").strip().lower() for key in form.getlist("editable_roles")]
+    valid = set(all_role_options())
+    return list(dict.fromkeys([key for key in selected if key in valid and key != "dev"]))
+
+
+def normalize_access_role_editable_fields_from_form(form: Any) -> list[str]:
+    selected = [str(key or "").strip() for key in form.getlist("editable_user_fields")]
+    valid = user_edit_field_key_set()
+    return list(dict.fromkeys([key for key in selected if key in valid]))
+
+
 def grouped_action_permissions(page_permissions: list[str] | set[str] | None = None) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
     for page in PAGE_PERMISSION_OPTIONS:
@@ -6856,6 +7080,8 @@ def action_permission_label_map() -> dict[str, str]:
 def access_role_listing() -> list[dict[str, Any]]:
     page_labels = {item["key"]: item["label"] for item in PAGE_PERMISSION_OPTIONS}
     action_labels = action_permission_label_map()
+    role_labels = role_option_labels()
+    field_labels = {item["key"]: item["label"] for item in USER_EDIT_FIELD_OPTIONS}
     default_descriptions = {
         "base": "Tipo padrão para bases. Permissões administrativas não liberadas.",
         "franchise": "Tipo padrão para franquias. Permissões administrativas não liberadas.",
@@ -6876,6 +7102,10 @@ def access_role_listing() -> list[dict[str, Any]]:
             "description": default_descriptions.get(key, "Tipo padrão do sistema."),
             "permissions": permissions,
             "action_permissions": actions,
+            "editable_roles": role_definition.editable_roles,
+            "editable_role_labels": [role_labels.get(item, display_access_role_key(item)) for item in role_definition.editable_roles if item != "dev"],
+            "editable_user_fields": role_definition.editable_user_fields,
+            "editable_field_labels": [field_labels.get(item, item) for item in role_definition.editable_user_fields],
             "is_custom": False,
             "can_edit": key != "dev",
             "can_delete": False,
@@ -6888,6 +7118,10 @@ def access_role_listing() -> list[dict[str, Any]]:
             "description": role.description or "-",
             "permissions": role.permissions,
             "action_permissions": role.action_permissions,
+            "editable_roles": role.editable_roles,
+            "editable_role_labels": [role_labels.get(item, display_access_role_key(item)) for item in role.editable_roles if item != "dev"],
+            "editable_user_fields": role.editable_user_fields,
+            "editable_field_labels": [field_labels.get(item, item) for item in role.editable_user_fields],
             "is_custom": True,
             "can_edit": True,
             "can_delete": True,
@@ -6895,15 +7129,27 @@ def access_role_listing() -> list[dict[str, Any]]:
     return roles
 
 
-def access_role_form_context(role: AccessRoleType | None = None, permissions: list[str] | set[str] | None = None, action_permissions: list[str] | set[str] | None = None) -> dict[str, Any]:
+def access_role_form_context(
+    role: AccessRoleType | None = None,
+    permissions: list[str] | set[str] | None = None,
+    action_permissions: list[str] | set[str] | None = None,
+    editable_roles: list[str] | set[str] | None = None,
+    editable_user_fields: list[str] | set[str] | None = None,
+) -> dict[str, Any]:
     selected = set(permissions if permissions is not None else (role.permissions if role else ["home", "my_requests"]))
     selected_actions = set(action_permissions if action_permissions is not None else (role.action_permissions if role else []))
+    selected_editable_roles = set(editable_roles if editable_roles is not None else (role.editable_roles if role else []))
+    selected_editable_fields = set(editable_user_fields if editable_user_fields is not None else (role.editable_user_fields if role else []))
     return {
         "access_role": role,
         "permission_options": PAGE_PERMISSION_OPTIONS,
         "selected_permissions": selected,
         "action_permission_groups": grouped_action_permissions(selected),
         "selected_action_permissions": selected_actions,
+        "user_edit_role_options": [{"key": key, "label": role_option_labels().get(key, display_access_role_key(key))} for key in all_role_options() if key != "dev"],
+        "selected_editable_roles": selected_editable_roles,
+        "user_edit_field_options": USER_EDIT_FIELD_OPTIONS,
+        "selected_editable_user_fields": selected_editable_fields,
         "action_permission_label_map": action_permission_label_map(),
         "custom_roles": list_custom_access_roles(),
         "access_roles": access_role_listing(),
@@ -6922,9 +7168,11 @@ def admin_access_types():
         description = (request.form.get("description") or "").strip()[:240]
         permissions = normalize_access_role_permissions_from_form(request.form)
         action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
+        editable_roles = normalize_access_role_editable_roles_from_form(request.form)
+        editable_user_fields = normalize_access_role_editable_fields_from_form(request.form)
         if not name:
             flash("Informe o nome do tipo de acesso.", "warning")
-            return render_template("admin/access_types.html", **access_role_form_context(None, permissions, action_permissions))
+            return render_template("admin/access_types.html", **access_role_form_context(None, permissions, action_permissions, editable_roles, editable_user_fields))
         role_key = custom_access_role_key(name)
         with db_connect() as conn:
             original_key = role_key
@@ -6934,10 +7182,20 @@ def admin_access_types():
                 suffix += 1
             conn.execute(
                 """
-                INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), now_iso(), now_iso()),
+                (
+                    role_key,
+                    name,
+                    description,
+                    json.dumps(permissions, ensure_ascii=False),
+                    json.dumps(action_permissions, ensure_ascii=False),
+                    json.dumps(editable_roles, ensure_ascii=False),
+                    json.dumps(editable_user_fields, ensure_ascii=False),
+                    now_iso(),
+                    now_iso(),
+                ),
             )
             conn.commit()
         get_access_role_override.cache_clear()
@@ -6968,21 +7226,24 @@ def admin_access_type_edit(role_key: str):
             updated_role_key = editable_custom_access_role_key(request.form.get("role_key"), role.role_key)
         permissions = normalize_access_role_permissions_from_form(request.form)
         action_permissions = normalize_access_role_action_permissions_from_form(request.form, permissions)
+        editable_roles = normalize_access_role_editable_roles_from_form(request.form)
+        editable_user_fields = normalize_access_role_editable_fields_from_form(request.form)
         if not name:
             flash("Informe o nome do tipo de acesso.", "warning")
-            return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
+            return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions, editable_roles, editable_user_fields))
         with db_connect() as conn:
             changed_at = now_iso()
             if updated_role_key != role.role_key:
                 existing = conn.execute("SELECT 1 FROM access_role_types WHERE role_key = ?", (updated_role_key,)).fetchone()
                 if existing is not None or updated_role_key in STATIC_ROLE_KEYS:
                     flash("Já existe outro tipo de acesso com esse identificador.", "warning")
-                    return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions))
+                    return render_template("admin/access_type_form.html", **access_role_form_context(role, permissions, action_permissions, editable_roles, editable_user_fields))
                 conn.execute(
                     """
                     UPDATE access_role_types
                        SET role_key = ?, name = ?, description = ?, permissions_json = ?,
-                           action_permissions_json = ?, updated_at = ?
+                           action_permissions_json = ?, editable_roles_json = ?,
+                           editable_user_fields_json = ?, updated_at = ?
                      WHERE role_key = ?
                     """,
                     (
@@ -6991,6 +7252,8 @@ def admin_access_type_edit(role_key: str):
                         description,
                         json.dumps(permissions, ensure_ascii=False),
                         json.dumps(action_permissions, ensure_ascii=False),
+                        json.dumps(editable_roles, ensure_ascii=False),
+                        json.dumps(editable_user_fields, ensure_ascii=False),
                         changed_at,
                         role.role_key,
                     ),
@@ -6999,16 +7262,28 @@ def admin_access_type_edit(role_key: str):
             else:
                 conn.execute(
                     """
-                    INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(role_key) DO UPDATE SET
                         name = excluded.name,
                         description = excluded.description,
                         permissions_json = excluded.permissions_json,
                         action_permissions_json = excluded.action_permissions_json,
+                        editable_roles_json = excluded.editable_roles_json,
+                        editable_user_fields_json = excluded.editable_user_fields_json,
                         updated_at = excluded.updated_at
                     """,
-                    (role.role_key, name, description, json.dumps(permissions, ensure_ascii=False), json.dumps(action_permissions, ensure_ascii=False), changed_at, changed_at),
+                    (
+                        role.role_key,
+                        name,
+                        description,
+                        json.dumps(permissions, ensure_ascii=False),
+                        json.dumps(action_permissions, ensure_ascii=False),
+                        json.dumps(editable_roles, ensure_ascii=False),
+                        json.dumps(editable_user_fields, ensure_ascii=False),
+                        changed_at,
+                        changed_at,
+                    ),
                 )
             # Usuários desse tipo passam a herdar as permissões novas do tipo.
             conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, updated_role_key))

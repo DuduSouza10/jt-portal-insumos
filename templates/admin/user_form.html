@@ -6,13 +6,23 @@
 <div class="card wide-card">
   <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}" data-role-admin-keys='{{ (role_admin_keys if role_admin_keys is defined else ["admin", "dev"])|tojson }}' data-role-permissions='{{ (role_permissions_map if role_permissions_map is defined else {})|tojson }}'>
     <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
+    {% set can_edit_responsible = current_can_edit_user_field(user, 'responsible_name', is_new) %}
+    {% set can_edit_role_field = current_can_edit_user_field(user, 'role', is_new) %}
+    {% set can_edit_base_field = current_can_edit_user_field(user, 'organization_name', is_new) %}
+    {% set can_edit_franchise_name = current_can_edit_user_field(user, 'franchise_name', is_new) %}
+    {% set can_edit_franchise_number = current_can_edit_user_field(user, 'franchise_number', is_new) %}
+    {% set can_edit_cnpj_field = current_can_edit_user_field(user, 'cnpj', is_new) %}
+    {% set can_edit_username_field = current_can_edit_user_field(user, 'username', is_new) %}
+    {% set can_edit_password_field = current_can_edit_user_field(user, 'password', is_new) %}
+    {% set can_edit_status_field = current_can_edit_user_field(user, 'status', is_new) %}
+    {% set can_edit_pages_field = current_can_edit_user_field(user, 'page_permissions', is_new) %}
     <label>
       Nome do responsável (quem usará o acesso)
-      <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required>
+      <input name="responsible_name" value="{{ user.responsible_name if user else '' }}" placeholder="Ex.: Eduardo Rodrigues" required {% if not can_edit_responsible %}disabled{% endif %}>
     </label>
     {% set role_options = allowed_role_options if allowed_role_options is defined else ['base', 'franchise', 'admin'] %}
     {% set role_labels_map = role_labels if role_labels is defined else {'base': 'Base', 'franchise': 'Franquia', 'admin': 'Administrador', 'dev': 'Dev'} %}
-    {% set role_locked = (user and user.is_admin and not current_can_manage_dev_roles() and not (current_user and user.id == current_user.id and current_can_bootstrap_dev_role())) %}
+    {% set role_locked = (not can_edit_role_field) or (user and user.is_admin and not current_can_edit_admin_role(user) and not (current_user and user.id == current_user.id and current_can_bootstrap_dev_role())) %}
     <label>
       Tipo de acesso (permissão do usuário)
       <select name="role" id="roleSelect" required {% if role_locked %}disabled{% endif %}>
@@ -27,9 +37,9 @@
     <label id="baseNameWrap">
       {{ 'Setor' if current_is_dev() else 'Nome da base (unidade J&T)' }}
       {% if current_is_dev() %}
-        <input name="organization_name" id="organizationSelect" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: BHZ 01, Administrativo, SAC">
+        <input name="organization_name" id="organizationSelect" value="{{ user.organization_name if user else '' }}" placeholder="Ex.: BHZ 01, Administrativo, SAC" {% if not can_edit_base_field %}disabled{% endif %}>
       {% else %}
-        <select name="organization_name" id="organizationSelect">
+        <select name="organization_name" id="organizationSelect" {% if not can_edit_base_field %}disabled{% endif %}>
           <option value="" disabled {% if not user or user.role != 'base' %}selected{% endif %}>Selecione a base</option>
           {% if user and user.role == 'base' and user.organization_name and user.organization_name not in base_unit_options %}
             <option value="{{ user.organization_name }}" selected>{{ user.organization_name }}</option>
@@ -42,27 +52,27 @@
     </label>
     <label id="franchiseNameWrap" class="hidden">
       {{ 'Setor' if current_is_dev() else 'Nome da franquia (nome exibido no portal)' }}
-      <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro">
+      <input name="franchise_name" id="franchiseNameInput" value="{{ user.franchise_name if user else '' }}" placeholder="Ex.: Franquia Centro" {% if not can_edit_franchise_name %}disabled{% endif %}>
     </label>
     <label id="franchiseNumberWrap" class="hidden">
       <small class="muted optional-prefix">(opcional)</small> Número de telefone (com DDD)
-      <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" value="{{ user.formatted_phone if user else '' }}" placeholder="(00) 00000-0000" autocomplete="tel">
+      <input name="franchise_number" id="franchiseNumberInput" inputmode="numeric" maxlength="15" value="{{ user.formatted_phone if user else '' }}" placeholder="(00) 00000-0000" autocomplete="tel" {% if not can_edit_franchise_number %}disabled{% endif %}>
     </label>
     <label id="cnpjWrap" class="hidden">
       <small class="muted optional-prefix">(opcional)</small> CNPJ (somente números)
-      <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" value="{{ user.formatted_cnpj if user else '' }}" placeholder="00.000.000/0000-00">
+      <input name="cnpj" id="cnpjInput" inputmode="numeric" maxlength="18" value="{{ user.formatted_cnpj if user else '' }}" placeholder="00.000.000/0000-00" {% if not can_edit_cnpj_field %}disabled{% endif %}>
     </label>
     <label>
       Nome de usuário (login)
-      <input name="username" type="text" value="{{ user.username if user else '' }}" placeholder="Ex.: mg_bhz" autocomplete="username" required>
+      <input name="username" type="text" value="{{ user.username if user else '' }}" placeholder="Ex.: mg_bhz" autocomplete="username" required {% if not can_edit_username_field %}disabled{% endif %}>
     </label>
     <label>
       Senha (acesso ao portal)
-      <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Deixe vazio para manter a atual' }}" {% if is_new %}required{% endif %}>
+      <input name="password" type="password" placeholder="{{ 'Senha inicial do usuário' if is_new else 'Deixe vazio para manter a atual' }}" {% if is_new %}required{% endif %} {% if not can_edit_password_field %}disabled{% endif %}>
     </label>
     <label>
       Status do cadastro (aprovação)
-      <select name="status" required>
+      <select name="status" required {% if not can_edit_status_field %}disabled{% endif %}>
         <option value="pending" {% if user and user.status == 'pending' %}selected{% endif %}>Pendente</option>
         <option value="approved" {% if not user or user.status == 'approved' %}selected{% endif %}>Aprovado</option>
         <option value="rejected" {% if user and user.status == 'rejected' %}selected{% endif %}>Recusado</option>
@@ -74,7 +84,7 @@
         <strong>Páginas liberadas</strong>
         <span>Base e franquia usam Solicitar insumos e Minhas solicitações. Administradores recebem todas as páginas.</span>
       </div>
-      <button class="btn ghost" type="button" data-open-permission-modal>Ver páginas</button>
+      <button class="btn ghost" type="button" data-open-permission-modal>{{ 'Editar páginas' if can_edit_pages_field else 'Ver páginas' }}</button>
     </div>
 
     {% set can_change_dev_auth_password = can_edit_dev_password and user and current_user and user.id == current_user.id and current_user.is_dev %}
@@ -158,6 +168,7 @@
                 value="{{ option.key }}"
                 data-page-key="{{ option.key }}"
                 {% if option.key in selected_permissions %}checked{% endif %}
+                {% if not can_edit_pages_field %}disabled{% endif %}
               >
               <span>
                 <strong>{{ option.label }}</strong>
@@ -216,6 +227,13 @@
   const devPasswordChangeCancelButtons = document.querySelectorAll('[data-cancel-dev-password-change]');
   const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
   let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
+  const lockedFields = {
+    organization: {{ 'false' if can_edit_base_field else 'true' }},
+    franchiseName: {{ 'false' if can_edit_franchise_name else 'true' }},
+    franchiseNumber: {{ 'false' if can_edit_franchise_number else 'true' }},
+    cnpj: {{ 'false' if can_edit_cnpj_field else 'true' }},
+    pages: {{ 'false' if can_edit_pages_field else 'true' }}
+  };
 
   function syncRole() {
     const role = roleSelect ? roleSelect.value : 'base';
@@ -234,13 +252,13 @@
     franchiseNumberWrap.classList.toggle('hidden', !isFranchise);
     cnpjWrap.classList.toggle('hidden', !isFranchise);
 
-    baseSelect.disabled = !showBaseField;
+    baseSelect.disabled = lockedFields.organization || !showBaseField;
     baseSelect.required = showBaseField;
-    franchiseNameInput.disabled = !isFranchise;
+    franchiseNameInput.disabled = lockedFields.franchiseName || !isFranchise;
     franchiseNameInput.required = isFranchise;
-    franchiseNumberInput.disabled = !isFranchise;
+    franchiseNumberInput.disabled = lockedFields.franchiseNumber || !isFranchise;
     franchiseNumberInput.required = false;
-    cnpjInput.disabled = !isFranchise;
+    cnpjInput.disabled = lockedFields.cnpj || !isFranchise;
 
     document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
       const option = checkbox.closest('.permission-option');
@@ -252,7 +270,7 @@
         option.classList.toggle('disabled', !allowedByRole);
       } else if (isAdmin) {
         checkbox.checked = true;
-        checkbox.disabled = false;
+        checkbox.disabled = lockedFields.pages;
         option.classList.remove('disabled');
       } else if (adminOnly) {
         checkbox.checked = false;
@@ -260,9 +278,10 @@
         option.classList.add('disabled');
       } else {
         checkbox.checked = true;
-        checkbox.disabled = false;
+        checkbox.disabled = lockedFields.pages;
         option.classList.remove('disabled');
       }
+      if (lockedFields.pages) checkbox.disabled = true;
     });
 
     if (isAdmin && window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {

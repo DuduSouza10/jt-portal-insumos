@@ -95,6 +95,42 @@
       {% endfor %}
       <div class="access-action-empty empty-state" data-access-action-empty>Marque uma página administrativa acima para escolher funcionalidades.</div>
     </div>
+    <div class="full access-permission-summary card user-edit-scope-summary">
+      <div>
+        <strong>Edição de usuários</strong>
+        <span>Defina quais cargos este tipo poderá editar e quais dados ficam liberados no formulário.</span>
+      </div>
+    </div>
+    <div class="full access-user-edit-scope-grid">
+      <section class="access-action-group user-edit-scope-card">
+        <h3>Cargos que pode editar <small>Dev continua protegido</small></h3>
+        <div class="permission-grid access-type-permission-grid granular-permission-grid user-edit-role-grid">
+          {% for option in user_edit_role_options %}
+          <label class="permission-option action-permission-option">
+            <input type="checkbox" name="editable_roles" value="{{ option.key }}" {% if option.key in selected_editable_roles %}checked{% endif %}>
+            <span>
+              <strong>{{ option.label }}</strong>
+              <small>Permite abrir e salvar usuários desse cargo.</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="access-action-group user-edit-scope-card">
+        <h3>Dados que pode alterar <small>Campos do cadastro</small></h3>
+        <div class="permission-grid access-type-permission-grid granular-permission-grid user-edit-field-grid">
+          {% for field in user_edit_field_options %}
+          <label class="permission-option action-permission-option">
+            <input type="checkbox" name="editable_user_fields" value="{{ field.key }}" {% if field.key in selected_editable_user_fields %}checked{% endif %}>
+            <span>
+              <strong>{{ field.label }}</strong>
+              <small>{{ field.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
     <div class="full form-actions">
       <button class="btn primary" type="submit">Salvar tipo de acesso</button>
       <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Cancelar</a>
