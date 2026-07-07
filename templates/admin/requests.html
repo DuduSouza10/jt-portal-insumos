@@ -28,7 +28,7 @@
         <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
         <td data-label="Itens">{{ req.items|length }}</td>
         <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
-        <td data-label="Data">{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
         <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
       </tr>
       {% else %}

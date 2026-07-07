@@ -13996,3 +13996,141 @@ html[data-theme="light"] .stock-tag-active-option {
     width: 100%;
   }
 }
+
+/* v183 - senha em massa por planilha e por tipo de acesso. */
+.bulk-password-option,
+.access-type-bulk-password-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+}
+
+.bulk-password-option {
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.bulk-password-option input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--red);
+}
+
+.bulk-password-option span,
+.access-type-bulk-password-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bulk-password-option strong,
+.access-type-bulk-password-card strong {
+  color: var(--text-strong);
+  font-weight: 950;
+}
+
+.bulk-password-option small,
+.access-type-bulk-password-card span {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.access-type-bulk-password-card {
+  margin: 0 0 18px;
+}
+
+.role-password-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 145;
+  display: none;
+  place-items: center;
+  padding: 24px;
+}
+
+.role-password-modal.open {
+  display: grid;
+}
+
+.role-password-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(14px);
+}
+
+.role-password-card {
+  position: relative;
+  width: min(560px, 94vw);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 26px;
+}
+
+.role-password-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.role-password-head h2 {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  font-size: 24px;
+}
+
+.role-password-head p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.role-password-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted-2);
+  font-weight: 900;
+}
+
+.role-password-field input {
+  min-height: 52px;
+  border-radius: 16px;
+}
+
+body.role-password-modal-open {
+  overflow: hidden;
+}
+
+body.role-password-modal-open .page-shell,
+body.role-password-modal-open .dev-credit,
+body.role-password-modal-open .theme-toggle,
+body.role-password-modal-open .language-toggle,
+body.role-password-modal-open .settings-dock {
+  filter: blur(3px);
+  pointer-events: none;
+  user-select: none;
+}
+
+html[data-theme="light"] .bulk-password-option,
+html[data-theme="light"] .access-type-bulk-password-card {
+  background: rgba(255,255,255,.92);
+  border-color: rgba(17,24,39,.08);
+}
+
+@media (max-width: 700px) {
+  .access-type-bulk-password-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .access-type-bulk-password-card .btn {
+    width: 100%;
+  }
+}

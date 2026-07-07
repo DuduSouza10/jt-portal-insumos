@@ -57,7 +57,7 @@
     <p><strong>Pessoas na base:</strong> {{ supply_request.people_count or '-' }}</p>
     {% endif %}
     <p><strong>Usuário:</strong> {{ supply_request.user.username }}</p>
-    <p><strong>Enviado em:</strong> {{ supply_request.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+    <p><strong>Enviado em:</strong> {{ format_sao_paulo_datetime(supply_request.created_at) }}</p>
     <p><strong>Observação do solicitante:</strong><br>{{ supply_request.user_note or '-' }}</p>
     <p><strong>Observação admin:</strong><br>{{ supply_request.admin_note or '-' }}</p>
 

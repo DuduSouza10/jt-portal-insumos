@@ -21,7 +21,7 @@
       {% for req in requests_list %}
       <tr>
         <td data-label="#">#{{ req.id }}</td>
-        <td data-label="Data">{{ req.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
         <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
         <td data-label="Itens">
           {% for item in req.items %}

@@ -16,6 +16,14 @@
     <a class="btn ghost access-type-back" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Voltar</a>
   </div>
 
+  <div class="access-type-bulk-password-card card">
+    <div>
+      <strong>Senha em massa do cargo</strong>
+      <span>Defina uma nova senha para todos os usuários que estão nesse tipo de acesso.</span>
+    </div>
+    <button class="btn ghost" type="button" data-open-role-password>Alterar senha do cargo</button>
+  </div>
+
   <form method="post" class="access-type-form access-type-edit-form">
     <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
     <div class="access-type-edit-grid {% if access_role.is_static %}static-grid{% endif %}">
@@ -92,6 +100,30 @@
       <a class="btn ghost" href="{{ request.args.get('return_to') or url_for('admin_access_types') }}">Cancelar</a>
     </div>
   </form>
+
+  <div id="rolePasswordModal" class="role-password-modal" aria-hidden="true">
+    <div class="role-password-backdrop" data-cancel-role-password></div>
+    <form class="role-password-card card" method="post" action="{{ url_for('admin_access_type_bulk_password', role_key=access_role.role_key) }}">
+      <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
+      <div class="role-password-head">
+        <div>
+          <span class="eyebrow">Senha em massa</span>
+          <h2>Alterar senha de {{ access_role.name }}</h2>
+          <p>A nova senha será aplicada automaticamente a todos os usuários desse cargo.</p>
+        </div>
+        <button class="permission-close" type="button" data-cancel-role-password aria-label="Fechar">×</button>
+      </div>
+      <label class="role-password-field">
+        Nova senha
+        <input id="rolePasswordInput" name="bulk_password" type="password" autocomplete="new-password" placeholder="Digite a nova senha">
+      </label>
+      <p id="rolePasswordError" class="dev-access-error hidden">Informe a nova senha para continuar.</p>
+      <div class="permission-actions">
+        <button class="btn ghost" type="button" data-cancel-role-password>Cancelar</button>
+        <button class="btn primary" type="submit" data-confirm-role-password>Aplicar senha</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
@@ -123,6 +155,42 @@
   });
   document.addEventListener('DOMContentLoaded', syncActionGroups);
   syncActionGroups();
+})();
+
+(function () {
+  const modal = document.getElementById('rolePasswordModal');
+  const openButton = document.querySelector('[data-open-role-password]');
+  const input = document.getElementById('rolePasswordInput');
+  const error = document.getElementById('rolePasswordError');
+  const cancelButtons = document.querySelectorAll('[data-cancel-role-password]');
+  const form = modal ? modal.querySelector('form') : null;
+  if (!modal || !openButton || !form) return;
+  function openModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('role-password-modal-open');
+    if (error) error.classList.add('hidden');
+    window.setTimeout(function () { if (input) input.focus(); }, 80);
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('role-password-modal-open');
+    if (input) input.value = '';
+    if (error) error.classList.add('hidden');
+  }
+  openButton.addEventListener('click', openModal);
+  cancelButtons.forEach((button) => button.addEventListener('click', closeModal));
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+  form.addEventListener('submit', function (event) {
+    if (!input || !input.value.trim()) {
+      event.preventDefault();
+      if (error) error.classList.remove('hidden');
+      if (input) input.focus();
+    }
+  });
 })();
 </script>
 {% endblock %}

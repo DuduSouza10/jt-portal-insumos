@@ -141,7 +141,7 @@
     <dl class="asset-meta">
       <div><dt>Setor</dt><dd>{{ asset.sector }}</dd></div>
       <div><dt>Gestor</dt><dd>{{ asset.manager }}</dd></div>
-      <div><dt>Cadastrado em</dt><dd>{{ asset.created_at.strftime('%d/%m/%Y %H:%M') }}</dd></div>
+      <div><dt>Cadastrado em</dt><dd>{{ format_sao_paulo_datetime(asset.created_at) }}</dd></div>
     </dl>
     <div class="asset-items-list">
       {% for item in asset.items %}

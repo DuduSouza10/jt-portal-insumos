@@ -136,7 +136,7 @@
     <tbody>
       {% for entry in entries %}
       <tr>
-        <td data-label="Data">{{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+        <td data-label="Data">{{ format_sao_paulo_datetime(entry.created_at) }}</td>
         <td data-label="Item"><strong>{{ entry.item_name }}</strong></td>
         <td data-label="Qtd.">{{ entry.quantity }}</td>
         <td data-label="Unidade">{{ entry.unit_measure }}</td>

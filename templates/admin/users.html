@@ -109,6 +109,15 @@
         </span>
       </label>
     </fieldset>
+    {% if current_is_dev() %}
+    <label class="bulk-password-option">
+      <input type="checkbox" name="update_existing_passwords">
+      <span>
+        <strong>Atualizar senhas existentes</strong>
+        <small>Quando marcado, a coluna Senha/Nova senha da planilha troca a senha dos usuários já cadastrados. Novos usuários continuam precisando de senha.</small>
+      </span>
+    </label>
+    {% endif %}
     <button class="btn primary" type="submit">Importar usuários</button>
     <small>Use o modelo acima. Escolha se deseja apenas adicionar/atualizar ou substituir os cadastros atuais.</small>
   </form>

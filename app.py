@@ -13,7 +13,7 @@ import time
 import webbrowser
 import socket
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from io import BytesIO
 from functools import wraps, lru_cache
@@ -794,6 +794,43 @@ def parse_dt(value: Any) -> datetime | None:
 
 def now_iso() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+
+SAO_PAULO_OFFSET = timedelta(hours=-3)
+SAO_PAULO_TZ = timezone(SAO_PAULO_OFFSET, "GMT-3")
+
+
+def sao_paulo_now() -> datetime:
+    return datetime.utcnow() + SAO_PAULO_OFFSET
+
+
+def to_sao_paulo_dt(value: Any | None = None) -> datetime | None:
+    if value is None:
+        return sao_paulo_now()
+    parsed = parse_dt(value)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(SAO_PAULO_TZ).replace(tzinfo=None)
+    return parsed + SAO_PAULO_OFFSET
+
+
+def format_sao_paulo_datetime(value: Any | None = None, fmt: str = "%d/%m/%Y %H:%M", suffix: str = "") -> str:
+    local_dt = to_sao_paulo_dt(value)
+    if local_dt is None:
+        return ""
+    return local_dt.strftime(fmt) + suffix
+
+
+def sao_paulo_filename_timestamp() -> str:
+    return sao_paulo_now().strftime("%Y%m%d_%H%M%S")
+
+
+def sao_paulo_report_bounds_to_utc(start_local: datetime, end_local_date: datetime) -> tuple[datetime, datetime]:
+    start_utc = start_local - SAO_PAULO_OFFSET
+    end_local = end_local_date + timedelta(days=1) - timedelta(seconds=1)
+    end_utc = end_local - SAO_PAULO_OFFSET
+    return start_utc, end_utc
 
 
 def normalize_username(value: str) -> str:
@@ -2036,6 +2073,7 @@ def inject_globals():
     return {
         "current_user": user,
         "format_brl": format_brl,
+        "format_sao_paulo_datetime": format_sao_paulo_datetime,
         "status_label": status_label,
         "user_role_label": user_role_label,
         "stock_status_class": stock_status_class,
@@ -2614,9 +2652,7 @@ def user_role_label(role: str | None) -> str:
 
 
 def format_feishu_datetime(value: datetime | None = None) -> str:
-    base_value = value or datetime.utcnow()
-    # Datas gravadas no app ficam em UTC. Para o Feishu, exibe no horário de Brasília.
-    return (base_value - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") + " (Brasília)"
+    return format_sao_paulo_datetime(value, suffix=" (Brasilia)")
 
 
 def public_url_for(endpoint: str, **values: Any) -> str:
@@ -3265,7 +3301,7 @@ def save_product_image_upload(uploaded: Any) -> tuple[str, str, str]:
         raise ValueError("A imagem deve ter no máximo 3 MB.")
     content_type = PRODUCT_IMAGE_TYPES[extension]
     token = "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(12))
-    key = storage_key("product_images", datetime.now().strftime("%Y%m%d_%H%M%S"), token) + extension
+    key = storage_key("product_images", sao_paulo_filename_timestamp(), token) + extension
     local_path = local_product_image_path(key)
     local_path.write_bytes(data)
     try:
@@ -3390,7 +3426,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     ]
     status_block = Paragraph(
         f"<font color='#e60012'><b>{pdf_mixed_text(status_label(supply_request.status))}</b></font>"
-        f"<br/><font color='#777777'>Emitido em {datetime.now().strftime('%d/%m/%Y %H:%M')}</font>",
+        f"<br/><font color='#777777'>Emitido em {format_sao_paulo_datetime(suffix=' GMT-3')}</font>",
         styles["JTMeta"],
     )
     header_table = Table(
@@ -3438,7 +3474,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
 
     secondary_fields = [
         ("USUÁRIO", requester_username),
-        ("DATA DA SOLICITAÇÃO", supply_request.created_at.strftime("%d/%m/%Y %H:%M")),
+        ("DATA DA SOLICITAÇÃO", format_sao_paulo_datetime(supply_request.created_at)),
     ]
     if requester_role == "base":
         secondary_fields.insert(1, ("PESSOAS NA BASE", people_count_label(supply_request.people_count)))
@@ -3518,7 +3554,7 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     if supply_request.admin_note:
         info_blocks.append([p("Observação administrativa", "JTCellBold"), p(supply_request.admin_note, "JTSmall")])
     if supply_request.reviewed_at:
-        info_blocks.append([p("Revisão", "JTCellBold"), p(f"Revisado em {supply_request.reviewed_at.strftime('%d/%m/%Y %H:%M')}", "JTSmall")])
+        info_blocks.append([p("Revisão", "JTCellBold"), p(f"Revisado em {format_sao_paulo_datetime(supply_request.reviewed_at)}", "JTSmall")])
     if info_blocks:
         story.append(Paragraph("Informações complementares", styles["JTSection"]))
         info_table = Table(info_blocks, colWidths=[52 * mm, 122 * mm])
@@ -3662,7 +3698,7 @@ def build_supply_requests_period_report_pdf(
 
     period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
     unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
-    generated_label = datetime.now().strftime("%d/%m/%Y %H:%M")
+    generated_label = format_sao_paulo_datetime(suffix=" GMT-3")
     story: list[Any] = []
     header = Table(
         [[
@@ -3798,14 +3834,14 @@ def build_supply_requests_period_report_pdf(
                 notes_html = pdf_clean_text(req.admin_note)
 
             detail_rows = [
-                [Paragraph(f"Solicitação #{req.id}", styles["ReportCellBold"]), Paragraph(pdf_clean_text(status_name(req.status)), styles["ReportCellBold"]), Paragraph(req.created_at.strftime("%d/%m/%Y %H:%M"), styles["ReportCellBold"])],
+                [Paragraph(f"Solicitação #{req.id}", styles["ReportCellBold"]), Paragraph(pdf_clean_text(status_name(req.status)), styles["ReportCellBold"]), Paragraph(format_sao_paulo_datetime(req.created_at), styles["ReportCellBold"])],
                 [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Setor", styles["ReportLabel"]), Paragraph(requester_role_label, styles["ReportLabel"])],
                 [p(f"{requester_name} ({requester_username})"), p(requester_org), p(requester_role_value)],
                 [Paragraph("Itens", styles["ReportLabel"]), Paragraph("Observações", styles["ReportLabel"]), Paragraph("Total", styles["ReportLabel"])],
                 [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_text_parts), styles["ReportSmall"]), Paragraph(notes_html, styles["ReportSmall"]), p(format_brl(req.total_cents), "ReportCellBold")],
             ]
             if req.reviewed_at:
-                detail_rows.append([Paragraph("Revisão", styles["ReportLabel"]), Paragraph(req.reviewed_at.strftime("%d/%m/%Y %H:%M"), styles["ReportSmall"]), Paragraph("", styles["ReportSmall"])])
+                detail_rows.append([Paragraph("Revisão", styles["ReportLabel"]), Paragraph(format_sao_paulo_datetime(req.reviewed_at), styles["ReportSmall"]), Paragraph("", styles["ReportSmall"])])
             detail = Table(detail_rows, colWidths=[68 * mm, 66 * mm, 44 * mm], repeatRows=0)
             detail.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
@@ -3883,7 +3919,7 @@ def build_assets_period_report_pdf(
 
     period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
     unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
-    generated_label = datetime.now().strftime("%d/%m/%Y %H:%M")
+    generated_label = format_sao_paulo_datetime(suffix=" GMT-3")
     total_assets = len(assets)
     total_item_lines = sum(len(asset.items) for asset in assets)
     total_quantity = sum(sum(max(0, int(item.quantity or 0)) for item in asset.items) for asset in assets)
@@ -3953,7 +3989,7 @@ def build_assets_period_report_pdf(
             if not item_parts:
                 item_parts.append("Sem itens")
             detail_rows = [
-                [p(f"Ativo #{asset.id}", "AssetReportCellBold"), p(asset.name, "AssetReportCellBold"), p(asset.created_at.strftime("%d/%m/%Y %H:%M"), "AssetReportCellBold")],
+                [p(f"Ativo #{asset.id}", "AssetReportCellBold"), p(asset.name, "AssetReportCellBold"), p(format_sao_paulo_datetime(asset.created_at), "AssetReportCellBold")],
                 [p("Setor", "AssetReportLabel"), p("Setor", "AssetReportLabel"), p("Gestor", "AssetReportLabel")],
                 [p(asset.base), p(asset.sector), p(asset.manager)],
                 [p("Itens vinculados", "AssetReportLabel"), p("Regional", "AssetReportLabel"), p("Total do ativo", "AssetReportLabel")],
@@ -4031,7 +4067,7 @@ def build_asset_pdf(asset: AssetRecord, viewer: User) -> BytesIO:
     total_lines = len(asset.items)
     created_by = get_user(asset.created_by_id) if asset.created_by_id else None
     created_by_name = created_by.responsible_name if created_by else "Portal de Insumos"
-    generated_at = datetime.now().strftime("%d/%m/%Y %H:%M")
+    generated_at = format_sao_paulo_datetime(suffix=" GMT-3")
 
     header = Table(
         [[
@@ -4068,7 +4104,7 @@ def build_asset_pdf(asset: AssetRecord, viewer: User) -> BytesIO:
         [label_cell("SETOR"), label_cell("GESTOR RESPONSAVEL"), label_cell("CADASTRADO POR")],
         [value_cell(asset.sector), value_cell(asset.manager), value_cell(created_by_name)],
         [label_cell("DATA DO CADASTRO"), label_cell("TOTAL DE ITENS"), label_cell("LINHAS DE ITENS")],
-        [value_cell(asset.created_at.strftime("%d/%m/%Y %H:%M")), value_cell(str(total_quantity)), value_cell(str(total_lines))],
+        [value_cell(format_sao_paulo_datetime(asset.created_at)), value_cell(str(total_quantity)), value_cell(str(total_lines))],
     ]
     info_table = Table(info_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
     info_table.setStyle(TableStyle([
@@ -4872,7 +4908,7 @@ def import_products_from_workbook_bytes(
 USER_IMPORT_HEADER_ALIASES = {
     "responsible_name": ["Nome do responsável", "Nome do responsavel", "Responsável", "Responsavel"],
     "username": ["Nome de usuário", "Nome de usuario", "Usuário", "Usuario", "Login"],
-    "password": ["Senha", "Senha inicial", "Password"],
+    "password": ["Senha", "Senha inicial", "Nova senha", "Alterar senha", "Password"],
     "role": ["Tipo de acesso", "Perfil", "Tipo", "Acesso"],
     "status": ["Status do cadastro", "Status", "Situação", "Situacao"],
     "base_name": ["Nome da base", "Base", "Unidade", "Nome da base/franquia", "Setor", "Unidade / Franquia", "Unidade/Franquia", "Organização", "Organizacao", "Base ou franquia"],
@@ -4958,8 +4994,6 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
         raise ValueError("nome do responsável não informado")
     if not valid_username(username):
         raise ValueError("nome de usuário inválido")
-    if not password:
-        raise ValueError("senha não informada")
     if role is None:
         raise ValueError("tipo de acesso inválido")
     if status is None:
@@ -4984,7 +5018,7 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
         source_row=row_number,
         responsible_name=responsible_name[:160],
         username=username,
-        password_hash=generate_user_import_password_hash(password),
+        password_hash=generate_user_import_password_hash(password) if password else "",
         role=role,
         status=status,
         organization_name=organization_name,
@@ -5118,10 +5152,11 @@ def reject_users_outside_import(conn: Any, existing_rows: list[Any], imported_us
     return total
 
 
-def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None, current_user_role: str = "admin") -> tuple[int, int, int, int, list[str]]:
+def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "merge", current_user_id: int | None = None, current_user_role: str = "admin", update_passwords: bool = False) -> tuple[int, int, int, int, list[str]]:
     import_mode = (import_mode or "merge").strip().lower()
     if import_mode not in {"merge", "replace"}:
         import_mode = "merge"
+    update_passwords = bool(update_passwords and current_user_role == "dev")
 
     try:
         workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
@@ -5134,7 +5169,7 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
             return 0, 0, 0, 0, ["planilha vazia"]
 
         header_row_number, header_map = detect_user_header_row(worksheet)
-        required_keys = ["responsible_name", "username", "password", "role", "status"]
+        required_keys = ["responsible_name", "username", "role", "status"]
         missing_headers = [
             USER_IMPORT_HEADER_ALIASES[key][0]
             for key in required_keys
@@ -5180,9 +5215,9 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
             return 0, 0, skipped, 0, errors
 
         with db_connect() as conn:
-            existing_rows = conn.execute("SELECT id, username, status, role FROM users").fetchall()
+            existing_rows = conn.execute("SELECT id, username, status, role, password_hash FROM users").fetchall()
             existing_by_username = {
-                normalize_username(row["username"]): {"id": int(row["id"]), "role": str(row["role"] or "base")}
+                normalize_username(row["username"]): {"id": int(row["id"]), "role": str(row["role"] or "base"), "password_hash": str(row["password_hash"] or "")}
                 for row in existing_rows
                 if row["username"]
             }
@@ -5193,6 +5228,12 @@ def import_users_from_workbook_bytes(uploaded_bytes: bytes, import_mode: str = "
                 existing_info = existing_by_username.get(record.username)
                 target_id = existing_info["id"] if existing_info else None
                 existing_role = existing_info["role"] if existing_info else ""
+                if target_id is None and not record.password_hash:
+                    skipped += 1
+                    errors.append(f"linha {record.source_row}: senha nao informada para novo usuario")
+                    continue
+                if target_id is not None and (not update_passwords or not record.password_hash):
+                    record.password_hash = existing_info["password_hash"]
                 if current_user_role != "dev" and role_is_admin_like(existing_role) and record.role != existing_role:
                     skipped += 1
                     errors.append(f"linha {record.source_row}: somente usuário Dev pode alterar o tipo de acesso de administradores")
@@ -5432,10 +5473,10 @@ def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | N
     params: list[Any] = []
     if start_dt is not None:
         clauses.append("me.created_at >= ?")
-        params.append(start_dt.isoformat())
+        params.append(start_dt.strftime("%Y-%m-%d %H:%M:%S"))
     if end_dt is not None:
         clauses.append("me.created_at <= ?")
-        params.append(end_dt.isoformat())
+        params.append(end_dt.strftime("%Y-%m-%d %H:%M:%S"))
     sql = """
         SELECT me.*, u.responsible_name AS created_by_name
           FROM material_entries me
@@ -5553,7 +5594,7 @@ def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: da
             if entry.invoice_file_name:
                 invoice_parts.append(entry.invoice_file_name)
             rows.append([
-                p(entry.created_at.strftime("%d/%m/%Y %H:%M")),
+                p(format_sao_paulo_datetime(entry.created_at)),
                 p(entry.item_name, "MaterialBold"),
                 p(str(entry.quantity)),
                 p(entry.unit_measure),
@@ -6288,8 +6329,8 @@ def admin_users_export():
         "Telefone",
         "CNPJ",
         "Status",
-        "Criado em",
-        "Atualizado em",
+        "Criado em (GMT-3)",
+        "Atualizado em (GMT-3)",
     ]
     worksheet.append(headers)
     for user in users:
@@ -6301,8 +6342,8 @@ def admin_users_export():
             user.formatted_phone if user.role == "franchise" else "",
             user.formatted_cnpj or "",
             status_label(user.status),
-            (user.created_at - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") if user.created_at else "",
-            (user.updated_at - timedelta(hours=3)).strftime("%d/%m/%Y %H:%M") if user.updated_at else "",
+            format_sao_paulo_datetime(user.created_at) if user.created_at else "",
+            format_sao_paulo_datetime(user.updated_at) if user.updated_at else "",
         ])
 
     header_fill = PatternFill("solid", fgColor="E60012")
@@ -6327,7 +6368,7 @@ def admin_users_export():
     buffer = BytesIO()
     workbook.save(buffer)
     buffer.seek(0)
-    filename = f"usuarios_tabela_atual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"usuarios_tabela_atual_{sao_paulo_filename_timestamp()}.xlsx"
     return send_file(
         buffer,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -6411,7 +6452,7 @@ def admin_users_template():
         ("Franquia", "Preencha Nome da franquia e Telefone com DDD. CNPJ é opcional. Deixe Nome da base vazio."),
         ("Administrador", "Deixe os campos de base, franquia e CNPJ vazios. O administrador recebe acesso a todas as páginas."),
         ("Dev", "Use apenas com autorização. Somente um usuário Dev pode importar/promover usuários como Dev."),
-        ("Senha", "Obrigatória para todos os novos usuários. Formate a coluna como texto para preservar zeros à esquerda."),
+        ("Senha", "Obrigatória para novos usuários. Para usuários existentes, o Dev pode marcar a opção de atualizar senhas para substituir pela senha da planilha; sem essa opção, a senha atual é preservada."),
         ("Status", "Use Aprovado, Pendente ou Recusado."),
     ]
     for row in instruction_rows:
@@ -6465,7 +6506,7 @@ def admin_users_import():
                 upload_bytes_to_r2(
                     storage_key(
                         "imports",
-                        "usuarios_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename),
+                        "usuarios_" + sao_paulo_filename_timestamp() + "_" + safe_filename(uploaded.filename),
                     ),
                     uploaded_bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -6475,11 +6516,13 @@ def admin_users_import():
                 print(f"[R2] Não foi possível salvar a planilha de usuários: {exc}")
 
         current_user = require_current_user()
+        update_existing_passwords = bool(current_user.is_dev and request.form.get("update_existing_passwords") == "on")
         created, updated, skipped, replaced, errors = import_users_from_workbook_bytes(
             uploaded_bytes,
             import_mode=import_mode,
             current_user_id=current_user.id,
             current_user_role=current_user.role,
+            update_passwords=update_existing_passwords,
         )
         if errors:
             preview = "; ".join(errors[:5])
@@ -6977,6 +7020,32 @@ def admin_access_type_edit(role_key: str):
     return render_template("admin/access_type_form.html", **access_role_form_context(role))
 
 
+@app.post("/admin/access-types/<role_key>/bulk-password")
+@admin_required
+@page_access_required("admin_users")
+def admin_access_type_bulk_password(role_key: str):
+    current = require_current_user()
+    if not current.is_dev:
+        abort(403)
+    role = get_access_role_definition(role_key)
+    if role is None or role.role_key == "dev":
+        abort(404)
+    new_password = (request.form.get("bulk_password") or "").strip()
+    if not new_password:
+        flash("Informe a nova senha para aplicar aos usuários desse tipo de acesso.", "warning")
+        return redirect(url_for("admin_access_type_edit", role_key=role.role_key, return_to=request.form.get("return_to", "")))
+    with db_connect() as conn:
+        changed_at = now_iso()
+        affected = int(conn.execute("SELECT COUNT(*) AS total FROM users WHERE role = ?", (role.role_key,)).fetchone()["total"] or 0)
+        conn.execute(
+            "UPDATE users SET password_hash = ?, updated_at = ? WHERE role = ?",
+            (generate_password_hash(new_password), changed_at, role.role_key),
+        )
+        conn.commit()
+    flash(f"Senha aplicada para {affected} usuário(s) do tipo {role.name}.", "success")
+    return redirect(url_for("admin_access_type_edit", role_key=role.role_key, return_to=request.form.get("return_to", "")))
+
+
 @app.post("/admin/access-types/<role_key>/delete")
 @admin_required
 @page_access_required("admin_users")
@@ -7376,7 +7445,7 @@ def admin_products_export():
     workbook.save(buffer)
     buffer.seek(0)
     language_label = "chines_simplificado" if export_language == "zh" else "portugues"
-    filename = f"produtos_jt_insumos_{language_label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filename = f"produtos_jt_insumos_{language_label}_{sao_paulo_filename_timestamp()}.xlsx"
     store_generated_file(
         storage_key("exports", filename),
         buffer,
@@ -7421,7 +7490,7 @@ def admin_products_import():
         if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
             try:
                 upload_bytes_to_r2(
-                    storage_key("imports", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)),
+                    storage_key("imports", sao_paulo_filename_timestamp() + "_" + safe_filename(uploaded.filename)),
                     uploaded_bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     {"type": "products_import", "mode": import_mode},
@@ -7742,7 +7811,7 @@ def admin_material_entries():
             try:
                 invoice_bytes = invoice_file.read()
                 invoice_file_name = invoice_file.filename or "nota_fiscal"
-                invoice_file_key = storage_key("notas_fiscais", datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(invoice_file_name))
+                invoice_file_key = storage_key("notas_fiscais", sao_paulo_filename_timestamp() + "_" + safe_filename(invoice_file_name))
                 try:
                     upload_bytes_to_r2(invoice_file_key, invoice_bytes, invoice_file.mimetype or "application/octet-stream", {"type": "material_invoice"})
                 except Exception as exc:
@@ -7836,7 +7905,7 @@ def admin_material_entries_import():
             return redirect_to_return("admin_material_entries")
         if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
             try:
-                upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
+                upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + sao_paulo_filename_timestamp() + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
             except Exception as exc:
                 print(f"[R2] Não foi possível salvar planilha de entrada: {exc}")
         imported, skipped, errors = import_material_entries_from_workbook_bytes(uploaded_bytes, require_current_user().id)
@@ -7865,18 +7934,18 @@ def admin_material_entries_report():
         flash("Informe a data inicial e a data final para gerar o relatório de entradas.", "warning")
         return redirect_to_return("admin_material_entries")
     try:
-        start_dt = parse_report_date(start_raw, "Data inicial")
+        start_local = parse_report_date(start_raw, "Data inicial")
         end_base = parse_report_date(end_raw, "Data final")
-        end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
+        start_dt, end_dt = sao_paulo_report_bounds_to_utc(start_local, end_base)
     except ValueError as exc:
         flash(str(exc), "danger")
         return redirect_to_return("admin_material_entries")
-    if end_dt < start_dt:
+    if end_base < start_local:
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect_to_return("admin_material_entries")
     entries = list_material_entries(start_dt, end_dt)
-    buffer = build_material_entries_report_pdf(entries, start_dt, end_base, require_current_user())
-    filename = f"relatorio_entrada_materiais_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    buffer = build_material_entries_report_pdf(entries, start_local, end_base, require_current_user())
+    filename = f"relatorio_entrada_materiais_{start_local.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(storage_key("reports", "material_entries", filename), buffer, "application/pdf", {"type": "material_entries_report", "start_date": start_raw, "end_date": end_raw})
     buffer.seek(0)
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
@@ -8227,6 +8296,13 @@ def admin_stock():
                 "movements": len(movement_rows),
             }
 
+    formatted_movement_rows: list[dict[str, Any]] = []
+    for row in movement_rows:
+        movement = {key: row[key] for key in row.keys()} if hasattr(row, "keys") else dict(row)
+        movement["created_at"] = format_sao_paulo_datetime(movement.get("created_at"))
+        formatted_movement_rows.append(movement)
+    movement_rows = formatted_movement_rows
+
     products = [product for row in product_rows if (product := row_to_product(row)) is not None]
 
     stock_rows: list[dict[str, Any]] = []
@@ -8321,21 +8397,21 @@ def admin_stock_requests_report():
             selected_unit, selected_kind = "", "all"
         else:
             selected_unit, selected_kind = validate_unit_selection(base_raw, franchise_raw, required=True)
-        start_dt = parse_report_date(start_raw, "Data inicial")
+        start_local = parse_report_date(start_raw, "Data inicial")
         end_base = parse_report_date(end_raw, "Data final")
-        end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
+        start_dt, end_dt = sao_paulo_report_bounds_to_utc(start_local, end_base)
     except ValueError as exc:
         flash(str(exc), "danger")
         return redirect(url_for("admin_stock"))
 
-    if end_dt < start_dt:
+    if end_base < start_local:
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect(url_for("admin_stock"))
 
     requests_list = list_supply_requests_between(start_dt, end_dt, selected_unit)
-    buffer = build_supply_requests_period_report_pdf(requests_list, start_dt, end_dt, require_current_user(), selected_unit, selected_kind)
+    buffer = build_supply_requests_period_report_pdf(requests_list, start_local, end_base, require_current_user(), selected_unit, selected_kind)
     unit_slug = "todas_unidades" if selected_kind == "all" else (re.sub(r"[^A-Za-z0-9]+", "_", selected_unit).strip("_").lower() or "unidade")
-    filename = f"relatorio_solicitacoes_insumos_{unit_slug}_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    filename = f"relatorio_solicitacoes_insumos_{unit_slug}_{start_local.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(
         storage_key("reports", "supply_requests", filename),
         buffer,
@@ -8367,21 +8443,21 @@ def admin_assets_period_report():
             selected_unit, selected_kind = "", "all"
         else:
             selected_unit, selected_kind = validate_unit_selection(base_raw, franchise_raw, required=True)
-        start_dt = parse_report_date(start_raw, "Data inicial")
+        start_local = parse_report_date(start_raw, "Data inicial")
         end_base = parse_report_date(end_raw, "Data final")
-        end_dt = end_base + timedelta(days=1) - timedelta(seconds=1)
+        start_dt, end_dt = sao_paulo_report_bounds_to_utc(start_local, end_base)
     except ValueError as exc:
         flash(str(exc), "danger")
         return redirect_to_return("admin_assets")
 
-    if end_dt < start_dt:
+    if end_base < start_local:
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect_to_return("admin_assets")
 
     assets = list_assets_between(start_dt, end_dt, selected_unit)
-    buffer = build_assets_period_report_pdf(assets, start_dt, end_dt, require_current_user(), selected_unit, selected_kind)
+    buffer = build_assets_period_report_pdf(assets, start_local, end_base, require_current_user(), selected_unit, selected_kind)
     unit_slug = "todas_unidades" if selected_kind == "all" else (re.sub(r"[^A-Za-z0-9]+", "_", selected_unit).strip("_").lower() or "unidade")
-    filename = f"relatorio_ativos_{unit_slug}_{start_dt.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
+    filename = f"relatorio_ativos_{unit_slug}_{start_local.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(
         storage_key("reports", "assets", filename),
         buffer,
