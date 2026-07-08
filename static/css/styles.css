@@ -15814,3 +15814,66 @@ body.product-image-modal-open .product-image-modal * {
     grid-template-columns: 1fr;
   }
 }
+
+/* v194 - coluna de acoes de produtos visivel para cargos com permissao. */
+.products-admin-table.has-product-actions {
+  min-width: 1540px !important;
+}
+
+.products-admin-table.has-product-actions th:nth-child(15),
+.products-admin-table.has-product-actions td:nth-child(15) {
+  width: 92px !important;
+}
+
+.products-admin-table.has-product-actions th:nth-child(16),
+.products-admin-table.has-product-actions td:nth-child(16),
+.products-admin-table.has-product-actions .actions-cell {
+  display: table-cell !important;
+  width: 148px !important;
+  min-width: 148px !important;
+  max-width: 148px !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  text-align: center !important;
+  vertical-align: middle !important;
+  overflow: visible !important;
+}
+
+.products-admin-table.has-product-actions .actions-cell {
+  white-space: nowrap !important;
+}
+
+.products-admin-table.has-product-actions .actions-cell > a,
+.products-admin-table.has-product-actions .actions-cell > form {
+  display: inline-flex !important;
+  margin: 2px 3px !important;
+  vertical-align: middle !important;
+}
+
+.products-admin-table.no-product-actions {
+  min-width: 1390px !important;
+}
+
+.products-admin-table.no-product-actions th:nth-child(15),
+.products-admin-table.no-product-actions td:nth-child(15) {
+  width: 92px !important;
+}
+
+@media (max-width: 1320px) {
+  .products-admin-table.has-product-actions {
+    min-width: 0 !important;
+  }
+
+  .products-admin-table.has-product-actions th:nth-child(16),
+  .products-admin-table.has-product-actions td:nth-child(16),
+  .products-admin-table.has-product-actions .actions-cell {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    grid-column: 1 / -1 !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+  }
+}

@@ -3,6 +3,11 @@
 {% block page_title %}Produtos e estoque{% endblock %}
 {% block page_subtitle %}Cadastre insumos, valores, limites e parâmetros de estoque mínimo/máximo.{% endblock %}
 {% block content %}
+{% set can_edit_products = can_do_any(product_edit_action_keys) %}
+{% set can_toggle_products = can_do('products_edit_visibility') %}
+{% set can_delete_products = can_do('products_delete') %}
+{% set can_use_product_actions = can_edit_products or can_toggle_products or can_delete_products %}
+{% set product_table_colspan = 16 if can_use_product_actions else 15 %}
 <div class="card table-card product-admin-card {{ 'has-import-card' if can_do('products_import') else 'no-import-card' }}">
   <div class="section-head product-tools-head">
     <h2>Produtos cadastrados</h2>
@@ -231,10 +236,10 @@
   </form>
   {% endif %}
   <div class="products-table-wrap">
-  <table class="products-admin-table">
+  <table class="products-admin-table {{ 'has-product-actions' if can_use_product_actions else 'no-product-actions' }}">
     <thead>
       <tr>
-        <th>Produto</th><th>Categoria</th><th>Tag</th><th>Público</th><th>Unidade</th><th>Kit</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th>Produto</th><th>Categoria</th><th>Tag</th><th>Público</th><th>Unidade</th><th>Kit</th><th>Estoque</th><th>Pedido mín.</th><th>Mín.</th><th>Máx.</th><th>Valor</th><th>Limite base</th><th>Limite franquia</th><th>Situação</th><th>Status</th>{% if can_use_product_actions %}<th>Ações</th>{% endif %}
       </tr>
     </thead>
     <tbody id="productTableBody">
@@ -283,20 +288,21 @@
         <td data-label="Limite franquia">{{ product.limit_franchise if product.limit_franchise is not none else 'Sem limite' }}</td>
         <td data-label="Situacao"><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
         <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
-        <td class="actions-cell icon-actions-cell" data-label="Acoes">
-          {% if can_do_any(product_edit_action_keys) %}
+        {% if can_use_product_actions %}
+        <td class="actions-cell icon-actions-cell" data-label="Ações">
+          {% if can_edit_products %}
           <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_product_edit', product_id=product.id) }}" data-tooltip="Editar" aria-label="Editar produto">
             <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
           </a>
           {% endif %}
-          {% if can_do('products_edit_visibility') %}
+          {% if can_toggle_products %}
           <form method="post" action="{{ url_for('admin_product_toggle_active', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}') : '{{ 'Inativar este produto? Ele será removido das solicitações, mas continuará salvo no banco de dados.' if product.active else 'Ativar este produto para solicitação?' }}')">
             <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="{{ 'Inativar' if product.active else 'Ativar' }}" aria-label="{{ 'Inativar produto' if product.active else 'Ativar produto' }}">
               <img src="{{ url_for('static', filename=('img/action-inactive.svg' if product.active else 'img/action-correct.svg')) }}" alt="">
             </button>
           </form>
           {% endif %}
-          {% if can_do('products_delete') %}
+          {% if can_delete_products %}
           <form method="post" action="{{ url_for('admin_product_delete', product_id=product.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.') : 'Excluir definitivamente este produto? Essa ação remove o produto do site e do banco de dados.')">
             <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir produto">
               <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
@@ -304,12 +310,13 @@
           </form>
           {% endif %}
         </td>
+        {% endif %}
       </tr>
       {% else %}
-      <tr><td colspan="16" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
+      <tr><td colspan="{{ product_table_colspan }}" class="muted center">Nenhum produto encontrado com os filtros selecionados.</td></tr>
       {% endfor %}
       {% if products %}
-      <tr id="productLiveEmpty" class="hidden"><td colspan="16" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
+      <tr id="productLiveEmpty" class="hidden"><td colspan="{{ product_table_colspan }}" class="muted center">Nenhum produto corresponde à pesquisa.</td></tr>
       {% endif %}
     </tbody>
   </table>
