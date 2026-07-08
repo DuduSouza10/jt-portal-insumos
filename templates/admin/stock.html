@@ -72,7 +72,7 @@
         <h2>Estoque atual por produto</h2>
         <p class="hint">Sem pesquisa, o gráfico mostra o estoque agrupado por categoria. Pesquise um produto para visualizar somente ele.</p>
       </div>
-      {% if can_access('admin_products') and (can_do('products_create') or can_do('products_edit_basic') or can_do('products_edit_category') or can_do('products_edit_unit') or can_do('products_edit_price') or can_do('products_edit_stock') or can_do('products_edit_limits') or can_do('products_edit_visibility')) %}
+      {% if can_access('admin_products') and (can_do('products_create') or can_do_any(product_edit_action_keys)) %}
         <a class="btn tiny ghost" href="{{ url_for('admin_products') }}">Editar produtos</a>
       {% endif %}
     </div>

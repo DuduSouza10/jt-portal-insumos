@@ -495,11 +495,11 @@ class User:
 
     @property
     def is_dev(self) -> bool:
-        return self.role == "dev"
+        return canonical_role_key(self.role, "") == "dev"
 
     @property
     def is_admin(self) -> bool:
-        return role_is_admin_like(self.role)
+        return role_is_admin_like(canonical_role_key(self.role, ""))
 
     @property
     def is_approved(self) -> bool:
@@ -855,24 +855,34 @@ def synthetic_email_for_username(username: str) -> str:
 
 
 
+ROLE_KEY_ALIASES = {
+    "base": "base",
+    "unidade": "base",
+    "franquia": "franchise",
+    "franchise": "franchise",
+    "admin": "admin",
+    "administrador": "admin",
+    "administradora": "admin",
+    "dev": "dev",
+    "desenvolvedor": "dev",
+    "developer": "dev",
+}
+
+
+def canonical_role_key(value: Any, default: str = "base") -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return default
+    normalized = normalize_header(raw).replace("_", " ").strip()
+    return ROLE_KEY_ALIASES.get(normalized) or raw.lower()
+
+
 def normalize_user_role(value: Any, allow_admin: bool = True) -> str | None:
     raw = str(value or "").strip()
     if not raw:
         return None
     normalized = normalize_header(raw).replace("_", " ").strip()
-    aliases = {
-        "base": "base",
-        "unidade": "base",
-        "franquia": "franchise",
-        "franchise": "franchise",
-        "admin": "admin",
-        "administrador": "admin",
-        "administradora": "admin",
-        "dev": "dev",
-        "desenvolvedor": "dev",
-        "developer": "dev",
-    }
-    role = aliases.get(normalized)
+    role = ROLE_KEY_ALIASES.get(normalized)
     if role is None:
         raw_lower = raw.lower()
         if get_custom_access_role(raw_lower) is not None:
@@ -1008,6 +1018,8 @@ def is_real_email(value: str | None) -> bool:
 def row_to_user(row: Any | None) -> User | None:
     if row is None:
         return None
+    raw_role = (row["role"] if "role" in row.keys() else "") or "base"
+    role = normalize_user_role(raw_role, allow_admin=True) or canonical_role_key(raw_role, "base")
     return User(
         id=int(row["id"]),
         responsible_name=row["responsible_name"] or "",
@@ -1018,7 +1030,7 @@ def row_to_user(row: Any | None) -> User | None:
         username=(row["username"] if "username" in row.keys() else "") or normalize_username((row["email"] if "email" in row.keys() else "") or row["responsible_name"] or "usuario"),
         email=(row["email"] if "email" in row.keys() else "") or "",
         password_hash=row["password_hash"] or "",
-        role=row["role"] or "base",
+        role=role,
         status=row["status"] or "pending",
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
@@ -1073,7 +1085,7 @@ def default_stock_tag_name(slug: str) -> str:
 
 def can_manage_stock_tags(user: User | None = None) -> bool:
     user = user if user is not None else current_user()
-    return bool(user and user.role in {"admin", "dev"})
+    return bool(user and canonical_role_key(user.role, "") in {"admin", "dev"})
 
 
 def row_to_stock_tag(row: Any | None) -> StockTag | None:
@@ -2105,7 +2117,9 @@ def inject_globals():
         "can_access": lambda page_key: page_key in allowed_pages,
         "can_access_any": lambda page_keys: any(page_key in allowed_pages for page_key in page_keys),
         "can_do": lambda action_key: user_has_action_access(user, action_key),
+        "can_do_any": lambda action_keys: user_has_any_action_access(user, action_keys),
         "action_permission_options": ACTION_PERMISSION_OPTIONS,
+        "product_edit_action_keys": PRODUCT_EDIT_ACTION_KEYS,
         "page_permission_options": PAGE_PERMISSION_OPTIONS,
         "base_franchise_options": BASE_FRANCHISE_OPTIONS,
         "base_unit_options": BASE_UNIT_OPTIONS,
@@ -2220,6 +2234,17 @@ ACTION_PERMISSION_OPTIONS = [
 ]
 
 
+PRODUCT_EDIT_ACTION_KEYS = (
+    "products_edit_basic",
+    "products_edit_category",
+    "products_edit_unit",
+    "products_edit_price",
+    "products_edit_stock",
+    "products_edit_limits",
+    "products_edit_visibility",
+)
+
+
 USER_EDIT_FIELD_OPTIONS = [
     {"key": "responsible_name", "label": "Nome do responsavel", "description": "Permite alterar quem usa o acesso."},
     {"key": "username", "label": "Nome de usuario", "description": "Permite alterar o login."},
@@ -2268,21 +2293,21 @@ def admin_page_key_set() -> set[str]:
 
 
 def default_static_page_permissions(role: str) -> list[str]:
-    key = str(role or "").strip().lower()
+    key = canonical_role_key(role, "")
     if key in {"admin", "dev"}:
         return [item["key"] for item in PAGE_PERMISSION_OPTIONS]
     return [item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
 
 
 def default_static_action_permissions(role: str) -> list[str]:
-    key = str(role or "").strip().lower()
+    key = canonical_role_key(role, "")
     if key in {"admin", "dev"}:
         return [item["key"] for item in ACTION_PERMISSION_OPTIONS]
     return []
 
 
 def default_static_user_edit_roles(role: str) -> list[str]:
-    key = str(role or "").strip().lower()
+    key = canonical_role_key(role, "")
     if key == "dev":
         return all_role_options()
     if key == "admin":
@@ -2291,7 +2316,7 @@ def default_static_user_edit_roles(role: str) -> list[str]:
 
 
 def default_static_user_edit_fields(role: str) -> list[str]:
-    key = str(role or "").strip().lower()
+    key = canonical_role_key(role, "")
     if key in {"admin", "dev"}:
         return [item["key"] for item in USER_EDIT_FIELD_OPTIONS]
     return []
@@ -2501,7 +2526,7 @@ def role_permissions_map(options: list[str] | None = None) -> dict[str, list[str
 
 
 def role_is_admin_like(role: str | None) -> bool:
-    key = str(role or "").strip().lower()
+    key = canonical_role_key(role, "")
     if key == "dev":
         return True
     role_definition = get_access_role_definition(key)
@@ -2509,7 +2534,7 @@ def role_is_admin_like(role: str | None) -> bool:
 
 
 def default_page_keys_for_role(role: str) -> set[str]:
-    role = str(role or "base").strip().lower()
+    role = canonical_role_key(role, "base")
     if role == "dev":
         return {item["key"] for item in PAGE_PERMISSION_OPTIONS}
     role_definition = get_access_role_definition(role)
@@ -2519,7 +2544,7 @@ def default_page_keys_for_role(role: str) -> set[str]:
 
 
 def permission_options_for_role(role: str) -> list[dict[str, Any]]:
-    role = str(role or "base").strip().lower()
+    role = canonical_role_key(role, "base")
     if role == "dev":
         return PAGE_PERMISSION_OPTIONS
     role_definition = get_access_role_definition(role)
@@ -2532,20 +2557,21 @@ def permission_options_for_role(role: str) -> list[dict[str, Any]]:
 def get_user_page_permissions(user: User | None) -> set[str]:
     if user is None:
         return set()
+    role_key = canonical_role_key(user.role, "base")
     cache_key = f"_page_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
-    if user.role in {"admin", "dev"}:
-        allowed = default_page_keys_for_role(user.role)
+    if role_key in {"admin", "dev"}:
+        allowed = default_page_keys_for_role(role_key)
     elif not user.page_permissions_configured:
-        allowed = default_page_keys_for_role(user.role)
+        allowed = default_page_keys_for_role(role_key)
     else:
         with db_connect() as conn:
             rows = conn.execute(
                 "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
                 (user.id,),
             ).fetchall()
-        allowed = {str(row["page_key"]) for row in rows} & default_page_keys_for_role(user.role)
+        allowed = {str(row["page_key"]) for row in rows} & default_page_keys_for_role(role_key)
     if has_request_context():
         setattr(g, cache_key, set(allowed))
     return set(allowed)
@@ -2554,13 +2580,14 @@ def get_user_page_permissions(user: User | None) -> set[str]:
 def get_user_action_permissions(user: User | None) -> set[str]:
     if user is None:
         return set()
+    role_key = canonical_role_key(user.role, "base")
     cache_key = f"_action_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
-    if user.role == "dev":
+    if role_key == "dev":
         allowed = action_permission_key_set()
     else:
-        role_definition = get_access_role_definition(user.role)
+        role_definition = get_access_role_definition(role_key)
         allowed = set(role_definition.action_permissions) if role_definition is not None else set()
         allowed = {key for key in allowed if any(item["key"] == key and item["page_key"] in get_user_page_permissions(user) for item in ACTION_PERMISSION_OPTIONS)}
     if has_request_context():
@@ -2572,12 +2599,18 @@ def user_has_action_access(user: User | None, action_key: str) -> bool:
     return str(action_key or "").strip() in get_user_action_permissions(user)
 
 
+def user_has_any_action_access(user: User | None, action_keys: list[str] | tuple[str, ...] | set[str]) -> bool:
+    allowed = get_user_action_permissions(user)
+    return any(str(action_key or "").strip() in allowed for action_key in action_keys)
+
+
 def get_user_editable_roles(user: User | None) -> set[str]:
     if user is None:
         return set()
-    if user.role == "dev":
+    role_key = canonical_role_key(user.role, "base")
+    if role_key == "dev":
         return set(all_role_options())
-    role_definition = get_access_role_definition(user.role)
+    role_definition = get_access_role_definition(role_key)
     roles = set(role_definition.editable_roles if role_definition is not None else [])
     roles.discard("dev")
     return {role for role in roles if role in set(all_role_options())}
@@ -2586,9 +2619,10 @@ def get_user_editable_roles(user: User | None) -> set[str]:
 def get_user_editable_fields(user: User | None) -> set[str]:
     if user is None:
         return set()
-    if user.role == "dev":
+    role_key = canonical_role_key(user.role, "base")
+    if role_key == "dev":
         return user_edit_field_key_set()
-    role_definition = get_access_role_definition(user.role)
+    role_definition = get_access_role_definition(role_key)
     fields = set(role_definition.editable_user_fields if role_definition is not None else [])
     return fields & user_edit_field_key_set()
 
@@ -2659,8 +2693,9 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
 
 
 def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
-    allowed_for_role = default_page_keys_for_role(role)
-    normalized = allowed_for_role if role in {"admin", "dev"} else {key for key in selected_keys if key in allowed_for_role}
+    role_key = canonical_role_key(role, "base")
+    allowed_for_role = default_page_keys_for_role(role_key)
+    normalized = allowed_for_role if role_key in {"admin", "dev"} else {key for key in selected_keys if key in allowed_for_role}
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     for key in sorted(normalized):
         conn.execute(
@@ -7909,6 +7944,9 @@ def admin_product_edit(product_id: int):
     product = get_product(product_id)
     if product is None:
         abort(404)
+    if not user_has_any_action_access(current_user(), PRODUCT_EDIT_ACTION_KEYS):
+        flash("Seu tipo de acesso nÃ£o pode editar produtos.", "warning")
+        return redirect_to_return("admin_products")
     if request.method == "POST":
         old_product = Product(**product.__dict__)
         old_stock_quantity = product.stock_quantity

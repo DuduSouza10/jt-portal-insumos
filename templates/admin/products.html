@@ -284,7 +284,7 @@
         <td data-label="Situacao"><span class="stock-pill {{ stock_status_class(product) }}">{{ stock_status_label(product) }}</span></td>
         <td data-label="Status"><span class="status {{ 'approved' if product.active else 'deleted' }}">{{ 'Ativo' if product.active else 'Inativo' }}</span></td>
         <td class="actions-cell icon-actions-cell" data-label="Acoes">
-          {% if can_do('products_edit_basic') or can_do('products_edit_category') or can_do('products_edit_unit') or can_do('products_edit_price') or can_do('products_edit_stock') or can_do('products_edit_limits') or can_do('products_edit_visibility') %}
+          {% if can_do_any(product_edit_action_keys) %}
           <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_product_edit', product_id=product.id) }}" data-tooltip="Editar" aria-label="Editar produto">
             <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
           </a>
