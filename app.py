@@ -507,11 +507,13 @@ class User:
 
     @property
     def formatted_cnpj(self) -> str:
-        return format_cnpj(self.cnpj)
+        digits = normalize_cnpj(self.cnpj)
+        return format_cnpj(digits) if len(digits) == 14 else ""
 
     @property
     def formatted_phone(self) -> str:
-        return format_phone_number(self.franchise_number)
+        digits = normalize_phone_number(self.franchise_number)
+        return format_phone_number(digits) if len(digits) in {10, 11} else ""
 
 
 @dataclass
@@ -1617,11 +1619,28 @@ def init_db() -> None:
         conn.execute(
             """
             UPDATE users
-               SET franchise_name = CASE WHEN franchise_name = '' THEN organization_name ELSE franchise_name END,
-                   franchise_number = CASE WHEN franchise_number = '' THEN organization_name ELSE franchise_number END
+               SET franchise_name = CASE WHEN franchise_name = '' THEN organization_name ELSE franchise_name END
              WHERE role = 'franchise'
             """
         )
+
+        # Limpa dados antigos inválidos de telefone/CNPJ em franquias.
+        # Em versões anteriores, algumas franquias sem telefone acabavam recebendo
+        # o nome da unidade no campo de telefone, exibindo valores como "10"
+        # e bloqueando o salvamento da edição. Telefone e CNPJ são opcionais.
+        legacy_contact_rows = conn.execute(
+            "SELECT id, franchise_number, cnpj FROM users WHERE role = 'franchise'"
+        ).fetchall()
+        for legacy_row in legacy_contact_rows:
+            clean_phone = normalize_phone_number(legacy_row["franchise_number"] if "franchise_number" in legacy_row.keys() else "")
+            clean_cnpj = normalize_cnpj(legacy_row["cnpj"] if "cnpj" in legacy_row.keys() else "")
+            normalized_phone = clean_phone if len(clean_phone) in {10, 11} else ""
+            normalized_cnpj = clean_cnpj if len(clean_cnpj) == 14 else ""
+            if normalized_phone != (legacy_row["franchise_number"] or "") or normalized_cnpj != (legacy_row["cnpj"] or ""):
+                conn.execute(
+                    "UPDATE users SET franchise_number = ?, cnpj = ? WHERE id = ?",
+                    (normalized_phone, normalized_cnpj, legacy_row["id"]),
+                )
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "username" not in user_columns:
@@ -3351,12 +3370,15 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         if user.role == "franchise" and not product.visible_franchise:
             return [], f"{product.name} não está disponível para franquias."
 
-        quantity = effective_product_quantity(product, quantity)
+        requested_quantity = quantity
 
         if not user.is_admin:
             limit = product_limit_for(product, user)
-            if limit is not None and quantity > limit:
-                return [], f"Limite de insumos excedido para {product.name}. Limite permitido: {limit}."
+            if limit is not None and requested_quantity > limit:
+                limit_label = "kits" if product.is_kit and product.kit_quantity > 1 else (product.unit_measure or "un")
+                return [], f"Limite de insumos excedido para {product.name}. Limite permitido: {limit} {limit_label}."
+
+        quantity = effective_product_quantity(product, requested_quantity)
 
         minimum = product.min_order_quantity
         if minimum is not None and minimum > 0 and quantity < minimum:
@@ -6877,6 +6899,8 @@ def admin_user_edit(user_id: int):
         franchise_name_value = request.form.get("franchise_name", "")
         franchise_number_value = request.form.get("franchise_number", "")
         cnpj_value = request.form.get("cnpj", "")
+        if role == "franchise" and not str(franchise_name_value or "").strip():
+            franchise_name_value = target.franchise_name or target.organization_name
         if "organization_name" not in editable_fields:
             organization_value = target.organization_name
         if "franchise_name" not in editable_fields:

@@ -69,6 +69,15 @@ function toRequestUnits(product, quantity) {
   return numeric * kitMultiplier(product);
 }
 
+function limitQuantity(product, quantity) {
+  const numeric = Math.max(0, Number(quantity || 0));
+  return isKitProduct(product) ? numeric : toRequestUnits(product, numeric);
+}
+
+function limitUnitText(product) {
+  return isKitProduct(product) ? jtText('kits') : jtText(product.unit_measure || 'un');
+}
+
 function kitUnitText(product) {
   const unitLabel = jtText(product.unit_measure || 'un');
   return `${kitMultiplier(product)} ${unitLabel}`;
@@ -118,12 +127,13 @@ function bindAddProduct(container, product) {
     const current = cart.get(product.id)?.quantity || 0;
     const requestedQuantity = current + quantity;
     const requestedUnits = toRequestUnits(product, requestedQuantity);
+    const requestedLimitQuantity = limitQuantity(product, requestedQuantity);
     if (requestedUnits < minimum) {
       setMessage(jtText(`A quantidade mínima para ${productName} é ${minimum}.`), 'err');
       return;
     }
-    if (product.limit !== null && product.limit !== undefined && requestedUnits > product.limit) {
-      setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit}.`), 'err');
+    if (product.limit !== null && product.limit !== undefined && requestedLimitQuantity > product.limit) {
+      setMessage(jtText(`Limite de insumos excedido para ${productName}. Limite permitido: ${product.limit} ${limitUnitText(product)}.`), 'err');
       return;
     }
     cart.set(product.id, { product, quantity: requestedQuantity });
@@ -147,7 +157,7 @@ function renderProductCards() {
     const unitBadge = `<span class="badge">${jtText('Unidade')}: ${escapeHtml(unitLabel)}</span>`;
     const kitBadge = isKitProduct(product) ? `<span class="badge">${jtText('Kit')}: ${escapeHtml(kitUnitText(product))}</span>` : '';
     const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
-    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(unitLabel)}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
+    const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(limitUnitText(product))}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
     const minimum = Number(product.min_order_quantity || 1);
     const inputMinimum = isKitProduct(product) ? 1 : minimum;
     const minimumBadge = minimum > 1 ? `<span class="badge minimum-badge">${jtText('Pedido mínimo')}: ${minimum} ${escapeHtml(unitLabel)}</span>` : '';
@@ -215,7 +225,7 @@ function renderProductTable() {
       ? `<strong>${product.stock_quantity}</strong><small>${escapeHtml(unitLabel)}</small>`
       : `<span class="muted">${jtText('Oculto')}</span>`;
     const limit = product.limit !== null && product.limit !== undefined
-      ? `${product.limit} ${escapeHtml(unitLabel)}`
+      ? `${product.limit} ${escapeHtml(limitUnitText(product))}`
       : jtText('Sem limite');
     const minimumOrder = minimum > 1 ? `${minimum} ${escapeHtml(unitLabel)}` : '-';
     const imageButton = product.image_url ? `
@@ -343,14 +353,15 @@ function renderCart() {
         return;
       }
       const requestedUnits = toRequestUnits(item.product, quantity);
+      const requestedLimitQuantity = limitQuantity(item.product, quantity);
       if (requestedUnits < minimum) {
         input.value = item.quantity;
         setMessage(jtText(`A quantidade mínima para ${jtText(item.product.name || '')} é ${minimum}.`), 'err');
         return;
       }
-      if (item.product.limit !== null && item.product.limit !== undefined && requestedUnits > item.product.limit) {
+      if (item.product.limit !== null && item.product.limit !== undefined && requestedLimitQuantity > item.product.limit) {
         input.value = item.quantity;
-        setMessage(jtText(`Limite de insumos excedido para ${jtText(item.product.name || '')}. Limite permitido: ${item.product.limit}.`), 'err');
+        setMessage(jtText(`Limite de insumos excedido para ${jtText(item.product.name || '')}. Limite permitido: ${item.product.limit} ${limitUnitText(item.product)}.`), 'err');
         return;
       }
       cart.set(item.product.id, { product: item.product, quantity });
