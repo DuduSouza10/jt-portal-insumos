@@ -228,11 +228,11 @@
   const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
   let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
   const lockedFields = {
-    organization: {{ 'false' if can_edit_base_field else 'true' }},
-    franchiseName: {{ 'false' if can_edit_franchise_name else 'true' }},
-    franchiseNumber: {{ 'false' if can_edit_franchise_number else 'true' }},
-    cnpj: {{ 'false' if can_edit_cnpj_field else 'true' }},
-    pages: {{ 'false' if can_edit_pages_field else 'true' }}
+    organization: {{ 'false' if current_can_edit_user_field(user, 'organization_name', is_new) else 'true' }},
+    franchiseName: {{ 'false' if current_can_edit_user_field(user, 'franchise_name', is_new) else 'true' }},
+    franchiseNumber: {{ 'false' if current_can_edit_user_field(user, 'franchise_number', is_new) else 'true' }},
+    cnpj: {{ 'false' if current_can_edit_user_field(user, 'cnpj', is_new) else 'true' }},
+    pages: {{ 'false' if current_can_edit_user_field(user, 'page_permissions', is_new) else 'true' }}
   };
 
   function syncRole() {
