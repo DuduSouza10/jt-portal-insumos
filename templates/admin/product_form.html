@@ -206,6 +206,11 @@
             <input name="limit_franchise" type="number" min="0" value="{{ product.limit_franchise if product and product.limit_franchise is not none else '' }}" placeholder="Vazio = sem limite">
           </label>
           <label class="field-card">
+            <span class="field-label">Dias de bloqueio após limite</span>
+            <input name="limit_block_days" type="number" min="1" step="1" value="{{ product.limit_block_days if product else 60 }}" placeholder="Ex.: 60">
+            <small class="hint">Quando o solicitante atingir o limite deste produto, ele ficará bloqueado por esse período.</small>
+          </label>
+          <label class="field-card">
             <span class="field-label"><small class="muted optional-prefix">(opcional)</small> Quantidade mínima por pedido</span>
             <input name="min_order_quantity" type="number" min="1" value="{{ product.min_order_quantity if product and product.min_order_quantity is not none else '' }}" placeholder="Ex.: 5">
           </label>

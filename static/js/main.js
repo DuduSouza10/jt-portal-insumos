@@ -118,6 +118,12 @@ function bindAddProduct(container, product) {
 
   const productName = jtText(product.name || '');
   const minimum = Number(product.min_order_quantity || 1);
+  if (product.blocked) {
+    button.disabled = true;
+    button.textContent = jtText('Bloqueado');
+    if (qtyInput) qtyInput.disabled = true;
+    return;
+  }
   button.addEventListener('click', () => {
     const quantity = parseInt(qtyInput.value, 10);
     if (!quantity || quantity <= 0) {
@@ -158,6 +164,7 @@ function renderProductCards() {
     const kitBadge = isKitProduct(product) ? `<span class="badge">${jtText('Kit')}: ${escapeHtml(kitUnitText(product))}</span>` : '';
     const stockBadge = product.show_stock ? `<span class="badge">${jtText('Estoque')}: ${product.stock_quantity} ${escapeHtml(unitLabel)}</span>` : '';
     const limitBadge = product.limit !== null && product.limit !== undefined ? `<span class="badge">${jtText('Limite')}: ${product.limit} ${escapeHtml(limitUnitText(product))}</span>` : `<span class="badge">${jtText('Sem limite definido')}</span>`;
+    const blockedBadge = product.blocked ? `<span class="badge red">${jtText('Bloqueado até')}: ${escapeHtml(product.blocked_until_label || product.blocked_until || '')}</span>` : '';
     const minimum = Number(product.min_order_quantity || 1);
     const inputMinimum = isKitProduct(product) ? 1 : minimum;
     const minimumBadge = minimum > 1 ? `<span class="badge minimum-badge">${jtText('Pedido mínimo')}: ${minimum} ${escapeHtml(unitLabel)}</span>` : '';
@@ -193,6 +200,7 @@ function renderProductCards() {
           ${kitBadge}
           ${stockBadge}
           ${limitBadge}
+          ${blockedBadge}
           ${minimumBadge}
         </div>
       </div>
@@ -228,6 +236,7 @@ function renderProductTable() {
       ? `${product.limit} ${escapeHtml(limitUnitText(product))}`
       : jtText('Sem limite');
     const minimumOrder = minimum > 1 ? `${minimum} ${escapeHtml(unitLabel)}` : '-';
+    const blockedRule = product.blocked ? `<span><b>${jtText('Bloqueio')}:</b> ${escapeHtml(product.blocked_until_label || product.blocked_until || '')}</span>` : '';
     const imageButton = product.image_url ? `
       <button
         class="product-thumb-button"
@@ -262,6 +271,7 @@ function renderProductTable() {
             <span><b>${jtText('Limite')}:</b> ${limit}</span>
             <span><b>${jtText('Pedido mínimo')}:</b> ${minimumOrder}</span>
             <span><b>${jtText('Kit')}:</b> ${escapeHtml(kitText)}</span>
+            ${blockedRule}
           </div>
         </td>
         <td class="request-product-quantity" data-label="${escapeHtml(jtText('Quantidade'))}">

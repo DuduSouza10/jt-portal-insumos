@@ -1,5 +1,6 @@
 import os
 import json
+import calendar
 import random
 import re
 import smtplib
@@ -470,6 +471,7 @@ DEFAULT_DEV_ACCESS_PASSWORD = os.getenv("DEV_ACCESS_PASSWORD", "DevJet2026")
 SUPPLY_STOCK_TAG = "insumos"
 ASSET_STOCK_TAG = "ativos"
 DEFAULT_STOCK_TAG = SUPPLY_STOCK_TAG
+DEFAULT_PRODUCT_REQUEST_BLOCK_MONTHS = 2
 SYSTEM_STOCK_TAGS = [
     (SUPPLY_STOCK_TAG, "Insumos", "Estoque usado nas solicitacoes de insumos."),
     (ASSET_STOCK_TAG, "Ativos", "Estoque usado no cadastro e baixa de ativos."),
@@ -563,6 +565,7 @@ class Product:
     price_cents: int = 0
     limit_base: int | None = None
     limit_franchise: int | None = None
+    limit_block_days: int = 60
     min_order_quantity: int | None = None
     min_stock: int | None = None
     max_stock: int | None = None
@@ -609,6 +612,34 @@ class SupplyRequest:
     @property
     def total_cents(self) -> int:
         return sum((item.price_cents_snapshot or 0) * item.quantity for item in self.items)
+
+
+@dataclass
+class ProductRequestBlock:
+    id: int
+    user_id: int
+    product_id: int
+    product_name: str
+    blocked_until: datetime
+    reason: str = ""
+    created_by_request_id: int | None = None
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = None
+    revoked_at: datetime | None = None
+    updated_by_id: int | None = None
+
+    @property
+    def is_active(self) -> bool:
+        return self.revoked_at is None and self.blocked_until > datetime.utcnow()
+
+    @property
+    def blocked_until_date_input(self) -> str:
+        local_dt = to_sao_paulo_dt(self.blocked_until)
+        return local_dt.strftime("%Y-%m-%d") if local_dt else ""
+
+    @property
+    def blocked_until_label(self) -> str:
+        return format_sao_paulo_datetime(self.blocked_until)
 
 
 @dataclass
@@ -1161,6 +1192,7 @@ def row_to_product(row: Any | None) -> Product | None:
         price_cents=int(row["price_cents"] or 0),
         limit_base=row["limit_base"] if "limit_base" in row.keys() and row["limit_base"] is not None else None,
         limit_franchise=row["limit_franchise"] if "limit_franchise" in row.keys() and row["limit_franchise"] is not None else None,
+        limit_block_days=max(1, int(row["limit_block_days"] or 60)) if "limit_block_days" in row.keys() else 60,
         min_order_quantity=row["min_order_quantity"] if "min_order_quantity" in row.keys() and row["min_order_quantity"] is not None else None,
         min_stock=row["min_stock"] if "min_stock" in row.keys() and row["min_stock"] is not None else None,
         max_stock=row["max_stock"] if "max_stock" in row.keys() and row["max_stock"] is not None else None,
@@ -1211,6 +1243,29 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
     if include_items:
         req.items = get_request_items(req.id)
     return req
+
+
+def row_to_product_request_block(row: Any | None) -> ProductRequestBlock | None:
+    if row is None:
+        return None
+    product_name = ""
+    try:
+        product_name = (row["product_name"] if "product_name" in row.keys() else "") or ""
+    except Exception:
+        product_name = ""
+    return ProductRequestBlock(
+        id=int(row["id"]),
+        user_id=int(row["user_id"]),
+        product_id=int(row["product_id"]),
+        product_name=product_name or f"Produto #{int(row['product_id'])}",
+        blocked_until=parse_dt(row["blocked_until"]) or datetime.utcnow(),
+        reason=(row["reason"] if "reason" in row.keys() else "") or "",
+        created_by_request_id=(int(row["created_by_request_id"]) if "created_by_request_id" in row.keys() and row["created_by_request_id"] is not None else None),
+        created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
+        updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
+        revoked_at=parse_dt(row["revoked_at"]) if "revoked_at" in row.keys() else None,
+        updated_by_id=(int(row["updated_by_id"]) if "updated_by_id" in row.keys() and row["updated_by_id"] is not None else None),
+    )
 
 
 def row_to_asset_item(row: Any | None) -> AssetItem | None:
@@ -1411,6 +1466,7 @@ def init_db() -> None:
                 price_cents INTEGER NOT NULL DEFAULT 0,
                 limit_base INTEGER,
                 limit_franchise INTEGER,
+                limit_block_days INTEGER NOT NULL DEFAULT 60,
                 min_order_quantity INTEGER,
                 min_stock INTEGER,
                 max_stock INTEGER,
@@ -1457,6 +1513,24 @@ def init_db() -> None:
                 price_cents_snapshot INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY(request_id) REFERENCES supply_requests(id) ON DELETE CASCADE,
                 FOREIGN KEY(product_id) REFERENCES products(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS product_request_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                blocked_until TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_by_request_id INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                revoked_at TEXT,
+                updated_by_id INTEGER,
+                UNIQUE(user_id, product_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY(created_by_request_id) REFERENCES supply_requests(id),
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
             );
 
             CREATE TABLE IF NOT EXISTS admin_login_codes (
@@ -1565,6 +1639,8 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_supply_requests_status_created ON supply_requests(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_user_created ON supply_requests(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_request_items_request ON request_items(request_id);
+            CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id);
+            CREATE INDEX IF NOT EXISTS idx_product_request_blocks_blocked_until ON product_request_blocks(blocked_until);
             CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
             """
         )
@@ -1663,6 +1739,29 @@ def init_db() -> None:
         supply_request_columns = {row["name"] for row in conn.execute("PRAGMA table_info(supply_requests)").fetchall()}
         if "people_count" not in supply_request_columns:
             conn.execute("ALTER TABLE supply_requests ADD COLUMN people_count INTEGER")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_request_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                blocked_until TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                created_by_request_id INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                revoked_at TEXT,
+                updated_by_id INTEGER,
+                UNIQUE(user_id, product_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY(created_by_request_id) REFERENCES supply_requests(id),
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_product_request_blocks_blocked_until ON product_request_blocks(blocked_until)")
 
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "category_emoji" not in product_columns:
@@ -1695,6 +1794,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1")
         if "stock_tag" not in product_columns:
             conn.execute("ALTER TABLE products ADD COLUMN stock_tag TEXT NOT NULL DEFAULT 'insumos'")
+        if "limit_block_days" not in product_columns:
+            conn.execute("ALTER TABLE products ADD COLUMN limit_block_days INTEGER NOT NULL DEFAULT 60")
         for stock_tag_slug, stock_tag_name, stock_tag_description in SYSTEM_STOCK_TAGS:
             conn.execute(
                 """
@@ -1916,6 +2017,7 @@ def permanently_delete_product(conn: Any, product_id: int) -> tuple[str, int, in
 
     conn.execute("DELETE FROM stock_movements WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM request_items WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_request_blocks WHERE product_id = ?", (product_id,))
     removed_empty_requests = permanently_delete_empty_supply_requests(conn, request_ids)
     conn.execute("UPDATE asset_items SET product_id = NULL WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
@@ -1936,6 +2038,7 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
         execute_delete_ids_chunked(conn, "request_items", "request_id", request_ids)
         execute_delete_ids_chunked(conn, "supply_requests", "id", request_ids)
 
+    conn.execute("DELETE FROM product_request_blocks WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM admin_login_codes WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     conn.execute("UPDATE assets SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
@@ -2178,6 +2281,8 @@ def inject_globals():
         "current_editable_user_roles": lambda: sorted(get_user_editable_roles(user)),
         "current_editable_user_fields": lambda: sorted(get_user_editable_fields(user)),
         "current_can_manage_stock_tags": can_manage_stock_tags,
+        "current_can_manage_product_blocks": lambda: can_manage_product_request_blocks(user),
+        "can_manage_product_blocks": can_manage_product_request_blocks(user),
     }
 
 
@@ -3283,6 +3388,210 @@ def product_limit_for(product: Product, user: User) -> int | None:
     return None
 
 
+def product_limit_unit_label(product: Product) -> str:
+    return "kits" if product.is_kit and product.kit_quantity > 1 else (product.unit_measure or "un")
+
+
+def product_limit_block_days(product: Product) -> int:
+    try:
+        days = int(product.limit_block_days or 60)
+    except (TypeError, ValueError):
+        days = 60
+    return max(1, days)
+
+
+def product_block_start_for_period(product: Product) -> datetime:
+    return datetime.utcnow() - timedelta(days=product_limit_block_days(product))
+
+
+def stored_quantity_to_limit_quantity(product: Product, stored_quantity: Any) -> int:
+    try:
+        qty = max(0, int(stored_quantity or 0))
+    except (TypeError, ValueError):
+        qty = 0
+    multiplier = product.kit_quantity if product.is_kit and product.kit_quantity > 1 else 1
+    if multiplier > 1:
+        return (qty + multiplier - 1) // multiplier
+    return qty
+
+
+def requested_quantity_to_limit_quantity(product: Product, requested_quantity: Any) -> int:
+    try:
+        return max(0, int(requested_quantity or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def can_manage_product_request_blocks(user: User | None = None) -> bool:
+    user = user if user is not None else current_user()
+    return bool(user and canonical_role_key(user.role, "") in {"admin", "dev"})
+
+
+def local_date_input_to_blocked_until_utc(value: Any) -> datetime | None:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return None
+    try:
+        local_date = datetime.strptime(text_value, "%Y-%m-%d")
+    except ValueError:
+        return None
+    local_end = local_date.replace(hour=23, minute=59, second=59, microsecond=0)
+    return local_end - SAO_PAULO_OFFSET
+
+
+def get_active_product_request_block(user_id: int, product_id: int, conn: Any | None = None) -> ProductRequestBlock | None:
+    sql = """
+        SELECT prb.*, COALESCE(p.name, '') AS product_name
+          FROM product_request_blocks prb
+          LEFT JOIN products p ON p.id = prb.product_id
+         WHERE prb.user_id = ?
+           AND prb.product_id = ?
+           AND prb.revoked_at IS NULL
+           AND prb.blocked_until > ?
+         LIMIT 1
+    """
+    params = (int(user_id), int(product_id), now_iso())
+    if conn is not None:
+        row = conn.execute(sql, params).fetchone()
+        return row_to_product_request_block(row)
+    with db_connect() as local_conn:
+        row = local_conn.execute(sql, params).fetchone()
+    return row_to_product_request_block(row)
+
+
+def list_product_request_blocks_for_user(user_id: int, conn: Any | None = None) -> list[ProductRequestBlock]:
+    sql = """
+        SELECT prb.*, COALESCE(p.name, '') AS product_name
+          FROM product_request_blocks prb
+          LEFT JOIN products p ON p.id = prb.product_id
+         WHERE prb.user_id = ?
+         ORDER BY (prb.revoked_at IS NULL AND prb.blocked_until > ?) DESC, prb.blocked_until DESC, prb.id DESC
+    """
+    params = (int(user_id), now_iso())
+    if conn is not None:
+        rows = conn.execute(sql, params).fetchall()
+    else:
+        with db_connect() as local_conn:
+            rows = local_conn.execute(sql, params).fetchall()
+    return [block for row in rows if (block := row_to_product_request_block(row)) is not None]
+
+
+def list_products_for_request_block_options(limit: int = 500) -> list[Product]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+              FROM products
+             WHERE catalog_archived = 0
+             ORDER BY name COLLATE NOCASE ASC
+             LIMIT ?
+            """,
+            (bounded_int(limit, 500, 50, 1000),),
+        ).fetchall()
+    return [product for row in rows if (product := row_to_product(row)) is not None]
+
+
+def product_requested_in_period(user_id: int, product: Product, conn: Any | None = None) -> int:
+    since_dt = product_block_start_for_period(product)
+
+    def query_total(active_conn: Any) -> int:
+        nonlocal since_dt
+        block_row = active_conn.execute(
+            "SELECT revoked_at FROM product_request_blocks WHERE user_id = ? AND product_id = ?",
+            (int(user_id), int(product.id)),
+        ).fetchone()
+        if block_row is not None and block_row["revoked_at"]:
+            revoked_dt = parse_dt(block_row["revoked_at"])
+            if revoked_dt is not None and revoked_dt > since_dt:
+                since_dt = revoked_dt
+        since_iso = since_dt.strftime("%Y-%m-%d %H:%M:%S")
+        row = active_conn.execute(
+            """
+            SELECT COALESCE(SUM(ri.quantity), 0) AS total
+              FROM request_items ri
+              JOIN supply_requests sr ON sr.id = ri.request_id
+             WHERE sr.user_id = ?
+               AND ri.product_id = ?
+               AND sr.status IN ('pending', 'approved')
+               AND sr.created_at >= ?
+            """,
+            (int(user_id), int(product.id), since_iso),
+        ).fetchone()
+        return stored_quantity_to_limit_quantity(product, (row["total"] if row else 0) or 0)
+
+    if conn is not None:
+        return query_total(conn)
+    with db_connect() as local_conn:
+        return query_total(local_conn)
+
+
+def upsert_product_request_block(conn: Any, user_id: int, product: Product, request_id: int | None, blocked_until: datetime, reason: str, updated_by_id: int | None = None) -> None:
+    conn.execute(
+        """
+        INSERT INTO product_request_blocks (user_id, product_id, blocked_until, reason, created_by_request_id, created_at, updated_at, revoked_at, updated_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+        ON CONFLICT(user_id, product_id) DO UPDATE SET
+            blocked_until = excluded.blocked_until,
+            reason = excluded.reason,
+            created_by_request_id = excluded.created_by_request_id,
+            updated_at = excluded.created_at,
+            revoked_at = NULL,
+            updated_by_id = excluded.updated_by_id
+        """,
+        (int(user_id), int(product.id), blocked_until.strftime("%Y-%m-%d %H:%M:%S"), reason, request_id, now_iso(), updated_by_id),
+    )
+
+
+def apply_automatic_blocks_after_request(conn: Any, user: User, request_id: int, requested_items: list[tuple[Product, int, int]]) -> None:
+    user_id = int(user.id)
+    for product, _effective_quantity, _requested_limit_quantity in requested_items:
+        limit = product_limit_for(product, user)
+        if limit is None or limit <= 0:
+            continue
+        used = product_requested_in_period(user_id, product, conn)
+        if used >= limit:
+            blocked_until = datetime.utcnow() + timedelta(days=product_limit_block_days(product))
+            reason = f"Limite de {limit} {product_limit_unit_label(product)} atingido automaticamente na solicitação #{request_id}."
+            upsert_product_request_block(conn, user_id, product, request_id, blocked_until, reason)
+
+
+def create_limit_block_from_history(user: User, product: Product, limit: int) -> None:
+    try:
+        with db_connect() as conn:
+            blocked_until = datetime.utcnow() + timedelta(days=product_limit_block_days(product))
+            reason = f"Limite de {limit} {product_limit_unit_label(product)} já atingido no período de bloqueio."
+            upsert_product_request_block(conn, user.id, product, None, blocked_until, reason)
+            conn.commit()
+    except Exception:
+        app.logger.exception("Falha ao criar bloqueio automatico retroativo")
+
+
+def apply_user_request_block_form(conn: Any, target_user_id: int, editor: User, form_data: Any) -> None:
+    if not can_manage_product_request_blocks(editor):
+        return
+    existing_blocks = list_product_request_blocks_for_user(target_user_id, conn)
+    for block in existing_blocks:
+        revoke = str(form_data.get(f"block_revoke_{block.id}") or "").lower() in {"on", "1", "true"}
+        if revoke:
+            conn.execute(
+                "UPDATE product_request_blocks SET revoked_at = ?, updated_at = ?, updated_by_id = ? WHERE id = ? AND user_id = ?",
+                (now_iso(), now_iso(), editor.id, block.id, int(target_user_id)),
+            )
+            continue
+        new_until = local_date_input_to_blocked_until_utc(form_data.get(f"block_until_{block.id}"))
+        if new_until is not None:
+            conn.execute(
+                "UPDATE product_request_blocks SET blocked_until = ?, updated_at = ?, revoked_at = NULL, updated_by_id = ? WHERE id = ? AND user_id = ?",
+                (new_until.strftime("%Y-%m-%d %H:%M:%S"), now_iso(), editor.id, block.id, int(target_user_id)),
+            )
+    new_product_id = parse_required_positive_int(form_data.get("new_block_product_id"))
+    new_until = local_date_input_to_blocked_until_utc(form_data.get("new_block_until"))
+    if new_product_id and new_until is not None:
+        product = get_product(new_product_id)
+        if product is not None:
+            upsert_product_request_block(conn, target_user_id, product, None, new_until, "Bloqueio definido manualmente na edição do usuário.", editor.id)
+
+
 def effective_product_quantity(product: Product, requested_quantity: int) -> int:
     multiplier = product.kit_quantity if product.is_kit and product.kit_quantity > 1 else 1
     return max(1, int(requested_quantity or 0)) * multiplier
@@ -3338,7 +3647,7 @@ def parse_optional_int(value: Any) -> int | None:
     return number if number >= 0 else None
 
 
-def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[Product, int]], str | None]:
+def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[Product, int, int]], str | None]:
     if not isinstance(items_payload, list):
         return [], "Lista de itens inválida."
     if not items_payload:
@@ -3354,13 +3663,13 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             return [], "Item inválido no pedido."
         seen[product_id] = seen.get(product_id, 0) + quantity
 
-    normalized: list[tuple[Product, int]] = []
+    normalized: list[tuple[Product, int, int]] = []
     for product_id, quantity in seen.items():
         product = get_product(product_id)
         if product is None or not product.active:
             return [], "Um dos insumos selecionados não está disponível."
         if normalize_stock_tag_slug(product.stock_tag) != SUPPLY_STOCK_TAG:
-            return [], f"{product.name} pertence a outro estoque e nao esta disponivel para solicitacao de insumos."
+            return [], f"{product.name} pertence a outro estoque e não está disponível para solicitação de insumos."
         if not user.is_admin and product.stock_quantity <= 0:
             return [], f"{product.name} está sem estoque no momento."
         if not user.is_admin and product.internal:
@@ -3370,21 +3679,33 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         if user.role == "franchise" and not product.visible_franchise:
             return [], f"{product.name} não está disponível para franquias."
 
-        requested_quantity = quantity
+        requested_quantity = requested_quantity_to_limit_quantity(product, quantity)
 
         if not user.is_admin:
-            limit = product_limit_for(product, user)
-            if limit is not None and requested_quantity > limit:
-                limit_label = "kits" if product.is_kit and product.kit_quantity > 1 else (product.unit_measure or "un")
-                return [], f"Limite de insumos excedido para {product.name}. Limite permitido: {limit} {limit_label}."
+            active_block = get_active_product_request_block(user.id, product.id)
+            if active_block is not None:
+                return [], f"{product.name} está bloqueado para nova solicitação até {active_block.blocked_until_label}."
 
-        quantity = effective_product_quantity(product, requested_quantity)
+            limit = product_limit_for(product, user)
+            if limit is not None and limit > 0:
+                limit_label = product_limit_unit_label(product)
+                already_requested = product_requested_in_period(user.id, product)
+                if requested_quantity > limit:
+                    return [], f"Limite de insumos excedido para {product.name}. Limite permitido: {limit} {limit_label}."
+                if already_requested >= limit:
+                    create_limit_block_from_history(user, product, limit)
+                    return [], f"Você já atingiu o limite de {limit} {limit_label} para {product.name}."
+                if already_requested + requested_quantity > limit:
+                    remaining = max(0, limit - already_requested)
+                    return [], f"Limite de insumos excedido para {product.name}. Restam {remaining} {limit_label} no período de bloqueio."
+
+        effective_quantity = effective_product_quantity(product, requested_quantity)
 
         minimum = product.min_order_quantity
-        if minimum is not None and minimum > 0 and quantity < minimum:
+        if minimum is not None and minimum > 0 and effective_quantity < minimum:
             return [], f"A quantidade mínima para solicitar {product.name} é {minimum}."
 
-        normalized.append((product, quantity))
+        normalized.append((product, effective_quantity, requested_quantity))
     return normalized, None
 
 
@@ -3408,6 +3729,7 @@ def fill_product_from_form(product: Product) -> Product:
         product.price_cents = 0
     product.limit_base = parse_optional_int(request.form.get("limit_base"))
     product.limit_franchise = parse_optional_int(request.form.get("limit_franchise"))
+    product.limit_block_days = parse_required_positive_int(request.form.get("limit_block_days")) or 60
     product.min_order_quantity = parse_optional_int(request.form.get("min_order_quantity"))
     if product.min_order_quantity is not None and product.min_order_quantity < 1:
         product.min_order_quantity = None
@@ -3433,7 +3755,7 @@ def product_update_missing_action_permissions(old_product: Product, new_product:
         ((old_product.unit_measure != new_product.unit_measure) or (old_product.is_kit != new_product.is_kit) or (old_product.kit_quantity != new_product.kit_quantity), "products_edit_unit", "unidade de medida/kit"),
         (old_product.stock_quantity != new_product.stock_quantity, "products_edit_stock", "estoque"),
         (old_product.price_cents != new_product.price_cents, "products_edit_price", "preço"),
-        ((old_product.limit_base != new_product.limit_base) or (old_product.limit_franchise != new_product.limit_franchise) or (old_product.min_order_quantity != new_product.min_order_quantity) or (old_product.min_stock != new_product.min_stock) or (old_product.max_stock != new_product.max_stock), "products_edit_limits", "limites/regras"),
+        ((old_product.limit_base != new_product.limit_base) or (old_product.limit_franchise != new_product.limit_franchise) or (old_product.limit_block_days != new_product.limit_block_days) or (old_product.min_order_quantity != new_product.min_order_quantity) or (old_product.min_stock != new_product.min_stock) or (old_product.max_stock != new_product.max_stock), "products_edit_limits", "limites/regras"),
         ((old_product.active != new_product.active) or (old_product.visible_base != new_product.visible_base) or (old_product.visible_franchise != new_product.visible_franchise) or (old_product.internal != new_product.internal), "products_edit_visibility", "visibilidade/status"),
     ]
     missing: list[str] = []
@@ -3487,6 +3809,7 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
     show_stock = user.is_admin
     show_price = user.is_admin or user.role == "franchise"
     limit = product_limit_for(product, user)
+    active_block = None if user.is_admin else get_active_product_request_block(user.id, product.id)
     return {
         "id": product.id,
         "name": product.name,
@@ -3500,6 +3823,10 @@ def product_to_api(product: Product, user: User) -> dict[str, Any]:
         "price": format_brl(product.price_cents),
         "stock_quantity": product.stock_quantity if show_stock else None,
         "limit": limit,
+        "limit_block_days": product.limit_block_days,
+        "blocked": active_block is not None,
+        "blocked_until": active_block.blocked_until_date_input if active_block else "",
+        "blocked_until_label": active_block.blocked_until_label if active_block else "",
         "min_order_quantity": product.min_order_quantity,
         "show_stock": show_stock,
         "show_price": show_price,
@@ -4465,6 +4792,7 @@ PRODUCT_EXPORT_HEADERS_PT = [
     "Valor unitário",
     "Limite para bases",
     "Limite para franquias",
+    "Dias de bloqueio após limite",
     "Quantidade mínima por pedido",
     "Estoque mínimo",
     "Estoque máximo",
@@ -4485,6 +4813,7 @@ PRODUCT_EXPORT_HEADERS_ZH = [
     "单价",
     "基地限制",
     "加盟店限制",
+    "限制后封锁天数",
     "最低订购量",
     "最低库存",
     "最高库存",
@@ -4547,6 +4876,7 @@ def product_row_for_excel_language(product: Product, language: str = "pt") -> li
             product.price_brl,
             product.limit_base,
             product.limit_franchise,
+            product.limit_block_days,
             product.min_order_quantity,
             product.min_stock,
             product.max_stock,
@@ -4568,6 +4898,7 @@ def product_row_for_excel(product: Product) -> list[Any]:
         product.price_brl,
         product.limit_base,
         product.limit_franchise,
+        product.limit_block_days,
         product.min_order_quantity,
         product.min_stock,
         product.max_stock,
@@ -4606,6 +4937,7 @@ PRODUCT_IMPORT_HEADER_ALIASES = {
     "price_cents": ["Valor unitário", "Valor unitario", "Valor", "Preço", "Preco", "Preço unitário", "Preco unitario", "Custo", "单价", "單價", "价格", "價格"],
     "limit_base": ["Limite para bases", "Limite base", "Base", "基地限制", "网点限制"],
     "limit_franchise": ["Limite para franquias", "Limite franquia", "Franquia", "加盟店限制", "加盟限制"],
+    "limit_block_days": ["Dias de bloqueio após limite", "Bloqueio após limite", "Tempo de bloqueio", "Dias de bloqueio", "限制后封锁天数"],
     "min_order_quantity": ["Quantidade mínima por pedido", "Quantidade minima por pedido", "Pedido mínimo", "Pedido minimo", "Qtd mínima", "Qtd minima", "最低订购量"],
     "min_stock": ["Estoque mínimo", "Estoque minimo", "Mínimo", "Minimo", "Min stock", "Min", "最低库存", "最低庫存"],
     "max_stock": ["Estoque máximo", "Estoque maximo", "Máximo", "Maximo", "Max stock", "Max", "最高库存", "最高庫存"],
@@ -4654,6 +4986,7 @@ class ProductImportRecord:
     price_cents: int
     limit_base: int | None
     limit_franchise: int | None
+    limit_block_days: int
     min_order_quantity: int | None
     min_stock: int | None
     max_stock: int | None
@@ -4682,6 +5015,7 @@ def parse_product_import_record(row_number: int, row_values: list[Any], header_m
         price_cents=parse_money_to_cents(get_import_value(row_values, header_map, "price_cents")),
         limit_base=parse_optional_int(get_import_value(row_values, header_map, "limit_base")),
         limit_franchise=parse_optional_int(get_import_value(row_values, header_map, "limit_franchise")),
+        limit_block_days=parse_required_positive_int(get_import_value(row_values, header_map, "limit_block_days")) or 60,
         min_order_quantity=parse_optional_int(get_import_value(row_values, header_map, "min_order_quantity")),
         min_stock=parse_optional_int(get_import_value(row_values, header_map, "min_stock")),
         max_stock=parse_optional_int(get_import_value(row_values, header_map, "max_stock")),
@@ -4706,6 +5040,7 @@ def product_import_signature(record: ProductImportRecord) -> tuple[Any, ...]:
         int(record.price_cents or 0),
         record.limit_base,
         record.limit_franchise,
+        record.limit_block_days,
         record.min_order_quantity,
         record.min_stock,
         record.max_stock,
@@ -4806,6 +5141,7 @@ def product_record_db_values(record: ProductImportRecord) -> tuple[Any, ...]:
         int(record.price_cents or 0),
         record.limit_base,
         record.limit_franchise,
+        record.limit_block_days,
         record.min_order_quantity,
         record.min_stock,
         record.max_stock,
@@ -4848,6 +5184,7 @@ def product_upsert_sql_rows(rows: list[tuple[int | None, ProductImportRecord]], 
             int(record.price_cents or 0),
             record.limit_base,
             record.limit_franchise,
+            record.limit_block_days,
             record.min_order_quantity,
             record.min_stock,
             record.max_stock,
@@ -4870,7 +5207,7 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
     created = sum(1 for target_id, _record in rows if target_id is None)
     updated = len(rows) - created
     skipped = 0
-    fields = "id, name, category, category_emoji, unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents, limit_base, limit_franchise, min_order_quantity, min_stock, max_stock, stock_tag, active, catalog_archived, created_at, updated_at"
+    fields = "id, name, category, category_emoji, unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents, limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock, stock_tag, active, catalog_archived, created_at, updated_at"
     update_set = """
         name = excluded.name,
         category = excluded.category,
@@ -4883,6 +5220,7 @@ def execute_upsert_products_chunked(conn: Any, rows: list[tuple[int | None, Prod
         price_cents = excluded.price_cents,
         limit_base = excluded.limit_base,
         limit_franchise = excluded.limit_franchise,
+        limit_block_days = excluded.limit_block_days,
         min_order_quantity = excluded.min_order_quantity,
         min_stock = excluded.min_stock,
         max_stock = excluded.max_stock,
@@ -4975,6 +5313,7 @@ def ensure_product_import_columns(conn: Any) -> None:
         ("is_kit", "ALTER TABLE products ADD COLUMN is_kit INTEGER NOT NULL DEFAULT 0"),
         ("kit_quantity", "ALTER TABLE products ADD COLUMN kit_quantity INTEGER NOT NULL DEFAULT 1"),
         ("stock_tag", "ALTER TABLE products ADD COLUMN stock_tag TEXT NOT NULL DEFAULT 'insumos'"),
+        ("limit_block_days", "ALTER TABLE products ADD COLUMN limit_block_days INTEGER NOT NULL DEFAULT 60"),
     ]
     for column_name, sql in migrations:
         if column_name not in product_columns:
@@ -5977,7 +6316,7 @@ def api_products():
     sql = """
         SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
                unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-               limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+               limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
                active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
          FROM products
          WHERE active = 1 AND catalog_archived = 0
@@ -6080,7 +6419,7 @@ def api_create_request():
             conn.rollback()
             return jsonify({"ok": False, "message": "Não foi possível registrar a solicitação."}), 500
 
-        for product, quantity in normalized:
+        for product, quantity, _requested_limit_quantity in normalized:
             conn.execute(
                 """
                 INSERT INTO request_items (request_id, product_id, product_name_snapshot, quantity, price_cents_snapshot)
@@ -6088,6 +6427,7 @@ def api_create_request():
                 """,
                 (request_id, product.id, product.name, quantity, product.price_cents),
             )
+        apply_automatic_blocks_after_request(conn, user, int(request_id), normalized)
         conn.commit()
 
     try:
@@ -6189,7 +6529,7 @@ def admin_dashboard():
             """
             SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
                    unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
                    active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
               FROM products
              WHERE catalog_archived = 0 AND stock_quantity <= 20
@@ -6989,12 +7329,28 @@ def admin_user_edit(user_id: int):
                     ),
                 )
             save_user_page_permissions(conn, user_id, role, selected_pages)
+            apply_user_request_block_form(conn, user_id, current, request.form)
             conn.commit()
 
         flash("Acesso do usuário atualizado.", "success")
         return redirect_to_return("admin_users")
 
-    return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=selected_permissions_for_form(target), allowed_role_options=allowed_role_options_for_editor(require_current_user(), target), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user(), target), can_edit_dev_password=can_edit_dev_password(require_current_user()))
+    return render_template(
+        "admin/user_form.html",
+        user=target,
+        is_new=False,
+        permission_options=PAGE_PERMISSION_OPTIONS,
+        selected_permissions=selected_permissions_for_form(target),
+        allowed_role_options=allowed_role_options_for_editor(require_current_user(), target),
+        role_labels=role_option_labels(),
+        role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)],
+        role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None),
+        can_edit_admin_role=can_change_admin_role(require_current_user(), target),
+        can_edit_dev_password=can_edit_dev_password(require_current_user()),
+        can_manage_product_blocks=can_manage_product_request_blocks(require_current_user()),
+        user_request_blocks=list_product_request_blocks_for_user(target.id) if can_manage_product_request_blocks(require_current_user()) else [],
+        block_product_options=list_products_for_request_block_options() if can_manage_product_request_blocks(require_current_user()) else [],
+    )
 
 
 @app.post("/admin/users/<int:user_id>/status")
@@ -7443,7 +7799,7 @@ def admin_products():
             f"""
             SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
                    unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
                    active, visible_base, visible_franchise, internal, stock_tag,
                    (SELECT name FROM stock_tags WHERE slug = products.stock_tag) AS stock_tag_name,
                    catalog_archived, created_at, updated_at
@@ -7741,7 +8097,7 @@ def admin_products_export():
             cell.alignment = Alignment(vertical="center")
         if len(row) >= 8:
             row[7].number_format = 'R$ #,##0.00'
-    widths = [10, 38, 24, 16, 24, 12, 18, 48, 18, 18, 22, 24, 24, 18, 18, 20, 14]
+    widths = [10, 38, 24, 16, 24, 12, 18, 48, 18, 18, 22, 24, 24, 24, 18, 18, 20, 14]
     for idx, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(idx)].width = width
     worksheet.freeze_panes = "A2"
@@ -7872,10 +8228,10 @@ def admin_product_new():
                 INSERT INTO products (
                     name, category, category_emoji, image_name, image_key, image_content_type,
                     unit_measure, is_kit, kit_quantity, description, stock_quantity,
-                    price_cents, limit_base, limit_franchise, min_order_quantity,
+                    price_cents, limit_base, limit_franchise, limit_block_days, min_order_quantity,
                     min_stock, max_stock, active, visible_base, visible_franchise, internal, stock_tag, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     product.name,
@@ -7892,6 +8248,7 @@ def admin_product_new():
                     product.price_cents,
                     product.limit_base,
                     product.limit_franchise,
+                    product.limit_block_days,
                     product.min_order_quantity,
                     product.min_stock,
                     product.max_stock,
@@ -7967,7 +8324,7 @@ def admin_product_edit(product_id: int):
                 SET name = ?, category = ?, category_emoji = ?, image_name = ?, image_key = ?,
                     image_content_type = ?, unit_measure = ?, is_kit = ?, kit_quantity = ?, description = ?,
                     stock_quantity = ?, price_cents = ?, limit_base = ?, limit_franchise = ?,
-                    min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
+                    limit_block_days = ?, min_order_quantity = ?, min_stock = ?, max_stock = ?, active = ?,
                     visible_base = ?, visible_franchise = ?, internal = ?, stock_tag = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -7986,6 +8343,7 @@ def admin_product_edit(product_id: int):
                     product.price_cents,
                     product.limit_base,
                     product.limit_franchise,
+                    product.limit_block_days,
                     product.min_order_quantity,
                     product.min_stock,
                     product.max_stock,
@@ -8562,7 +8920,7 @@ def admin_stock():
             """
             SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
                    unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-                   limit_base, limit_franchise, min_order_quantity, min_stock, max_stock,
+                   limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
                    active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
              FROM products
              WHERE catalog_archived = 0 AND stock_tag = ?

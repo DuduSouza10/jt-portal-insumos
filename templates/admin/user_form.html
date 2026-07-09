@@ -87,6 +87,55 @@
       <button class="btn ghost" type="button" data-open-permission-modal>{{ 'Editar páginas' if can_edit_pages_field else 'Ver páginas' }}</button>
     </div>
 
+    {% if not is_new and can_manage_product_blocks %}
+    <div class="full access-permission-summary card">
+      <div>
+        <strong>Bloqueio de produtos</strong>
+        <span>Somente Dev e Admin podem revogar ou alterar o prazo. O bloqueio automático é criado quando o solicitante atinge o limite do produto.</span>
+      </div>
+    </div>
+
+    <div class="full card">
+      <div class="form-grid two-cols">
+        {% if user_request_blocks is defined and user_request_blocks %}
+          {% for block in user_request_blocks %}
+            <label>
+              Produto bloqueado
+              <input value="{{ block.product_name }}" disabled>
+              <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Revogado' if block.revoked_at else 'Expirado') }}</small>
+            </label>
+            <label>
+              Bloqueado até
+              <input name="block_until_{{ block.id }}" type="date" value="{{ block.blocked_until_date_input }}">
+            </label>
+            <label class="checkbox-line">
+              <input type="checkbox" name="block_revoke_{{ block.id }}">
+              Revogar este bloqueio
+            </label>
+            <div></div>
+          {% endfor %}
+        {% else %}
+          <div class="muted">Este usuário ainda não possui bloqueios de produto.</div>
+          <div></div>
+        {% endif %}
+
+        <label>
+          Adicionar bloqueio manual
+          <select name="new_block_product_id">
+            <option value="">Selecione um produto</option>
+            {% for product_option in (block_product_options if block_product_options is defined else []) %}
+              <option value="{{ product_option.id }}">{{ product_option.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Bloquear até
+          <input name="new_block_until" type="date">
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
     {% set can_change_dev_auth_password = can_edit_dev_password and user and current_user and user.id == current_user.id and current_user.is_dev %}
     {% if can_change_dev_auth_password %}
     <div class="full access-permission-summary card dev-password-change-summary">

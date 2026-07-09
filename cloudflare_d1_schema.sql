@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS products (
     price_cents INTEGER NOT NULL DEFAULT 0,
     limit_base INTEGER,
     limit_franchise INTEGER,
+    limit_block_days INTEGER NOT NULL DEFAULT 60,
     min_order_quantity INTEGER,
     min_stock INTEGER,
     max_stock INTEGER,
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS products (
     visible_base INTEGER NOT NULL DEFAULT 1,
     visible_franchise INTEGER NOT NULL DEFAULT 1,
     internal INTEGER NOT NULL DEFAULT 0,
+    stock_tag TEXT NOT NULL DEFAULT 'insumos',
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
@@ -71,6 +73,28 @@ CREATE TABLE IF NOT EXISTS request_items (
     FOREIGN KEY(request_id) REFERENCES supply_requests(id) ON DELETE CASCADE,
     FOREIGN KEY(product_id) REFERENCES products(id)
 );
+
+
+CREATE TABLE IF NOT EXISTS product_request_blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    blocked_until TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_by_request_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    revoked_at TEXT,
+    updated_by_id INTEGER,
+    UNIQUE(user_id, product_id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY(created_by_request_id) REFERENCES supply_requests(id),
+    FOREIGN KEY(updated_by_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id);
+CREATE INDEX IF NOT EXISTS idx_product_request_blocks_blocked_until ON product_request_blocks(blocked_until);
 
 CREATE TABLE IF NOT EXISTS admin_login_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
