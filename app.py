@@ -1581,10 +1581,29 @@ def init_db() -> None:
             )
         if "editable_user_fields_json" not in access_role_columns:
             conn.execute("ALTER TABLE access_role_types ADD COLUMN editable_user_fields_json TEXT NOT NULL DEFAULT '[]'")
-            conn.execute(
-                "UPDATE access_role_types SET editable_user_fields_json = ? WHERE role_key = 'admin' AND editable_user_fields_json = '[]'",
-                (json.dumps(["responsible_name", "username", "password", "role", "status", "organization_name", "franchise_name", "franchise_number", "cnpj", "page_permissions"], ensure_ascii=False),),
-            )
+        admin_full_action_permissions = json.dumps([
+            "products_create", "products_edit_basic", "products_edit_category", "products_edit_unit",
+            "products_edit_price", "products_edit_stock", "products_edit_limits", "products_edit_visibility",
+            "products_import", "products_export", "products_delete", "stock_material_entries",
+            "stock_assets_create", "stock_reports", "requests_edit_items", "requests_approve_reject",
+            "requests_delete", "users_create_edit", "users_import_export", "users_status_delete",
+        ], ensure_ascii=False)
+        admin_full_editable_roles = json.dumps(["base", "franchise", "admin"], ensure_ascii=False)
+        admin_full_editable_fields = json.dumps([
+            "responsible_name", "username", "password", "role", "status", "organization_name",
+            "franchise_name", "franchise_number", "cnpj", "page_permissions",
+        ], ensure_ascii=False)
+        conn.execute(
+            """
+            UPDATE access_role_types
+               SET action_permissions_json = ?,
+                   editable_roles_json = ?,
+                   editable_user_fields_json = ?,
+                   updated_at = COALESCE(updated_at, ?)
+             WHERE role_key = 'admin'
+            """,
+            (admin_full_action_permissions, admin_full_editable_roles, admin_full_editable_fields, now_iso()),
+        )
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         user_migrations = [
@@ -2492,6 +2511,14 @@ def get_access_role_definition(role_key: str | None) -> AccessRoleType | None:
     if key == "dev":
         return default_static_access_role("dev")
     override = get_access_role_override(key)
+    if key == "admin":
+        if override is not None:
+            override.action_permissions = default_static_action_permissions("admin")
+            override.editable_roles = default_static_user_edit_roles("admin")
+            override.editable_user_fields = default_static_user_edit_fields("admin")
+            override.permissions = default_static_page_permissions("admin")
+            return override
+        return default_static_access_role("admin")
     if override is not None:
         return override
     if key in STATIC_ROLE_KEYS:
@@ -2610,6 +2637,10 @@ def get_user_editable_roles(user: User | None) -> set[str]:
     role_key = canonical_role_key(user.role, "base")
     if role_key == "dev":
         return set(all_role_options())
+    if role_key == "admin":
+        roles = set(all_role_options())
+        roles.discard("dev")
+        return roles
     role_definition = get_access_role_definition(role_key)
     roles = set(role_definition.editable_roles if role_definition is not None else [])
     roles.discard("dev")
@@ -2620,7 +2651,7 @@ def get_user_editable_fields(user: User | None) -> set[str]:
     if user is None:
         return set()
     role_key = canonical_role_key(user.role, "base")
-    if role_key == "dev":
+    if role_key in {"admin", "dev"}:
         return user_edit_field_key_set()
     role_definition = get_access_role_definition(role_key)
     fields = set(role_definition.editable_user_fields if role_definition is not None else [])
@@ -5899,74 +5930,8 @@ def verify_admin():
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == "POST":
-        responsible_name = request.form.get("responsible_name", "").strip()
-        role = normalize_user_role(request.form.get("role", "base"), allow_admin=False) or "base"
-        username = normalize_username(request.form.get("username", ""))
-        email = synthetic_email_for_username(username)
-        password = request.form.get("password", "")
-
-        try:
-            organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
-                role,
-                organization_name=request.form.get("organization_name", ""),
-                franchise_name=request.form.get("franchise_name", ""),
-                franchise_number=request.form.get("franchise_number", ""),
-                cnpj=request.form.get("cnpj", ""),
-            )
-        except ValueError as exc:
-            flash(str(exc), "warning")
-            return redirect(url_for("register"))
-        if not responsible_name or not username or not password:
-            flash("Preencha todos os campos obrigatórios.", "warning")
-            return redirect(url_for("register"))
-        if not valid_username(username):
-            flash("Use um nome de usuário com 3 a 40 caracteres: letras, números, ponto, hífen ou underline.", "warning")
-            return redirect(url_for("register"))
-        if get_user_by_username(username) is not None:
-            flash("Já existe cadastro com esse nome de usuário.", "warning")
-            return redirect(url_for("register"))
-
-        try:
-            new_user_id: int | None = None
-            with db_connect() as conn:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO users (
-                        responsible_name, organization_name, franchise_name, franchise_number, cnpj,
-                        username, email, password_hash, role, status, created_at, page_permissions_configured
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)
-                    """,
-                    (
-                        responsible_name,
-                        organization_name,
-                        franchise_name,
-                        franchise_number,
-                        cnpj,
-                        username,
-                        email,
-                        generate_password_hash(password),
-                        role,
-                        now_iso(),
-                    ),
-                )
-                new_user_id = get_cursor_lastrowid(cursor)
-                conn.commit()
-            if new_user_id is not None:
-                try:
-                    created_user = get_user(int(new_user_id))
-                    if created_user is not None:
-                        notify_feishu_user_registration_requested(created_user, public_url_for("admin_users", status="pending"))
-                except Exception:
-                    app.logger.exception("Falha ao preparar notificacao Feishu do cadastro")
-            flash("Cadastro enviado. Aguarde aprovação de um administrador.", "success")
-            return redirect(url_for("login"))
-        except sqlite3.IntegrityError:
-            flash("Já existe cadastro com esse nome de usuário.", "warning")
-            return redirect(url_for("register"))
-
-    return render_template("register.html")
+    flash("A solicitação pública de acesso foi desativada. Os logins devem ser criados dentro da plataforma por um cargo com permissão.", "warning")
+    return redirect(url_for("login"))
 
 
 @app.route("/logout")
