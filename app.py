@@ -1704,21 +1704,45 @@ def init_db() -> None:
             "requests_delete", "users_create_edit", "users_import_export", "users_status_delete",
         ], ensure_ascii=False)
         admin_full_editable_roles = json.dumps(["base", "franchise", "admin"], ensure_ascii=False)
-        admin_full_editable_fields = json.dumps([
-            "responsible_name", "username", "password", "role", "status", "organization_name",
-            "franchise_name", "franchise_number", "cnpj", "page_permissions",
-        ], ensure_ascii=False)
+        admin_default_editable_fields = json.dumps(default_static_user_edit_fields("admin"), ensure_ascii=False)
         conn.execute(
             """
-            UPDATE access_role_types
-               SET action_permissions_json = ?,
-                   editable_roles_json = ?,
-                   editable_user_fields_json = ?,
-                   updated_at = COALESCE(updated_at, ?)
-             WHERE role_key = 'admin'
+            INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at)
+            VALUES ('admin', 'Administrador', ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(role_key) DO UPDATE SET
+                action_permissions_json = excluded.action_permissions_json,
+                editable_roles_json = excluded.editable_roles_json,
+                updated_at = COALESCE(access_role_types.updated_at, excluded.updated_at)
             """,
-            (admin_full_action_permissions, admin_full_editable_roles, admin_full_editable_fields, now_iso()),
+            (
+                STATIC_ROLE_DESCRIPTIONS.get("admin", "Tipo padrão administrativo."),
+                json.dumps(default_static_page_permissions("admin"), ensure_ascii=False),
+                admin_full_action_permissions,
+                admin_full_editable_roles,
+                admin_default_editable_fields,
+                now_iso(),
+                now_iso(),
+            ),
         )
+        admin_identity_lock_key = "migration_v203_admin_identity_fields_locked"
+        if conn.execute("SELECT 1 FROM app_settings WHERE key = ?", (admin_identity_lock_key,)).fetchone() is None:
+            old_admin_full_editable_fields = json.dumps([
+                "responsible_name", "username", "password", "role", "status", "organization_name",
+                "franchise_name", "franchise_number", "cnpj", "page_permissions",
+            ], ensure_ascii=False)
+            conn.execute(
+                """
+                UPDATE access_role_types
+                   SET editable_user_fields_json = ?, updated_at = ?
+                 WHERE role_key = 'admin'
+                   AND (editable_user_fields_json = ? OR editable_user_fields_json = '[]' OR editable_user_fields_json IS NULL)
+                """,
+                (admin_default_editable_fields, now_iso(), old_admin_full_editable_fields),
+            )
+            conn.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES (?, '1', ?)",
+                (admin_identity_lock_key, now_iso()),
+            )
 
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         user_migrations = [
@@ -2962,8 +2986,13 @@ def default_static_user_edit_roles(role: str) -> list[str]:
 
 def default_static_user_edit_fields(role: str) -> list[str]:
     key = canonical_role_key(role, "")
-    if key in {"admin", "dev"}:
+    if key == "dev":
         return [item["key"] for item in USER_EDIT_FIELD_OPTIONS]
+    if key == "admin":
+        # Por padrão, Admin não altera identidade/login do usuário.
+        # O Dev pode liberar esses campos em Tipos de acesso > Administrador.
+        protected_by_default = {"responsible_name", "username"}
+        return [item["key"] for item in USER_EDIT_FIELD_OPTIONS if item["key"] not in protected_by_default]
     return []
 
 
@@ -3139,10 +3168,13 @@ def get_access_role_definition(role_key: str | None) -> AccessRoleType | None:
     override = get_access_role_override(key)
     if key == "admin":
         if override is not None:
+            # Páginas, ações e cargos do Admin continuam completos.
+            # Campos editáveis respeitam o que o Dev marcou no tipo de acesso.
             override.action_permissions = default_static_action_permissions("admin")
             override.editable_roles = default_static_user_edit_roles("admin")
-            override.editable_user_fields = default_static_user_edit_fields("admin")
             override.permissions = default_static_page_permissions("admin")
+            if not override.editable_user_fields:
+                override.editable_user_fields = default_static_user_edit_fields("admin")
             return override
         return default_static_access_role("admin")
     if override is not None:
@@ -3277,7 +3309,7 @@ def get_user_editable_fields(user: User | None) -> set[str]:
     if user is None:
         return set()
     role_key = canonical_role_key(user.role, "base")
-    if role_key in {"admin", "dev"}:
+    if role_key == "dev":
         return user_edit_field_key_set()
     role_definition = get_access_role_definition(role_key)
     fields = set(role_definition.editable_user_fields if role_definition is not None else [])
@@ -3319,6 +3351,10 @@ def can_edit_user_field(current: User | None, target: User | None, field_key: st
         return True
     if not user_has_action_access(current, "users_create_edit"):
         return False
+    # Na criação do acesso, responsável/login/senha precisam ser preenchidos.
+    # Depois de criado, responsável e login só mudam se o Dev liberar esses campos.
+    if is_new and key in {"responsible_name", "username", "password"}:
+        return True
     if not is_new and target is not None and not can_edit_user_target(current, target):
         return False
     return key in get_user_editable_fields(current)
@@ -3757,6 +3793,21 @@ def notify_feishu_stock_movement(
         qty_prefix = "+" if quantity_delta > 0 else ""
         qty_text = f"{qty_prefix}{quantity_delta} {unit_measure}".strip()
         movement_dt = parse_dt(created_at) if created_at else datetime.utcnow()
+        request_unit = ""
+        request_requester = ""
+        if request_id:
+            request_row = conn.execute(
+                """
+                SELECT u.responsible_name, u.username, u.organization_name
+                  FROM supply_requests sr
+                  LEFT JOIN users u ON u.id = sr.user_id
+                 WHERE sr.id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+            if request_row is not None:
+                request_unit = str(request_row["organization_name"] or "").strip()
+                request_requester = str(request_row["responsible_name"] or request_row["username"] or "").strip()
         responsible_label = "Aprovado por" if movement_type == "request_approved" else "Responsável"
         lines = [
             feishu_line(responsible_label, responsible),
@@ -3769,6 +3820,15 @@ def notify_feishu_stock_movement(
         ]
         if request_id:
             lines.insert(1, feishu_line("Solicitação", f"#{request_id}"))
+            if request_unit:
+                lines.insert(2, feishu_line("Unidade/Base", request_unit))
+            if request_requester:
+                lines.insert(3, feishu_line("Pedido por", request_requester))
+            if movement_type == "request_approved":
+                reason = f"Saída por aprovação da solicitação #{request_id}"
+                if request_unit:
+                    reason += f" para {request_unit}"
+                lines.insert(4, feishu_line("Motivo da saída", reason))
         if note:
             lines.append(feishu_line("Observação", note))
         link_url = public_url_for("admin_request_detail", request_id=request_id) if request_id else public_url_for("admin_material_entries")
@@ -7672,7 +7732,7 @@ def admin_user_new():
         if not can_create_user_role(current, requested_role):
             flash("Seu tipo de acesso nao pode criar usuarios com esse cargo.", "warning")
             return redirect_to_return("admin_users")
-        required_create_fields = {"responsible_name", "username", "password", "role", "status"}
+        required_create_fields = {"role", "status"}
         if not current.is_dev and not required_create_fields.issubset(get_user_editable_fields(current)):
             flash("Seu tipo de acesso nao tem todos os campos necessarios para criar usuarios.", "warning")
             return redirect_to_return("admin_users")

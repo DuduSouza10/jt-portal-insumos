@@ -88,52 +88,70 @@
     </div>
 
     {% if not is_new and can_manage_product_blocks %}
-    <div class="full access-permission-summary card">
+    <div class="full access-permission-summary card user-product-block-summary">
       <div>
         <strong>Bloqueio de produtos</strong>
         <span>Somente Dev e Admin podem revogar ou alterar o prazo. O bloqueio automático é criado quando o solicitante atinge o limite do produto.</span>
       </div>
     </div>
 
-    <div class="full card">
-      <div class="form-grid two-cols">
-        {% if user_request_blocks is defined and user_request_blocks %}
-          {% for block in user_request_blocks %}
-            <label>
-              Produto bloqueado
-              <input value="{{ block.product_name }}" disabled>
-              <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Inativo: solicitação recusada' if block.created_by_request_id and block.source_request_status == 'rejected' else ('Revogado' if block.revoked_at else 'Expirado')) }}</small>
-            </label>
+    <section class="full card user-product-block-panel">
+      {% if user_request_blocks is defined and user_request_blocks %}
+      <div class="product-block-list">
+        {% for block in user_request_blocks %}
+        <article class="product-block-card {{ 'active' if block.is_active else 'inactive' }}">
+          <div class="product-block-main">
+            <div>
+              <span class="product-block-label">Produto bloqueado</span>
+              <strong>{{ block.product_name }}</strong>
+            </div>
+            <span class="block-status-pill {{ 'active' if block.is_active else 'inactive' }}">
+              {{ 'Ativo' if block.is_active else ('Recusado' if block.created_by_request_id and block.source_request_status == 'rejected' else ('Revogado' if block.revoked_at else 'Expirado')) }}
+            </span>
+          </div>
+          <div class="product-block-fields">
             <label>
               Bloqueado até
               <input name="block_until_{{ block.id }}" type="date" value="{{ block.blocked_until_date_input }}">
+              <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Inativo: solicitação recusada' if block.created_by_request_id and block.source_request_status == 'rejected' else ('Revogado' if block.revoked_at else 'Expirado')) }}</small>
             </label>
-            <label class="checkbox-line">
+            <label class="checkbox-line product-block-revoke">
               <input type="checkbox" name="block_revoke_{{ block.id }}">
-              Revogar este bloqueio
+              <span>Revogar este bloqueio</span>
             </label>
-            <div></div>
-          {% endfor %}
-        {% else %}
-          <div class="muted">Este usuário ainda não possui bloqueios de produto.</div>
-          <div></div>
-        {% endif %}
-
-        <label>
-          Adicionar bloqueio manual
-          <select name="new_block_product_id">
-            <option value="">Selecione um produto</option>
-            {% for product_option in (block_product_options if block_product_options is defined else []) %}
-              <option value="{{ product_option.id }}">{{ product_option.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>
-          Bloquear até
-          <input name="new_block_until" type="date">
-        </label>
+          </div>
+        </article>
+        {% endfor %}
       </div>
-    </div>
+      {% else %}
+      <div class="product-block-empty">
+        <strong>Nenhum bloqueio ativo ou registrado</strong>
+        <span>Este usuário ainda não possui bloqueios de produto.</span>
+      </div>
+      {% endif %}
+
+      <div class="manual-block-card">
+        <div class="manual-block-head">
+          <strong>Adicionar bloqueio manual</strong>
+          <span>Escolha o produto e a data final do bloqueio.</span>
+        </div>
+        <div class="manual-block-grid">
+          <label>
+            Produto
+            <select name="new_block_product_id">
+              <option value="">Selecione um produto</option>
+              {% for product_option in (block_product_options if block_product_options is defined else []) %}
+                <option value="{{ product_option.id }}">{{ product_option.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Bloquear até
+            <input name="new_block_until" type="date">
+          </label>
+        </div>
+      </div>
+    </section>
     {% endif %}
 
     {% set can_change_dev_auth_password = can_edit_dev_password and user and current_user and user.id == current_user.id and current_user.is_dev %}

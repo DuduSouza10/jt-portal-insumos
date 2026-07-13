@@ -15914,3 +15914,219 @@ body.product-image-modal-open .product-image-modal * {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* v203 - alinhamento dos cards de bloqueio e detalhes da solicitação. */
+.user-product-block-summary {
+  margin-bottom: -4px;
+}
+
+.user-product-block-panel {
+  padding: 22px !important;
+  display: grid;
+  gap: 18px;
+  overflow: visible !important;
+}
+
+.product-block-list {
+  display: grid;
+  gap: 14px;
+}
+
+.product-block-card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(255,255,255,.025);
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.product-block-card.active {
+  border-color: rgba(230,0,18,.28);
+  background: linear-gradient(135deg, rgba(230,0,18,.09), rgba(255,255,255,.025));
+}
+
+.product-block-card.inactive {
+  opacity: .82;
+}
+
+.product-block-main,
+.manual-block-head,
+.request-side-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.product-block-main > div,
+.manual-block-head > div,
+.request-side-head > div {
+  min-width: 0;
+}
+
+.product-block-label,
+.manual-block-head span,
+.request-meta-item span,
+.request-note-box span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .01em;
+  margin-bottom: 5px;
+}
+
+.product-block-main strong {
+  display: block;
+  color: var(--text-strong);
+  font-size: 16px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.block-status-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 950;
+  border: 1px solid var(--line);
+  color: var(--muted-2);
+  background: rgba(255,255,255,.035);
+}
+
+.block-status-pill.active {
+  color: #78efb1;
+  border-color: rgba(19,163,91,.35);
+  background: rgba(19,163,91,.11);
+}
+
+.product-block-fields,
+.manual-block-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .55fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.product-block-revoke {
+  min-height: 54px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.025);
+  color: var(--muted-2);
+}
+
+.product-block-revoke input {
+  margin: 0;
+}
+
+.product-block-empty {
+  border: 1px dashed rgba(255,255,255,.16);
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  background: rgba(255,255,255,.02);
+}
+
+.product-block-empty strong,
+.manual-block-head strong {
+  color: var(--text-strong);
+  font-size: 15px;
+}
+
+.manual-block-card {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.request-detail-card {
+  align-self: start;
+  gap: 16px !important;
+}
+
+.request-side-head h2 {
+  margin: 2px 0 0 !important;
+}
+
+.request-meta-list {
+  display: grid;
+  gap: 10px;
+}
+
+.request-meta-item,
+.request-note-box,
+.request-action-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: rgba(255,255,255,.025);
+  min-width: 0;
+}
+
+.request-meta-item strong,
+.request-note-box p,
+.request-action-item span,
+.request-action-item small {
+  display: block;
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.request-note-box p {
+  margin: 0 !important;
+  color: var(--muted-2) !important;
+  font-weight: 750;
+}
+
+.request-action-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.request-action-history h2 {
+  font-size: 16px;
+  margin-top: 4px !important;
+}
+
+.request-action-item strong {
+  display: block;
+  color: var(--text-strong);
+  margin-bottom: 4px;
+}
+
+.request-action-item small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+html[data-theme="light"] .product-block-card,
+html[data-theme="light"] .product-block-revoke,
+html[data-theme="light"] .product-block-empty,
+html[data-theme="light"] .request-meta-item,
+html[data-theme="light"] .request-note-box,
+html[data-theme="light"] .request-action-item {
+  background: rgba(255,255,255,.62);
+}
+
+@media (max-width: 720px) {
+  .product-block-main,
+  .manual-block-head,
+  .request-side-head {
+    display: grid;
+  }
+  .product-block-fields,
+  .manual-block-grid {
+    grid-template-columns: 1fr;
+  }
+}

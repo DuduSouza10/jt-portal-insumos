@@ -48,25 +48,63 @@
     {% endif %}
   </div>
 
-  <div class="card request-side">
-    <h2>Dados</h2>
+  <aside class="card request-side request-detail-card">
+    <div class="request-side-head">
+      <div>
+        <span class="eyebrow">Solicitação</span>
+        <h2>Dados</h2>
+      </div>
+      <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+    </div>
     <a class="btn primary full-btn" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
-    <p><strong>Unidade:</strong> {{ supply_request.user.organization_name }}</p>
-    <p><strong>Tipo:</strong> {{ 'Base' if supply_request.user.role == 'base' else ('Franquia' if supply_request.user.role == 'franchise' else 'Admin') }}</p>
-    {% if supply_request.user.role == 'base' %}
-    <p><strong>Pessoas na base:</strong> {{ supply_request.people_count or '-' }}</p>
-    {% endif %}
-    <p><strong>Usuário:</strong> {{ supply_request.user.username }}</p>
-    <p><strong>Enviado em:</strong> {{ format_sao_paulo_datetime(supply_request.created_at) }}</p>
-    <p><strong>Ação executada:</strong><br>{{ request_action_summary(supply_request) }}</p>
-    <p><strong>Observação do solicitante:</strong><br>{{ supply_request.user_note or '-' }}</p>
-    <p><strong>Observação admin:</strong><br>{{ supply_request.admin_note or '-' }}</p>
+
+    <div class="request-meta-list">
+      <div class="request-meta-item">
+        <span>Unidade</span>
+        <strong>{{ supply_request.user.organization_name }}</strong>
+      </div>
+      <div class="request-meta-item">
+        <span>Tipo</span>
+        <strong>{{ 'Base' if supply_request.user.role == 'base' else ('Franquia' if supply_request.user.role == 'franchise' else 'Admin') }}</strong>
+      </div>
+      {% if supply_request.user.role == 'base' %}
+      <div class="request-meta-item">
+        <span>Pessoas na base</span>
+        <strong>{{ supply_request.people_count or '-' }}</strong>
+      </div>
+      {% endif %}
+      <div class="request-meta-item">
+        <span>Usuário</span>
+        <strong>{{ supply_request.user.username }}</strong>
+      </div>
+      <div class="request-meta-item">
+        <span>Enviado em</span>
+        <strong>{{ format_sao_paulo_datetime(supply_request.created_at) }}</strong>
+      </div>
+      <div class="request-meta-item wide">
+        <span>Ação executada</span>
+        <strong>{{ request_action_summary(supply_request) }}</strong>
+      </div>
+    </div>
+
+    <div class="request-note-box">
+      <span>Observação do solicitante</span>
+      <p>{{ supply_request.user_note or '-' }}</p>
+    </div>
+    <div class="request-note-box">
+      <span>Observação admin</span>
+      <p>{{ supply_request.admin_note or '-' }}</p>
+    </div>
 
     {% if supply_request.action_logs %}
     <div class="request-action-history">
       <h2>Histórico de ações</h2>
       {% for action_log in supply_request.action_logs %}
-      <p><strong>{{ action_log.action_label }}</strong><br>{{ action_log.actor_name }} • {{ format_sao_paulo_datetime(action_log.created_at) }}{% if action_log.note %}<br><small>{{ action_log.note }}</small>{% endif %}</p>
+      <div class="request-action-item">
+        <strong>{{ action_log.action_label }}</strong>
+        <span>{{ action_log.actor_name }} • {{ format_sao_paulo_datetime(action_log.created_at) }}</span>
+        {% if action_log.note %}<small>{{ action_log.note }}</small>{% endif %}
+      </div>
       {% endfor %}
     </div>
     {% endif %}
@@ -93,6 +131,6 @@
     {% elif can_access('admin_requests_attended') %}
     <a class="btn ghost" href="{{ url_for('admin_requests_attended') }}">Voltar</a>
     {% endif %}
-  </div>
+  </aside>
 </section>
 {% endblock %}

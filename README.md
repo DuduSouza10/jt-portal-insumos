@@ -314,3 +314,10 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 ## v107 - Correção final das cores do topo
 - Reforço dos seletores do menu superior para manter vermelho escuro no estado normal e branco apenas no hover/ativo.
 - Aplicação também nos botões superiores de ação das páginas administrativas.
+
+## v203 - Ajustes de solicitações, Feishu e permissões
+
+- Melhorado o layout da área de bloqueios de produtos na edição de usuários.
+- Melhorado o card de detalhes da solicitação para exibir dados, observações e histórico de ações de forma alinhada.
+- Cards de movimentação de estoque no Feishu agora informam a unidade/base, solicitante e motivo da saída quando a baixa vier de aprovação de solicitação.
+- Por padrão, apenas Dev pode alterar nome do responsável e nome de usuário/login em usuários existentes. O Dev pode liberar esses campos para outros cargos na edição do tipo de acesso.
