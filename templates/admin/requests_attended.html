@@ -10,10 +10,11 @@
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Ver todas as solicitações</a>
     {% endif %}
   </div>
+  {% include '_request_filters.html' %}
   <table>
     <thead>
       <tr>
-        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação</th>
+        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação executada por</th><th>Ação</th>
       </tr>
     </thead>
     <tbody>
@@ -26,10 +27,11 @@
         <td data-label="Itens">{{ req.items|length }}</td>
         <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
         <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
+        <td data-label="Ação executada por">{{ request_action_summary(req) }}</td>
         <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
+      <tr><td colspan="9" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>

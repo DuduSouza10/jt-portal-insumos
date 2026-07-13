@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS request_items (
     FOREIGN KEY(product_id) REFERENCES products(id)
 );
 
+CREATE TABLE IF NOT EXISTS request_action_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    actor_user_id INTEGER,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(request_id) REFERENCES supply_requests(id) ON DELETE CASCADE,
+    FOREIGN KEY(actor_user_id) REFERENCES users(id)
+);
+
 
 CREATE TABLE IF NOT EXISTS product_request_blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,3 +215,17 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_responsible_name ON users(responsible_name COLLATE NOCASE);
+
+-- v201 - Direcionamento de solicitações por regional
+CREATE TABLE IF NOT EXISTS request_regional_admin_assignments (
+    regional TEXT PRIMARY KEY,
+    admin_user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    updated_by_id INTEGER,
+    FOREIGN KEY(admin_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(updated_by_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_request_action_logs_request ON request_action_logs(request_id, created_at DESC);

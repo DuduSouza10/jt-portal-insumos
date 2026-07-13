@@ -15877,3 +15877,40 @@ body.product-image-modal-open .product-image-modal * {
     gap: 8px !important;
   }
 }
+
+/* v201 - filtros de solicitações e direcionamento por regional */
+.request-filter-card {
+  margin-top: 10px !important;
+  margin-bottom: 18px !important;
+}
+.request-filter-main {
+  grid-template-columns: minmax(130px, .65fr) minmax(130px, .65fr) minmax(220px, 1.2fr) minmax(190px, 1fr) minmax(125px, .55fr) auto !important;
+}
+.regional-routing-card {
+  margin-bottom: 18px !important;
+}
+.regional-routing-card .section-head p {
+  max-width: 820px;
+  margin: 6px 0 0;
+}
+.request-routing-form {
+  margin-top: 14px;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto !important;
+}
+@media (max-width: 1180px) {
+  .request-filter-main,
+  .request-routing-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .request-filter-main .field-actions,
+  .request-routing-form .field-actions {
+    grid-column: 1 / -1 !important;
+    justify-content: flex-start !important;
+  }
+}
+@media (max-width: 680px) {
+  .request-filter-main,
+  .request-routing-form {
+    grid-template-columns: 1fr !important;
+  }
+}

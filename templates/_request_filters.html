@@ -1,0 +1,59 @@
+<form class="product-filter-card request-filter-card" method="get" action="{{ url_for(request_filter_action|default('admin_requests')) }}">
+  <input type="hidden" name="page" value="1">
+  {% if selected_status and request_filter_action == 'admin_requests' %}
+  <input type="hidden" name="status" value="{{ selected_status }}">
+  {% endif %}
+  <div class="product-filter-main request-filter-main">
+    {% if request_filter_show_type|default(true) %}
+    <label class="product-filter-field">
+      Tipo
+      <select name="type">
+        <option value="">Todos</option>
+        {% for option in request_type_options|default([]) %}
+        <option value="{{ option.value }}" {{ 'selected' if request_filters.type == option.value else '' }}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    {% if request_filter_show_regional|default(true) %}
+    <label class="product-filter-field">
+      Regional
+      <select name="regional">
+        <option value="">Todas</option>
+        {% for option in request_regional_options|default([]) %}
+        <option value="{{ option.value }}" {{ 'selected' if request_filters.regional == option.value else '' }}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label class="product-filter-field">
+      Produto solicitado
+      <select name="product_id">
+        <option value="">Todos</option>
+        {% for product in request_product_options|default([]) %}
+        <option value="{{ product.id }}" {{ 'selected' if request_filters.product_id == product.id else '' }}>{{ product.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="product-filter-field">
+      Classificar por
+      <select name="sort">
+        {% for option in request_sort_options|default([]) %}
+        <option value="{{ option.value }}" {{ 'selected' if request_filters.sort == option.value else '' }}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="product-filter-field field-limit">
+      Linhas por página
+      <select name="limit">
+        {% for option in request_pagination.page_size_options %}
+        <option value="{{ option }}" {{ 'selected' if option == request_pagination.limit else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="product-filter-actions field-actions">
+      <button class="btn primary" type="submit">Aplicar filtros</button>
+      <a class="btn ghost" href="{{ url_for(request_filter_action|default('admin_requests'), status=selected_status) if selected_status and request_filter_action == 'admin_requests' else url_for(request_filter_action|default('admin_requests')) }}">Limpar filtros</a>
+    </div>
+  </div>
+</form>

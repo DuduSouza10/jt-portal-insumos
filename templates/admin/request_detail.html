@@ -5,7 +5,7 @@
 {% block content %}
 {% set can_edit_request_items = supply_request.status == 'pending' and can_do('requests_edit_items') %}
 {% set can_review_request = supply_request.status == 'pending' and can_do('requests_approve_reject') %}
-{% set can_delete_request = can_do('requests_delete') %}
+{% set can_delete_request = supply_request.status != 'deleted' and can_do('requests_delete') %}
 <section class="admin-split detail-grid">
   <div class="card table-card">
     <div class="section-head">
@@ -58,8 +58,18 @@
     {% endif %}
     <p><strong>Usuário:</strong> {{ supply_request.user.username }}</p>
     <p><strong>Enviado em:</strong> {{ format_sao_paulo_datetime(supply_request.created_at) }}</p>
+    <p><strong>Ação executada:</strong><br>{{ request_action_summary(supply_request) }}</p>
     <p><strong>Observação do solicitante:</strong><br>{{ supply_request.user_note or '-' }}</p>
     <p><strong>Observação admin:</strong><br>{{ supply_request.admin_note or '-' }}</p>
+
+    {% if supply_request.action_logs %}
+    <div class="request-action-history">
+      <h2>Histórico de ações</h2>
+      {% for action_log in supply_request.action_logs %}
+      <p><strong>{{ action_log.action_label }}</strong><br>{{ action_log.actor_name }} • {{ format_sao_paulo_datetime(action_log.created_at) }}{% if action_log.note %}<br><small>{{ action_log.note }}</small>{% endif %}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {% if can_review_request %}
       <form method="post" action="{{ url_for('admin_request_approve', request_id=supply_request.id) }}" class="form-grid">
@@ -72,7 +82,7 @@
       </form>
     {% endif %}
     {% if can_delete_request %}
-    <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente esta solicitação do banco de dados?') : 'Excluir definitivamente esta solicitação do banco de dados?')">
+    <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Marcar esta solicitação como excluída?') : 'Marcar esta solicitação como excluída?')">
       <button class="btn ghost danger" type="submit">Excluir solicitação</button>
     </form>
     {% endif %}

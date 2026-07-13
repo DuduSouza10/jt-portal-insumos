@@ -3,20 +3,46 @@
 {% block page_title %}Solicitações de insumos{% endblock %}
 {% block page_subtitle %}Aprove, recuse ou exclua pedidos. O estoque é descontado somente na aprovação.{% endblock %}
 {% block content %}
+{% if current_user.is_dev %}
+<div class="card regional-routing-card">
+  <div class="section-head">
+    <div>
+      <h2>Direcionamento por regional</h2>
+      <p class="muted">Defina qual Admin recebe as solicitações de MG e SP. Quando uma regional tiver Admin definido, os pedidos dela aparecem somente para esse Admin e para Dev.</p>
+    </div>
+  </div>
+  <form class="product-filter-main request-routing-form" method="post" action="{{ url_for('admin_request_regional_admins_update', return_to=request.full_path) }}">
+    {% for option in request_regional_options|default([]) %}
+    {% set assignment = regional_assignments.get(option.value) if regional_assignments else none %}
+    <label class="product-filter-field">
+      Regional {{ option.label }}
+      <select name="admin_{{ option.value }}">
+        <option value="">Sem direcionamento</option>
+        {% for admin in regional_assignment_options|default([]) %}
+        <option value="{{ admin.id }}" {{ 'selected' if assignment and assignment.admin_id == admin.id else '' }}>{{ admin.responsible_name }}{% if admin.organization_name %} • {{ admin.organization_name }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <div class="product-filter-actions field-actions">
+      <button class="btn primary" type="submit">Salvar direcionamento</button>
+    </div>
+  </form>
+</div>
+{% endif %}
 <div class="card table-card">
   <div class="section-head">
     <div class="tabs">
-      <a class="tab {{ 'active' if selected_status == '' else '' }}" href="{{ url_for('admin_requests', limit=request_pagination.limit) }}">Todas</a>
-      <a class="tab {{ 'active' if selected_status == 'pending' else '' }}" href="{{ url_for('admin_requests', status='pending', limit=request_pagination.limit) }}">Pendentes</a>
-      <a class="tab {{ 'active' if selected_status == 'approved' else '' }}" href="{{ url_for('admin_requests', status='approved', limit=request_pagination.limit) }}">Aprovadas</a>
-      <a class="tab {{ 'active' if selected_status == 'rejected' else '' }}" href="{{ url_for('admin_requests', status='rejected', limit=request_pagination.limit) }}">Recusadas</a>
-      <a class="tab {{ 'active' if selected_status == 'deleted' else '' }}" href="{{ url_for('admin_requests', status='deleted', limit=request_pagination.limit) }}">Excluídas</a>
+      {% for tab in request_status_tabs|default([]) %}
+      <a class="tab {{ 'active' if tab.active else '' }}" href="{{ tab.url }}">{{ tab.label }}</a>
+      {% endfor %}
     </div>
   </div>
+  {% include '_request_filters.html' %}
   <table>
     <thead>
       <tr>
-        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação</th>
+        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação executada por</th><th>Ação</th>
       </tr>
     </thead>
     <tbody>
@@ -29,10 +55,11 @@
         <td data-label="Itens">{{ req.items|length }}</td>
         <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
         <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
+        <td data-label="Ação executada por">{{ request_action_summary(req) }}</td>
         <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted center">Nenhuma solicitação encontrada.</td></tr>
+      <tr><td colspan="9" class="muted center">Nenhuma solicitação encontrada.</td></tr>
       {% endfor %}
     </tbody>
   </table>

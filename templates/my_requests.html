@@ -4,6 +4,7 @@
 {% block page_subtitle %}Acompanhe os pedidos enviados e o status de aprovação.{% endblock %}
 {% block content %}
 <div class="card table-card">
+  {% include '_request_filters.html' %}
   <table>
     <thead>
       <tr>
@@ -14,6 +15,7 @@
         {% if current_user.role == 'base' %}<th>Pessoas</th>{% endif %}
         {% if current_user.role == 'franchise' or current_user.is_admin %}<th>Total</th>{% endif %}
         <th>Observação admin</th>
+        <th>Ação executada por</th>
         <th>PDF</th>
       </tr>
     </thead>
@@ -31,10 +33,11 @@
         {% if current_user.role == 'base' %}<td data-label="Pessoas">{{ req.people_count or '-' }}</td>{% endif %}
         {% if current_user.role == 'franchise' or current_user.is_admin %}<td data-label="Total">{{ format_brl(req.total_cents) }}</td>{% endif %}
         <td data-label="Observacao admin">{{ req.admin_note or '-' }}</td>
+        <td data-label="Ação executada por">{{ request_action_summary(req) }}</td>
         <td class="actions-cell" data-label="PDF"><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="muted center">Nenhuma solicitação enviada.</td></tr>
+      <tr><td colspan="8" class="muted center">Nenhuma solicitação enviada.</td></tr>
       {% endfor %}
     </tbody>
   </table>

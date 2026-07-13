@@ -607,7 +607,9 @@ class SupplyRequest:
     reviewed_at: datetime | None = None
     reviewed_by_id: int | None = None
     user: User | None = None
+    reviewed_by: User | None = None
     items: list[RequestItem] = field(default_factory=list)
+    action_logs: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def total_cents(self) -> int:
@@ -1229,24 +1231,30 @@ def row_to_item(row: Any | None, load_product: bool = True) -> RequestItem | Non
     return item
 
 
-def row_to_supply_request(row: Any | None, include_user: bool = True, include_items: bool = True) -> SupplyRequest | None:
+def row_to_supply_request(row: Any | None, include_user: bool = True, include_items: bool = True, include_actions: bool = False) -> SupplyRequest | None:
     if row is None:
         return None
+    row_keys = set(row.keys()) if hasattr(row, "keys") else set()
+    reviewed_by_id = row["reviewed_by_id"] if "reviewed_by_id" in row_keys else None
     req = SupplyRequest(
         id=int(row["id"]),
         user_id=int(row["user_id"]),
         status=row["status"] or "pending",
         user_note=row["user_note"] or "",
         admin_note=row["admin_note"] or "",
-        people_count=int(row["people_count"] or 0) if "people_count" in row.keys() and row["people_count"] is not None else None,
+        people_count=int(row["people_count"] or 0) if "people_count" in row_keys and row["people_count"] is not None else None,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
-        reviewed_at=parse_dt(row["reviewed_at"]),
-        reviewed_by_id=row["reviewed_by_id"],
+        reviewed_at=parse_dt(row["reviewed_at"]) if "reviewed_at" in row_keys else None,
+        reviewed_by_id=int(reviewed_by_id) if reviewed_by_id is not None else None,
     )
     if include_user:
         req.user = get_user(req.user_id)
+    if req.reviewed_by_id is not None:
+        req.reviewed_by = get_user(req.reviewed_by_id)
     if include_items:
         req.items = get_request_items(req.id)
+    if include_actions:
+        req.action_logs = list_request_action_logs(req.id)
     return req
 
 
@@ -1521,6 +1529,17 @@ def init_db() -> None:
                 FOREIGN KEY(product_id) REFERENCES products(id)
             );
 
+            CREATE TABLE IF NOT EXISTS request_action_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                actor_user_id INTEGER,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(request_id) REFERENCES supply_requests(id) ON DELETE CASCADE,
+                FOREIGN KEY(actor_user_id) REFERENCES users(id)
+            );
+
             CREATE TABLE IF NOT EXISTS product_request_blocks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -1632,6 +1651,17 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_access_role_types_name ON access_role_types(name COLLATE NOCASE);
 
+            CREATE TABLE IF NOT EXISTS request_regional_admin_assignments (
+                regional TEXT PRIMARY KEY,
+                admin_user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                updated_by_id INTEGER,
+                FOREIGN KEY(admin_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id);
+
             CREATE INDEX IF NOT EXISTS idx_users_status_created ON users(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -1645,6 +1675,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_supply_requests_status_created ON supply_requests(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_supply_requests_user_created ON supply_requests(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_request_items_request ON request_items(request_id);
+            CREATE INDEX IF NOT EXISTS idx_request_action_logs_request ON request_action_logs(request_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id);
             CREATE INDEX IF NOT EXISTS idx_product_request_blocks_blocked_until ON product_request_blocks(blocked_until);
             CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
@@ -1768,6 +1799,20 @@ def init_db() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_product_request_blocks_blocked_until ON product_request_blocks(blocked_until)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS request_regional_admin_assignments (
+                regional TEXT PRIMARY KEY,
+                admin_user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                updated_by_id INTEGER,
+                FOREIGN KEY(admin_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id)")
 
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "category_emoji" not in product_columns:
@@ -1942,7 +1987,86 @@ def get_request_items(request_id: int) -> list[RequestItem]:
 def get_supply_request(request_id: int) -> SupplyRequest | None:
     with db_connect() as conn:
         row = conn.execute("SELECT * FROM supply_requests WHERE id = ?", (request_id,)).fetchone()
-    return row_to_supply_request(row)
+    return row_to_supply_request(row, include_actions=True)
+
+
+def request_action_label(action: str) -> str:
+    labels = {
+        "created": "Criada",
+        "items_updated": "Itens editados",
+        "approved": "Aprovada",
+        "rejected": "Recusada",
+        "deleted": "Excluída",
+    }
+    return labels.get((action or "").strip().lower(), action or "Ação")
+
+
+def request_action_actor_name(actor: User | None, fallback: str = "Sistema") -> str:
+    if actor is None:
+        return fallback
+    return actor.responsible_name or actor.username or fallback
+
+
+def request_action_log_to_dict(row: Any) -> dict[str, Any]:
+    actor_name = (row["actor_name"] if "actor_name" in row.keys() else "") or (row["actor_username"] if "actor_username" in row.keys() else "") or "Sistema"
+    created_at = parse_dt(row["created_at"]) or datetime.utcnow()
+    action = (row["action"] or "").strip().lower()
+    return {
+        "id": int(row["id"]),
+        "request_id": int(row["request_id"]),
+        "action": action,
+        "action_label": request_action_label(action),
+        "actor_user_id": int(row["actor_user_id"]) if row["actor_user_id"] is not None else None,
+        "actor_name": actor_name,
+        "note": row["note"] or "",
+        "created_at": created_at,
+    }
+
+
+def list_request_action_logs(request_id: int) -> list[dict[str, Any]]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT ral.*, u.responsible_name AS actor_name, u.username AS actor_username
+              FROM request_action_logs ral
+              LEFT JOIN users u ON u.id = ral.actor_user_id
+             WHERE ral.request_id = ?
+             ORDER BY ral.created_at ASC, ral.id ASC
+            """,
+            (request_id,),
+        ).fetchall()
+    return [request_action_log_to_dict(row) for row in rows]
+
+
+def record_request_action(conn: Any, request_id: int, action: str, actor_user_id: int | None = None, note: str = "") -> None:
+    conn.execute(
+        """
+        INSERT INTO request_action_logs (request_id, action, actor_user_id, note, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (int(request_id), (action or "").strip().lower(), actor_user_id, compact_text(note, fallback="", limit=900), now_iso()),
+    )
+
+
+def request_action_summary(supply_request: SupplyRequest | None) -> str:
+    if supply_request is None:
+        return "-"
+    terminal_actions = {"approved", "rejected", "deleted"}
+    action_log = None
+    for log in reversed(supply_request.action_logs or []):
+        if log.get("action") in terminal_actions:
+            action_log = log
+            break
+    if action_log is not None:
+        date_text = format_sao_paulo_datetime(action_log.get("created_at"))
+        return f"{action_log.get('action_label', 'Ação')} por {action_log.get('actor_name') or 'Sistema'} em {date_text}"
+    if supply_request.status in terminal_actions:
+        label = {"approved": "Aprovada", "rejected": "Recusada", "deleted": "Excluída"}.get(supply_request.status, status_label(supply_request.status))
+        actor = request_action_actor_name(supply_request.reviewed_by, "Não registrado")
+        if supply_request.reviewed_at:
+            return f"{label} por {actor} em {format_sao_paulo_datetime(supply_request.reviewed_at)}"
+        return f"{label} por {actor}"
+    return "Aguardando análise"
 
 
 def chunked_ids(values: list[int], chunk_size: int = 80) -> list[list[int]]:
@@ -1962,7 +2086,7 @@ def chunked_ids(values: list[int], chunk_size: int = 80) -> list[list[int]]:
 def execute_delete_ids_chunked(conn: Any, table: str, column: str, ids: list[int]) -> int:
     """Apaga IDs em blocos para funcionar bem no SQLite local e no Cloudflare D1."""
     total = 0
-    allowed_tables = {"supply_requests", "request_items", "stock_movements", "admin_login_codes", "user_page_permissions"}
+    allowed_tables = {"supply_requests", "request_items", "request_action_logs", "stock_movements", "admin_login_codes", "user_page_permissions"}
     allowed_columns = {"id", "request_id", "product_id", "user_id", "created_by_id"}
     if table not in allowed_tables or column not in allowed_columns:
         raise ValueError("Tabela/coluna não autorizada para exclusão em bloco.")
@@ -1981,6 +2105,7 @@ def permanently_delete_supply_request(conn: Any, request_id: int) -> bool:
         return False
     conn.execute("DELETE FROM product_request_blocks WHERE created_by_request_id = ?", (request_id,))
     conn.execute("DELETE FROM stock_movements WHERE request_id = ?", (request_id,))
+    conn.execute("DELETE FROM request_action_logs WHERE request_id = ?", (request_id,))
     conn.execute("DELETE FROM request_items WHERE request_id = ?", (request_id,))
     conn.execute("DELETE FROM supply_requests WHERE id = ?", (request_id,))
     return True
@@ -2004,6 +2129,7 @@ def permanently_delete_empty_supply_requests(conn: Any, request_ids: list[int]) 
     if not empty_ids:
         return 0
     execute_delete_ids_chunked(conn, "stock_movements", "request_id", empty_ids)
+    execute_delete_ids_chunked(conn, "request_action_logs", "request_id", empty_ids)
     return execute_delete_ids_chunked(conn, "supply_requests", "id", empty_ids)
 
 
@@ -2055,29 +2181,305 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
     return len(request_ids), user_id
 
 
-def supply_request_filter_sql(status: str = "", user_id: int | None = None) -> tuple[str, list[Any]]:
+
+REQUEST_REGIONAL_OPTIONS = [
+    {"value": "MG", "label": "MG"},
+    {"value": "SP", "label": "SP"},
+]
+REQUEST_REGIONAL_VALUES = {item["value"] for item in REQUEST_REGIONAL_OPTIONS}
+REQUEST_SORT_OPTIONS = [
+    {"value": "newest", "label": "Mais recentes"},
+    {"value": "oldest", "label": "Mais antigas"},
+    {"value": "unit_asc", "label": "Unidade A-Z"},
+    {"value": "unit_desc", "label": "Unidade Z-A"},
+    {"value": "quantity_desc", "label": "Maior quantidade de materiais"},
+    {"value": "quantity_asc", "label": "Menor quantidade de materiais"},
+    {"value": "items_desc", "label": "Mais tipos de produtos"},
+    {"value": "items_asc", "label": "Menos tipos de produtos"},
+]
+REQUEST_SORT_VALUES = {item["value"] for item in REQUEST_SORT_OPTIONS}
+REQUEST_TYPE_OPTIONS = [
+    {"value": "base", "label": "Base"},
+    {"value": "franchise", "label": "Franquia"},
+]
+REQUEST_TYPE_VALUES = {item["value"] for item in REQUEST_TYPE_OPTIONS}
+REQUEST_REGION_SQL = """
+CASE
+  WHEN UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '%-MG%'
+    OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '% MG'
+    THEN 'MG'
+  WHEN UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '%-SP%'
+    OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '% SP'
+    THEN 'SP'
+  ELSE ''
+END
+"""
+REQUEST_UNIT_SQL = "COALESCE(NULLIF(u.organization_name, ''), NULLIF(u.franchise_name, ''), u.responsible_name, '')"
+REQUEST_TOTAL_QUANTITY_SQL = "COALESCE((SELECT SUM(riq.quantity) FROM request_items riq WHERE riq.request_id = sr.id), 0)"
+REQUEST_ITEM_COUNT_SQL = "COALESCE((SELECT COUNT(*) FROM request_items ric WHERE ric.request_id = sr.id), 0)"
+
+
+def normalize_request_regional(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if raw in {"SP", "SPN", "SAO PAULO", "SÃO PAULO"}:
+        return "SP"
+    if raw in {"MG", "MINAS", "MINAS GERAIS"}:
+        return "MG"
+    return ""
+
+
+def request_regional_label(value: str) -> str:
+    regional = normalize_request_regional(value)
+    return regional if regional else "Sem regional"
+
+
+def request_regional_for_unit_name(unit_name: Any) -> str:
+    regional = asset_regional_for_base(str(unit_name or ""))
+    if regional == "SPN":
+        return "SP"
+    return regional if regional == "MG" else ""
+
+
+def request_regional_for_user(user: User | None) -> str:
+    if user is None:
+        return ""
+    return request_regional_for_unit_name(user.organization_name or user.franchise_name)
+
+
+def normalize_request_filters_from_args(args: Any | None = None) -> dict[str, Any]:
+    source = args if args is not None else request.args
+    type_filter = (source.get("type", "") if hasattr(source, "get") else "") or ""
+    type_filter = type_filter.strip().lower()
+    if type_filter not in REQUEST_TYPE_VALUES:
+        type_filter = ""
+
+    regional_filter = normalize_request_regional(source.get("regional", "") if hasattr(source, "get") else "")
+
+    product_id: int | None = None
+    raw_product = (source.get("product_id", "") if hasattr(source, "get") else "") or ""
+    try:
+        parsed_product = int(raw_product)
+        product_id = parsed_product if parsed_product > 0 else None
+    except (TypeError, ValueError):
+        product_id = None
+
+    sort_filter = (source.get("sort", "newest") if hasattr(source, "get") else "newest") or "newest"
+    sort_filter = str(sort_filter).strip().lower()
+    if sort_filter not in REQUEST_SORT_VALUES:
+        sort_filter = "newest"
+
+    return {
+        "type": type_filter,
+        "regional": regional_filter,
+        "product_id": product_id,
+        "sort": sort_filter,
+    }
+
+
+def request_filters_to_query_args(filters: dict[str, Any] | None, *, include_empty: bool = False) -> dict[str, Any]:
+    filters = filters or {}
+    args: dict[str, Any] = {}
+    if include_empty or filters.get("type"):
+        args["type"] = filters.get("type", "") or ""
+    if include_empty or filters.get("regional"):
+        args["regional"] = filters.get("regional", "") or ""
+    if include_empty or filters.get("product_id"):
+        product_id = filters.get("product_id")
+        args["product_id"] = int(product_id) if product_id else ""
+    if include_empty or filters.get("sort", "newest") != "newest":
+        args["sort"] = filters.get("sort", "newest") or "newest"
+    return args
+
+
+def list_products_for_request_filters(limit: int = 1000) -> list[Product]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT p.*
+              FROM products p
+              JOIN request_items ri ON ri.product_id = p.id
+             ORDER BY p.name COLLATE NOCASE ASC
+             LIMIT ?
+            """,
+            (bounded_int(limit, 1000, 50, 2000),),
+        ).fetchall()
+    return [product for row in rows if (product := row_to_product(row)) is not None]
+
+
+def request_admin_assignment_admin_options() -> list[User]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+              FROM users
+             WHERE status = 'approved'
+               AND role <> 'dev'
+             ORDER BY responsible_name COLLATE NOCASE ASC, organization_name COLLATE NOCASE ASC
+            """
+        ).fetchall()
+    users = [user for row in rows if (user := row_to_user(row)) is not None]
+    return [user for user in users if user.is_admin]
+
+
+def list_request_regional_admin_assignments(conn: Any | None = None) -> dict[str, int]:
+    sql = "SELECT regional, admin_user_id FROM request_regional_admin_assignments"
+    if conn is not None:
+        rows = conn.execute(sql).fetchall()
+    else:
+        with db_connect() as local_conn:
+            rows = local_conn.execute(sql).fetchall()
+    assignments: dict[str, int] = {}
+    for row in rows:
+        regional = normalize_request_regional(row["regional"])
+        if regional:
+            assignments[regional] = int(row["admin_user_id"])
+    return assignments
+
+
+def list_request_regional_admin_assignment_details() -> dict[str, dict[str, Any]]:
+    assignments = list_request_regional_admin_assignments()
+    details: dict[str, dict[str, Any]] = {}
+    for option in REQUEST_REGIONAL_OPTIONS:
+        regional = option["value"]
+        admin_id = assignments.get(regional)
+        details[regional] = {"regional": regional, "label": option["label"], "admin_id": admin_id, "admin": get_user(admin_id) if admin_id else None}
+    return details
+
+
+def set_request_regional_admin_assignment(conn: Any, regional: str, admin_user_id: int | None, updated_by_id: int | None = None) -> None:
+    normalized = normalize_request_regional(regional)
+    if normalized not in REQUEST_REGIONAL_VALUES:
+        raise ValueError("Regional inválida.")
+    if admin_user_id is None:
+        conn.execute("DELETE FROM request_regional_admin_assignments WHERE regional = ?", (normalized,))
+        return
+    admin_row = conn.execute("SELECT * FROM users WHERE id = ?", (int(admin_user_id),)).fetchone()
+    admin = row_to_user(admin_row)
+    if admin is None or admin.status != "approved" or admin.is_dev or not admin.is_admin:
+        raise ValueError("Selecione um Admin aprovado para receber os pedidos da regional.")
+    existing = conn.execute("SELECT regional FROM request_regional_admin_assignments WHERE regional = ?", (normalized,)).fetchone()
+    if existing:
+        conn.execute(
+            """
+            UPDATE request_regional_admin_assignments
+               SET admin_user_id = ?, updated_at = ?, updated_by_id = ?
+             WHERE regional = ?
+            """,
+            (int(admin_user_id), now_iso(), updated_by_id, normalized),
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO request_regional_admin_assignments (regional, admin_user_id, created_at, updated_at, updated_by_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (normalized, int(admin_user_id), now_iso(), now_iso(), updated_by_id),
+        )
+
+
+def request_assignment_visibility_condition(viewer: User | None) -> tuple[str, list[Any]]:
+    if viewer is None or viewer.is_dev:
+        return "", []
+    return f"""
+      AND (
+            ({REQUEST_REGION_SQL}) = ''
+         OR NOT EXISTS (
+              SELECT 1
+                FROM request_regional_admin_assignments raa_any
+               WHERE raa_any.regional = ({REQUEST_REGION_SQL})
+            )
+         OR EXISTS (
+              SELECT 1
+                FROM request_regional_admin_assignments raa_viewer
+               WHERE raa_viewer.regional = ({REQUEST_REGION_SQL})
+                 AND raa_viewer.admin_user_id = ?
+            )
+      )
+    """, [viewer.id]
+
+
+def can_view_supply_request_by_assignment(supply_request: SupplyRequest | None, viewer: User | None = None) -> bool:
+    if supply_request is None:
+        return False
+    viewer = viewer or current_user()
+    if viewer is None or viewer.is_dev:
+        return True
+    requester = supply_request.user or get_user(supply_request.user_id)
+    regional = request_regional_for_user(requester)
+    if not regional:
+        return True
+    assignments = list_request_regional_admin_assignments()
+    assigned_admin_id = assignments.get(regional)
+    return assigned_admin_id is None or assigned_admin_id == viewer.id
+
+
+def request_list_query_parts(status: str = "", user_id: int | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> tuple[str, list[Any], str]:
+    filters = filters or {}
     clauses: list[str] = []
     params: list[Any] = []
+    status = (status or "").strip().lower()
     if status:
-        clauses.append("status = ?")
+        clauses.append("sr.status = ?")
         params.append(status)
     if user_id is not None:
-        clauses.append("user_id = ?")
+        clauses.append("sr.user_id = ?")
         params.append(int(user_id))
-    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    return where_sql, params
+
+    type_filter = (filters.get("type") or "").strip().lower()
+    if type_filter in REQUEST_TYPE_VALUES:
+        clauses.append("u.role = ?")
+        params.append(type_filter)
+
+    regional_filter = normalize_request_regional(filters.get("regional", ""))
+    if regional_filter:
+        clauses.append(f"({REQUEST_REGION_SQL}) = ?")
+        params.append(regional_filter)
+
+    product_id = filters.get("product_id")
+    if product_id:
+        clauses.append("EXISTS (SELECT 1 FROM request_items rif WHERE rif.request_id = sr.id AND rif.product_id = ?)")
+        params.append(int(product_id))
+
+    if apply_assignment_visibility:
+        visibility_sql, visibility_params = request_assignment_visibility_condition(viewer)
+        if visibility_sql:
+            clauses.append(visibility_sql.strip()[4:].strip() if visibility_sql.strip().upper().startswith("AND ") else visibility_sql.strip())
+            params.extend(visibility_params)
+
+    where_sql = (" WHERE " + " AND ".join(f"({clause})" for clause in clauses)) if clauses else ""
+    sort_filter = (filters.get("sort") or "newest").strip().lower()
+    sort_map = {
+        "newest": "sr.created_at DESC, sr.id DESC",
+        "oldest": "sr.created_at ASC, sr.id ASC",
+        "unit_asc": f"{REQUEST_UNIT_SQL} COLLATE NOCASE ASC, sr.created_at DESC, sr.id DESC",
+        "unit_desc": f"{REQUEST_UNIT_SQL} COLLATE NOCASE DESC, sr.created_at DESC, sr.id DESC",
+        "quantity_desc": f"{REQUEST_TOTAL_QUANTITY_SQL} DESC, sr.created_at DESC, sr.id DESC",
+        "quantity_asc": f"{REQUEST_TOTAL_QUANTITY_SQL} ASC, sr.created_at DESC, sr.id DESC",
+        "items_desc": f"{REQUEST_ITEM_COUNT_SQL} DESC, sr.created_at DESC, sr.id DESC",
+        "items_asc": f"{REQUEST_ITEM_COUNT_SQL} ASC, sr.created_at DESC, sr.id DESC",
+    }
+    order_sql = sort_map.get(sort_filter, sort_map["newest"])
+    return where_sql, params, order_sql
 
 
-def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
+def count_supply_requests(status: str = "", user_id: int | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> int:
+    where_sql, params, _order_sql = request_list_query_parts(status, user_id, filters, viewer, apply_assignment_visibility)
+    with db_connect() as conn:
+        row = conn.execute(f"SELECT COUNT(*) AS total FROM supply_requests sr JOIN users u ON u.id = sr.user_id {where_sql}", params).fetchone()
+    return int((row["total"] if row else 0) or 0)
+
+
+def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> list[SupplyRequest]:
     if limit is None and low_row_read_mode():
         limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), DEFAULT_TABLE_PAGE_SIZE, DEFAULT_TABLE_PAGE_SIZE, 300)
-    where_sql, params = supply_request_filter_sql(status, user_id)
+    where_sql, params, order_sql = request_list_query_parts(status, user_id, filters, viewer, apply_assignment_visibility)
     sql = f"""
-        SELECT id, user_id, status, user_note, admin_note, people_count,
-               created_at, reviewed_at, reviewed_by_id
-          FROM supply_requests
+        SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
+               sr.created_at, sr.reviewed_at, sr.reviewed_by_id
+          FROM supply_requests sr
+          JOIN users u ON u.id = sr.user_id
           {where_sql}
-         ORDER BY created_at DESC
+         ORDER BY {order_sql}
     """
     if limit is not None:
         sql += " LIMIT ?"
@@ -2136,13 +2538,13 @@ def build_pagination(endpoint: str, page: int, per_page: int, total: int, shown_
     }
 
 
-def list_supply_requests_page(status: str = "", user_id: int | None = None, page: int | None = None, limit: int | None = None, endpoint: str = "my_requests", extra_args: dict[str, Any] | None = None) -> tuple[list[SupplyRequest], dict[str, Any]]:
+def list_supply_requests_page(status: str = "", user_id: int | None = None, page: int | None = None, limit: int | None = None, endpoint: str = "my_requests", extra_args: dict[str, Any] | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> tuple[list[SupplyRequest], dict[str, Any]]:
     per_page = limit if limit is not None else list_page_limit(default=DEFAULT_TABLE_PAGE_SIZE, maximum=500)
     current_page = bounded_int(page if page is not None else request.args.get("page"), 1, 1, 100000)
-    where_sql, params = supply_request_filter_sql(status, user_id)
+    where_sql, params, order_sql = request_list_query_parts(status, user_id, filters, viewer, apply_assignment_visibility)
 
     with db_connect() as conn:
-        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM supply_requests{where_sql}", params).fetchone()
+        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM supply_requests sr JOIN users u ON u.id = sr.user_id {where_sql}", params).fetchone()
         total_requests = int((total_row["total"] if total_row else 0) or 0)
         total_pages = max(1, (total_requests + per_page - 1) // per_page)
         if current_page > total_pages:
@@ -2150,11 +2552,12 @@ def list_supply_requests_page(status: str = "", user_id: int | None = None, page
         offset = (current_page - 1) * per_page
         rows = conn.execute(
             f"""
-            SELECT id, user_id, status, user_note, admin_note, people_count,
-                   created_at, reviewed_at, reviewed_by_id
-              FROM supply_requests
+            SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
+                   sr.created_at, sr.reviewed_at, sr.reviewed_by_id
+              FROM supply_requests sr
+              JOIN users u ON u.id = sr.user_id
               {where_sql}
-             ORDER BY created_at DESC
+             ORDER BY {order_sql}
              LIMIT ? OFFSET ?
             """,
             [*params, per_page, offset],
@@ -2349,6 +2752,8 @@ def inject_globals():
         "format_brl": format_brl,
         "format_sao_paulo_datetime": format_sao_paulo_datetime,
         "status_label": status_label,
+        "request_action_label": request_action_label,
+        "request_action_summary": request_action_summary,
         "user_role_label": user_role_label,
         "stock_status_class": stock_status_class,
         "stock_status_label": stock_status_label,
@@ -3070,6 +3475,7 @@ def record_stock_movement(
         stock_after=stock_after,
         movement_type=movement_type,
         note=note,
+        request_id=request_id,
         created_by_id=created_by_id,
         created_at=created_at,
     )
@@ -3145,7 +3551,7 @@ def dispatch_feishu_webhook(payload: dict[str, Any]) -> None:
     threading.Thread(target=send_payload, daemon=True).start()
 
 
-def send_feishu_card(title: str, lines: list[str], link_text: str, link_url: str) -> None:
+def send_feishu_card(title: str, lines: list[str], link_text: str, link_url: str, template: str = "red") -> None:
     content = "\n".join(line for line in lines if line is not None).strip()
     if len(content) > 3500:
         content = content[:3497].rstrip() + "..."
@@ -3177,7 +3583,7 @@ def send_feishu_card(title: str, lines: list[str], link_text: str, link_url: str
             "card": {
                 "config": {"wide_screen_mode": True},
                 "header": {
-                    "template": "red",
+                    "template": template or "red",
                     "title": {"tag": "plain_text", "content": compact_text(title, limit=80)},
                 },
                 "elements": elements,
@@ -3224,6 +3630,37 @@ def notify_feishu_supply_request_created(supply_request: SupplyRequest, link_url
     lines.extend(["", "---", "**Itens solicitados**", "", *request_item_feishu_lines(supply_request.items)])
 
     send_feishu_card("Nova solicitação de insumos", lines, "Abrir solicitação", link_url)
+
+
+def notify_feishu_supply_request_action(supply_request: SupplyRequest, action: str, actor: User, link_url: str, admin_note: str = "") -> None:
+    action = (action or "").strip().lower()
+    requester = supply_request.user
+    requester_name = requester.responsible_name if requester else f"Usuario #{supply_request.user_id}"
+    requester_org = requester.organization_name if requester else "-"
+    requester_role = user_role_label(requester.role if requester else "")
+    status_text = {"approved": "Aprovada", "rejected": "Recusada", "deleted": "Excluída"}.get(action, request_action_label(action))
+    actor_label = {"approved": "Aprovada por", "rejected": "Recusada por", "deleted": "Excluída por"}.get(action, "Executada por")
+    title = {
+        "approved": "Solicitação de insumos aprovada",
+        "rejected": "Solicitação de insumos recusada",
+        "deleted": "Solicitação de insumos excluída",
+    }.get(action, "Solicitação de insumos atualizada")
+    template = "green" if action == "approved" else "red"
+    lines = [
+        feishu_line("Solicitação", f"#{supply_request.id}"),
+        feishu_line("Pedido por", requester_name),
+        feishu_line("Setor", requester_org),
+        feishu_line("Tipo", requester_role),
+        feishu_line("Status", status_text),
+        feishu_line(actor_label, request_action_actor_name(actor)),
+        feishu_line("Data da ação", format_feishu_datetime()),
+    ]
+    note_text = admin_note or supply_request.admin_note
+    if note_text:
+        lines.append(feishu_line("Observação admin", note_text))
+    if supply_request.items:
+        lines.extend(["", "---", "**Itens solicitados**", "", *request_item_feishu_lines(supply_request.items)])
+    send_feishu_card(title, lines, "Abrir solicitação", link_url, template=template)
 
 
 def notify_feishu_user_registration_requested(user: User, link_url: str) -> None:
@@ -3301,6 +3738,7 @@ def notify_feishu_stock_movement(
     stock_after: int,
     movement_type: str,
     note: str = "",
+    request_id: int | None = None,
     created_by_id: int | None = None,
     created_at: str | None = None,
 ) -> None:
@@ -3319,8 +3757,9 @@ def notify_feishu_stock_movement(
         qty_prefix = "+" if quantity_delta > 0 else ""
         qty_text = f"{qty_prefix}{quantity_delta} {unit_measure}".strip()
         movement_dt = parse_dt(created_at) if created_at else datetime.utcnow()
+        responsible_label = "Aprovado por" if movement_type == "request_approved" else "Responsável"
         lines = [
-            feishu_line("Responsável", responsible),
+            feishu_line(responsible_label, responsible),
             feishu_line("Produto", product_name),
             feishu_line("Movimentação", direction),
             feishu_line("Quantidade", qty_text),
@@ -3328,9 +3767,14 @@ def notify_feishu_stock_movement(
             feishu_line("Tipo", movement_type_label(movement_type)),
             feishu_line("Data", format_feishu_datetime(movement_dt)),
         ]
+        if request_id:
+            lines.insert(1, feishu_line("Solicitação", f"#{request_id}"))
         if note:
             lines.append(feishu_line("Observação", note))
-        send_feishu_card("Movimentação de estoque", lines, "Abrir entrada de materiais", public_url_for("admin_material_entries"))
+        link_url = public_url_for("admin_request_detail", request_id=request_id) if request_id else public_url_for("admin_material_entries")
+        link_text = "Abrir solicitação" if request_id else "Abrir entrada de materiais"
+        title = "Estoque atualizado após aprovação" if movement_type == "request_approved" else "Movimentação de estoque"
+        send_feishu_card(title, lines, link_text, link_url, template="green")
     except Exception:
         app.logger.exception("Falha ao preparar notificacao Feishu da movimentacao de estoque")
 
@@ -6540,6 +6984,7 @@ def api_create_request():
                 """,
                 (request_id, product.id, product.name, quantity, product.price_cents),
             )
+        record_request_action(conn, int(request_id), "created", user.id, "Solicitação criada pelo solicitante.")
         apply_automatic_blocks_after_request(conn, user, int(request_id), normalized)
         conn.commit()
 
@@ -6559,11 +7004,27 @@ def api_create_request():
 @page_access_required("my_requests")
 def my_requests():
     user = require_current_user()
+    request_filters = normalize_request_filters_from_args()
+    extra_args = request_filters_to_query_args(request_filters)
     requests_list, request_pagination = list_supply_requests_page(
         user_id=user.id,
         endpoint="my_requests",
+        filters=request_filters,
+        extra_args=extra_args,
     )
-    return render_template("my_requests.html", requests_list=requests_list, request_pagination=request_pagination)
+    return render_template(
+        "my_requests.html",
+        requests_list=requests_list,
+        request_pagination=request_pagination,
+        request_filters=request_filters,
+        request_product_options=list_products_for_request_filters(),
+        request_sort_options=REQUEST_SORT_OPTIONS,
+        request_type_options=REQUEST_TYPE_OPTIONS,
+        request_regional_options=REQUEST_REGIONAL_OPTIONS,
+        request_filter_action="my_requests",
+        request_filter_show_type=True,
+        request_filter_show_regional=True,
+    )
 
 
 
@@ -6576,6 +7037,8 @@ def request_pdf(request_id: int):
     if supply_request is None:
         abort(404)
     if not viewer.is_admin and supply_request.user_id != viewer.id:
+        abort(403)
+    if viewer.is_admin and supply_request.user_id != viewer.id and not can_view_supply_request_by_assignment(supply_request, viewer):
         abort(403)
 
     requester = supply_request.user
@@ -6627,17 +7090,17 @@ def admin_dashboard():
         if exact_counts_enabled():
             counts = {
                 "users_pending": conn.execute("SELECT COUNT(*) AS total FROM users WHERE status = 'pending'").fetchone()["total"],
-                "requests_pending": conn.execute("SELECT COUNT(*) AS total FROM supply_requests WHERE status = 'pending'").fetchone()["total"],
+                "requests_pending": count_supply_requests(status="pending", viewer=current_user(), apply_assignment_visibility=True),
                 "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
                 "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0").fetchone()["total"],
             }
         else:
             user_pending_rows = conn.execute("SELECT id FROM users WHERE status = 'pending' ORDER BY id DESC LIMIT 50").fetchall()
-            request_pending_rows = conn.execute("SELECT id FROM supply_requests WHERE status = 'pending' ORDER BY id DESC LIMIT 50").fetchall()
+            request_pending_rows = []
             product_rows = conn.execute("SELECT id, stock_quantity FROM products WHERE catalog_archived = 0 ORDER BY id DESC LIMIT 200").fetchall()
             counts = {
                 "users_pending": len(user_pending_rows),
-                "requests_pending": len(request_pending_rows),
+                "requests_pending": count_supply_requests(status="pending", viewer=current_user(), apply_assignment_visibility=True),
                 "products": len(product_rows),
                 "stock_total": sum(int(row["stock_quantity"] or 0) for row in product_rows),
             }
@@ -6656,9 +7119,9 @@ def admin_dashboard():
     low_stock = [product for row in low_rows if (product := row_to_product(row)) is not None]
     dashboard_pages = get_user_page_permissions(current_user())
     if "admin_requests" in dashboard_pages:
-        latest_requests = list_supply_requests(limit=8)
+        latest_requests = list_supply_requests(limit=8, viewer=current_user(), apply_assignment_visibility=True)
     elif "admin_requests_attended" in dashboard_pages:
-        latest_requests = list_supply_requests(status="approved", limit=8)
+        latest_requests = list_supply_requests(status="approved", limit=8, viewer=current_user(), apply_assignment_visibility=True)
     else:
         latest_requests = []
     return render_template("admin/dashboard.html", counts=counts, low_stock=low_stock, latest_requests=latest_requests)
@@ -8552,27 +9015,103 @@ def admin_product_delete(product_id: int):
 @admin_required
 @page_access_required("admin_requests")
 def admin_requests():
-    selected_status = request.args.get("status", "")
-    extra_args: dict[str, Any] = {}
+    current = require_current_user()
+    selected_status = (request.args.get("status", "") or "").strip().lower()
+    if selected_status not in {"", "pending", "approved", "rejected", "deleted"}:
+        selected_status = ""
+    request_filters = normalize_request_filters_from_args()
+    extra_args: dict[str, Any] = request_filters_to_query_args(request_filters)
     if selected_status:
         extra_args["status"] = selected_status
     requests_list, request_pagination = list_supply_requests_page(
         status=selected_status,
         endpoint="admin_requests",
         extra_args=extra_args,
+        filters=request_filters,
+        viewer=current,
+        apply_assignment_visibility=True,
     )
-    return render_template("admin/requests.html", requests_list=requests_list, selected_status=selected_status, request_pagination=request_pagination)
+    status_tabs = []
+    for value, label in [("", "Todas"), ("pending", "Pendentes"), ("approved", "Aprovadas"), ("rejected", "Recusadas"), ("deleted", "Excluídas")]:
+        tab_args = request_filters_to_query_args(request_filters)
+        tab_args["limit"] = request_pagination["limit"]
+        if value:
+            tab_args["status"] = value
+        status_tabs.append({"value": value, "label": label, "active": selected_status == value, "url": url_for("admin_requests", **tab_args)})
+    return render_template(
+        "admin/requests.html",
+        requests_list=requests_list,
+        selected_status=selected_status,
+        request_pagination=request_pagination,
+        request_filters=request_filters,
+        request_status_tabs=status_tabs,
+        request_product_options=list_products_for_request_filters(),
+        request_sort_options=REQUEST_SORT_OPTIONS,
+        request_type_options=REQUEST_TYPE_OPTIONS,
+        request_regional_options=REQUEST_REGIONAL_OPTIONS,
+        request_filter_action="admin_requests",
+        request_filter_show_type=True,
+        request_filter_show_regional=True,
+        regional_assignment_options=request_admin_assignment_admin_options() if current.is_dev else [],
+        regional_assignments=list_request_regional_admin_assignment_details() if current.is_dev else {},
+    )
+
+
+@app.post("/admin/requests/regional-admins")
+@admin_required
+@page_access_required("admin_requests")
+def admin_request_regional_admins_update():
+    current = require_current_user()
+    if not current.is_dev:
+        abort(403)
+    try:
+        with db_connect() as conn:
+            for option in REQUEST_REGIONAL_OPTIONS:
+                regional = option["value"]
+                raw_admin_id = (request.form.get(f"admin_{regional}") or "").strip()
+                admin_id: int | None = None
+                if raw_admin_id:
+                    admin_id = int(raw_admin_id)
+                set_request_regional_admin_assignment(conn, regional, admin_id, current.id)
+            conn.commit()
+        flash("Direcionamento de solicitações por regional atualizado.", "success")
+    except ValueError as exc:
+        flash(str(exc), "warning")
+    except Exception as exc:
+        app.logger.exception("Falha ao atualizar direcionamento de solicitações por regional")
+        flash(f"Não consegui atualizar o direcionamento. Erro: {type(exc).__name__}.", "danger")
+    return redirect_to_return("admin_requests")
 
 
 @app.route("/admin/requests/attended")
 @admin_required
 @page_access_required("admin_requests_attended")
 def admin_requests_attended():
+    current = require_current_user()
+    request_filters = normalize_request_filters_from_args()
+    extra_args = request_filters_to_query_args(request_filters)
     requests_list, request_pagination = list_supply_requests_page(
         status="approved",
         endpoint="admin_requests_attended",
+        filters=request_filters,
+        extra_args=extra_args,
+        viewer=current,
+        apply_assignment_visibility=True,
     )
-    return render_template("admin/requests_attended.html", requests_list=requests_list, selected_status="approved", request_pagination=request_pagination)
+    return render_template(
+        "admin/requests_attended.html",
+        requests_list=requests_list,
+        selected_status="approved",
+        request_pagination=request_pagination,
+        request_filters=request_filters,
+        request_product_options=list_products_for_request_filters(),
+        request_sort_options=REQUEST_SORT_OPTIONS,
+        request_type_options=REQUEST_TYPE_OPTIONS,
+        request_regional_options=REQUEST_REGIONAL_OPTIONS,
+        request_filter_action="admin_requests_attended",
+        request_filter_show_type=True,
+        request_filter_show_regional=True,
+    )
 
 
 
@@ -9268,6 +9807,8 @@ def admin_request_detail(request_id: int):
     if supply_request is None:
         abort(404)
     current = require_current_user()
+    if not can_view_supply_request_by_assignment(supply_request, current):
+        abort(403)
     default_back_endpoint = "admin_requests" if user_has_page_access(current, "admin_requests") else "admin_requests_attended"
     back_url = return_target(default_back_endpoint)
     return render_template("admin/request_detail.html", supply_request=supply_request, back_url=back_url)
@@ -9285,6 +9826,8 @@ def admin_request_update_items(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
+    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+        abort(403)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ter quantidades editadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
@@ -9299,6 +9842,8 @@ def admin_request_update_items(request_id: int):
             if quantity != item.quantity:
                 conn.execute("UPDATE request_items SET quantity = ? WHERE id = ? AND request_id = ?", (quantity, item.id, request_id))
                 updated += 1
+        if updated:
+            record_request_action(conn, request_id, "items_updated", require_current_user().id, f"Quantidades editadas em {updated} item(ns).")
         conn.commit()
 
     flash("Quantidades atualizadas." if updated else "Nenhuma quantidade foi alterada.", "success")
@@ -9315,6 +9860,8 @@ def admin_request_approve(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
+    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+        abort(403)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser aprovadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
@@ -9358,7 +9905,15 @@ def admin_request_approve(request_id: int):
             """,
             (now_iso(), current.id, admin_note, request_id),
         )
+        record_request_action(conn, request_id, "approved", current.id, admin_note or "Solicitação aprovada e estoque descontado.")
         conn.commit()
+
+    try:
+        updated_request = get_supply_request(request_id)
+        if updated_request is not None:
+            notify_feishu_supply_request_action(updated_request, "approved", current, public_url_for("admin_request_detail", request_id=request_id), admin_note)
+    except Exception:
+        app.logger.exception("Falha ao preparar notificacao Feishu da aprovacao da solicitacao")
 
     flash("Solicitação aprovada e estoque descontado.", "success")
     return redirect_to_return("admin_request_detail", request_id=request_id)
@@ -9374,6 +9929,8 @@ def admin_request_reject(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
+    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+        abort(403)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser recusadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
@@ -9389,7 +9946,14 @@ def admin_request_reject(request_id: int):
             """,
             (now_iso(), current.id, admin_note, request_id),
         )
+        record_request_action(conn, request_id, "rejected", current.id, admin_note or "Solicitação recusada.")
         conn.commit()
+    try:
+        updated_request = get_supply_request(request_id)
+        if updated_request is not None:
+            notify_feishu_supply_request_action(updated_request, "rejected", current, public_url_for("admin_request_detail", request_id=request_id), admin_note)
+    except Exception:
+        app.logger.exception("Falha ao preparar notificacao Feishu da recusa da solicitacao")
     flash("Solicitação recusada.", "success")
     return redirect_to_return("admin_request_detail", request_id=request_id)
 
@@ -9401,18 +9965,34 @@ def admin_request_delete(request_id: int):
     denied = require_action_permission("requests_delete", "Seu tipo de acesso não pode excluir solicitações.", "admin_requests")
     if denied:
         return denied
+    supply_request = get_supply_request(request_id)
+    if supply_request is None:
+        abort(404)
+    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+        abort(403)
+    if supply_request.status == "deleted":
+        flash("Esta solicitação já está marcada como excluída.", "warning")
+        return redirect_to_return("admin_requests")
+    current = require_current_user()
     try:
         with db_connect() as conn:
-            deleted = permanently_delete_supply_request(conn, request_id)
-            if not deleted:
-                raise LookupError("Solicitação não encontrada.")
+            conn.execute(
+                """
+                UPDATE supply_requests
+                   SET status = 'deleted', reviewed_at = ?, reviewed_by_id = ?
+                 WHERE id = ?
+                """,
+                (now_iso(), current.id, request_id),
+            )
+            record_request_action(conn, request_id, "deleted", current.id, "Solicitação marcada como excluída.")
             conn.commit()
-        flash("Solicitação excluída definitivamente do banco de dados.", "success")
-    except LookupError:
-        abort(404)
+        updated_request = get_supply_request(request_id)
+        if updated_request is not None:
+            notify_feishu_supply_request_action(updated_request, "deleted", current, public_url_for("admin_request_detail", request_id=request_id), "Solicitação marcada como excluída.")
+        flash("Solicitação marcada como excluída.", "success")
     except Exception as exc:
-        app.logger.exception("Falha ao excluir solicitação definitivamente")
-        flash(f"Não consegui excluir a solicitação do banco. Erro: {type(exc).__name__}.", "danger")
+        app.logger.exception("Falha ao marcar solicitação como excluída")
+        flash(f"Não consegui excluir a solicitação. Erro: {type(exc).__name__}.", "danger")
     return redirect_to_return("admin_requests")
 
 
