@@ -110,14 +110,17 @@
             </span>
           </div>
           <div class="product-block-fields">
-            <label>
-              Bloqueado até
+            <label class="field-stack">
+              <span class="field-card-label">Bloqueado até</span>
               <input name="block_until_{{ block.id }}" type="date" value="{{ block.blocked_until_date_input }}">
               <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Inativo: solicitação recusada' if block.created_by_request_id and block.source_request_status == 'rejected' else ('Revogado' if block.revoked_at else 'Expirado')) }}</small>
             </label>
-            <label class="checkbox-line product-block-revoke">
-              <input type="checkbox" name="block_revoke_{{ block.id }}">
-              <span>Revogar este bloqueio</span>
+            <label class="field-stack product-block-action">
+              <span class="field-card-label">Ação</span>
+              <span class="checkbox-line product-block-revoke">
+                <input type="checkbox" name="block_revoke_{{ block.id }}">
+                <span>Revogar este bloqueio</span>
+              </span>
             </label>
           </div>
         </article>
@@ -133,11 +136,11 @@
       <div class="manual-block-card">
         <div class="manual-block-head">
           <strong>Adicionar bloqueio manual</strong>
-          <span>Escolha o produto e a data final do bloqueio.</span>
+          <p>Escolha o produto e a data final do bloqueio.</p>
         </div>
         <div class="manual-block-grid">
-          <label>
-            Produto
+          <label class="field-stack">
+            <span class="field-card-label">Produto</span>
             <select name="new_block_product_id">
               <option value="">Selecione um produto</option>
               {% for product_option in (block_product_options if block_product_options is defined else []) %}
@@ -145,8 +148,8 @@
               {% endfor %}
             </select>
           </label>
-          <label>
-            Bloquear até
+          <label class="field-stack">
+            <span class="field-card-label">Bloquear até</span>
             <input name="new_block_until" type="date">
           </label>
         </div>
