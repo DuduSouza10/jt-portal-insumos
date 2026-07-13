@@ -102,7 +102,7 @@
             <label>
               Produto bloqueado
               <input value="{{ block.product_name }}" disabled>
-              <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Revogado' if block.revoked_at else 'Expirado') }}</small>
+              <small class="hint">{{ 'Ativo até ' ~ block.blocked_until_label if block.is_active else ('Inativo: solicitação recusada' if block.created_by_request_id and block.source_request_status == 'rejected' else ('Revogado' if block.revoked_at else 'Expirado')) }}</small>
             </label>
             <label>
               Bloqueado até

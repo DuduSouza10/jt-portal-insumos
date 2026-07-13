@@ -26,12 +26,14 @@
         <td data-label="Itens">{{ req.items|length }}</td>
         <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
         <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
-        <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id) }}">Abrir</a></td>
+        <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a></td>
       </tr>
       {% else %}
       <tr><td colspan="8" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  {% set request_pagination_item_label = 'solicitações atendidas' %}
+  {% include '_request_pagination.html' %}
 </div>
 {% endblock %}

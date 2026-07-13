@@ -1,0 +1,35 @@
+{% if request_pagination %}
+<div class="product-pagination-panel request-pagination-panel" aria-label="Paginação de solicitações">
+  <div class="product-pagination-info request-pagination-info">
+    Exibindo {{ request_pagination.start }}–{{ request_pagination.end }} de {{ request_pagination.total }} {{ request_pagination_item_label|default('solicitações') }}
+    <span>• Página {{ request_pagination.page }} de {{ request_pagination.total_pages }}</span>
+  </div>
+  <nav class="product-pagination request-pagination" aria-label="Alternar página de solicitações">
+    {% if request_pagination.has_prev %}
+      <a class="page-btn" href="{{ request_pagination.first_url }}">Primeira</a>
+      <a class="page-btn" href="{{ request_pagination.prev_url }}">Anterior</a>
+    {% else %}
+      <span class="page-btn disabled">Primeira</span>
+      <span class="page-btn disabled">Anterior</span>
+    {% endif %}
+
+    {% for item in request_pagination.page_links %}
+      {% if item.ellipsis %}
+        <span class="page-ellipsis">...</span>
+      {% elif item.active %}
+        <span class="page-btn active" aria-current="page">{{ item.number }}</span>
+      {% else %}
+        <a class="page-btn" href="{{ item.url }}">{{ item.number }}</a>
+      {% endif %}
+    {% endfor %}
+
+    {% if request_pagination.has_next %}
+      <a class="page-btn" href="{{ request_pagination.next_url }}">Próxima</a>
+      <a class="page-btn" href="{{ request_pagination.last_url }}">Última</a>
+    {% else %}
+      <span class="page-btn disabled">Próxima</span>
+      <span class="page-btn disabled">Última</span>
+    {% endif %}
+  </nav>
+</div>
+{% endif %}

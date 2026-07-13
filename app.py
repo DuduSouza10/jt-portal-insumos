@@ -627,10 +627,15 @@ class ProductRequestBlock:
     updated_at: datetime | None = None
     revoked_at: datetime | None = None
     updated_by_id: int | None = None
+    source_request_status: str = ""
 
     @property
     def is_active(self) -> bool:
-        return self.revoked_at is None and self.blocked_until > datetime.utcnow()
+        if self.revoked_at is not None or self.blocked_until <= datetime.utcnow():
+            return False
+        if self.created_by_request_id is not None and self.source_request_status not in {"pending", "approved"}:
+            return False
+        return True
 
     @property
     def blocked_until_date_input(self) -> str:
@@ -1265,6 +1270,7 @@ def row_to_product_request_block(row: Any | None) -> ProductRequestBlock | None:
         updated_at=parse_dt(row["updated_at"]) if "updated_at" in row.keys() else None,
         revoked_at=parse_dt(row["revoked_at"]) if "revoked_at" in row.keys() else None,
         updated_by_id=(int(row["updated_by_id"]) if "updated_by_id" in row.keys() and row["updated_by_id"] is not None else None),
+        source_request_status=((row["source_request_status"] if "source_request_status" in row.keys() else "") or ""),
     )
 
 
@@ -1973,6 +1979,7 @@ def permanently_delete_supply_request(conn: Any, request_id: int) -> bool:
     row = conn.execute("SELECT id FROM supply_requests WHERE id = ?", (request_id,)).fetchone()
     if row is None:
         return False
+    conn.execute("DELETE FROM product_request_blocks WHERE created_by_request_id = ?", (request_id,))
     conn.execute("DELETE FROM stock_movements WHERE request_id = ?", (request_id,))
     conn.execute("DELETE FROM request_items WHERE request_id = ?", (request_id,))
     conn.execute("DELETE FROM supply_requests WHERE id = ?", (request_id,))
@@ -2048,31 +2055,121 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
     return len(request_ids), user_id
 
 
-def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
-    if limit is None and low_row_read_mode():
-        limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), DEFAULT_TABLE_PAGE_SIZE, DEFAULT_TABLE_PAGE_SIZE, 300)
-    sql = """
-        SELECT id, user_id, status, user_note, admin_note, people_count,
-               created_at, reviewed_at, reviewed_by_id
-          FROM supply_requests
-    """
-    params: list[Any] = []
+def supply_request_filter_sql(status: str = "", user_id: int | None = None) -> tuple[str, list[Any]]:
     clauses: list[str] = []
+    params: list[Any] = []
     if status:
         clauses.append("status = ?")
         params.append(status)
     if user_id is not None:
         clauses.append("user_id = ?")
-        params.append(user_id)
-    if clauses:
-        sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY created_at DESC"
+        params.append(int(user_id))
+    where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where_sql, params
+
+
+def list_supply_requests(status: str = "", user_id: int | None = None, limit: int | None = None) -> list[SupplyRequest]:
+    if limit is None and low_row_read_mode():
+        limit = bounded_int(os.getenv("D1_REQUEST_LIST_LIMIT"), DEFAULT_TABLE_PAGE_SIZE, DEFAULT_TABLE_PAGE_SIZE, 300)
+    where_sql, params = supply_request_filter_sql(status, user_id)
+    sql = f"""
+        SELECT id, user_id, status, user_note, admin_note, people_count,
+               created_at, reviewed_at, reviewed_by_id
+          FROM supply_requests
+          {where_sql}
+         ORDER BY created_at DESC
+    """
     if limit is not None:
         sql += " LIMIT ?"
         params.append(limit)
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [req for row in rows if (req := row_to_supply_request(row)) is not None]
+
+
+def build_pagination(endpoint: str, page: int, per_page: int, total: int, shown_count: int, extra_args: dict[str, Any] | None = None) -> dict[str, Any]:
+    total_pages = max(1, (int(total or 0) + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), total_pages))
+    offset = (page - 1) * per_page
+    extra_args = dict(extra_args or {})
+
+    page_size_options = list(TABLE_PAGE_SIZE_OPTIONS)
+    if per_page not in page_size_options:
+        page_size_options.append(per_page)
+        page_size_options.sort()
+
+    def page_url(target_page: int, target_limit: int | None = None) -> str:
+        args = dict(extra_args)
+        args["page"] = max(1, int(target_page or 1))
+        args["limit"] = target_limit or per_page
+        return url_for(endpoint, **args)
+
+    visible_page_numbers: set[int] = {1, total_pages}
+    for number in range(page - 2, page + 3):
+        if 1 <= number <= total_pages:
+            visible_page_numbers.add(number)
+    page_links: list[dict[str, Any]] = []
+    previous_number = 0
+    for number in sorted(visible_page_numbers):
+        if previous_number and number - previous_number > 1:
+            page_links.append({"ellipsis": True})
+        page_links.append({"number": number, "active": number == page, "url": page_url(number)})
+        previous_number = number
+
+    start_item = offset + 1 if total else 0
+    end_item = min(offset + int(shown_count or 0), int(total or 0))
+    return {
+        "page": page,
+        "limit": per_page,
+        "total": int(total or 0),
+        "total_pages": total_pages,
+        "start": start_item,
+        "end": end_item,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "first_url": page_url(1),
+        "prev_url": page_url(max(1, page - 1)),
+        "next_url": page_url(min(total_pages, page + 1)),
+        "last_url": page_url(total_pages),
+        "page_links": page_links,
+        "page_size_options": page_size_options,
+    }
+
+
+def list_supply_requests_page(status: str = "", user_id: int | None = None, page: int | None = None, limit: int | None = None, endpoint: str = "my_requests", extra_args: dict[str, Any] | None = None) -> tuple[list[SupplyRequest], dict[str, Any]]:
+    per_page = limit if limit is not None else list_page_limit(default=DEFAULT_TABLE_PAGE_SIZE, maximum=500)
+    current_page = bounded_int(page if page is not None else request.args.get("page"), 1, 1, 100000)
+    where_sql, params = supply_request_filter_sql(status, user_id)
+
+    with db_connect() as conn:
+        total_row = conn.execute(f"SELECT COUNT(*) AS total FROM supply_requests{where_sql}", params).fetchone()
+        total_requests = int((total_row["total"] if total_row else 0) or 0)
+        total_pages = max(1, (total_requests + per_page - 1) // per_page)
+        if current_page > total_pages:
+            current_page = total_pages
+        offset = (current_page - 1) * per_page
+        rows = conn.execute(
+            f"""
+            SELECT id, user_id, status, user_note, admin_note, people_count,
+                   created_at, reviewed_at, reviewed_by_id
+              FROM supply_requests
+              {where_sql}
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?
+            """,
+            [*params, per_page, offset],
+        ).fetchall()
+
+    requests_list = [req for row in rows if (req := row_to_supply_request(row)) is not None]
+    pagination = build_pagination(
+        endpoint=endpoint,
+        page=current_page,
+        per_page=per_page,
+        total=total_requests,
+        shown_count=len(requests_list),
+        extra_args=extra_args,
+    )
+    return requests_list, pagination
 
 
 # ---------- Helpers ----------
@@ -3441,13 +3538,15 @@ def local_date_input_to_blocked_until_utc(value: Any) -> datetime | None:
 
 def get_active_product_request_block(user_id: int, product_id: int, conn: Any | None = None) -> ProductRequestBlock | None:
     sql = """
-        SELECT prb.*, COALESCE(p.name, '') AS product_name
+        SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
           FROM product_request_blocks prb
           LEFT JOIN products p ON p.id = prb.product_id
+          LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
          WHERE prb.user_id = ?
            AND prb.product_id = ?
            AND prb.revoked_at IS NULL
            AND prb.blocked_until > ?
+           AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved'))
          LIMIT 1
     """
     params = (int(user_id), int(product_id), now_iso())
@@ -3461,11 +3560,12 @@ def get_active_product_request_block(user_id: int, product_id: int, conn: Any | 
 
 def list_product_request_blocks_for_user(user_id: int, conn: Any | None = None) -> list[ProductRequestBlock]:
     sql = """
-        SELECT prb.*, COALESCE(p.name, '') AS product_name
+        SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
           FROM product_request_blocks prb
           LEFT JOIN products p ON p.id = prb.product_id
+          LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
          WHERE prb.user_id = ?
-         ORDER BY (prb.revoked_at IS NULL AND prb.blocked_until > ?) DESC, prb.blocked_until DESC, prb.id DESC
+         ORDER BY (prb.revoked_at IS NULL AND prb.blocked_until > ? AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved'))) DESC, prb.blocked_until DESC, prb.id DESC
     """
     params = (int(user_id), now_iso())
     if conn is not None:
@@ -3553,6 +3653,19 @@ def apply_automatic_blocks_after_request(conn: Any, user: User, request_id: int,
             blocked_until = datetime.utcnow() + timedelta(days=product_limit_block_days(product))
             reason = f"Limite de {limit} {product_limit_unit_label(product)} atingido automaticamente na solicitação #{request_id}."
             upsert_product_request_block(conn, user_id, product, request_id, blocked_until, reason)
+
+
+def deactivate_automatic_blocks_for_request(conn: Any, request_id: int, updated_by_id: int | None = None) -> None:
+    """Desativa bloqueios criados automaticamente quando a solicitação deixa de contar para o limite."""
+    conn.execute(
+        """
+        UPDATE product_request_blocks
+           SET revoked_at = ?, updated_at = ?, updated_by_id = ?
+         WHERE created_by_request_id = ?
+           AND revoked_at IS NULL
+        """,
+        (now_iso(), now_iso(), updated_by_id, int(request_id)),
+    )
 
 
 def create_limit_block_from_history(user: User, product: Product, limit: int) -> None:
@@ -6446,8 +6559,11 @@ def api_create_request():
 @page_access_required("my_requests")
 def my_requests():
     user = require_current_user()
-    requests_list = list_supply_requests(user_id=user.id)
-    return render_template("my_requests.html", requests_list=requests_list)
+    requests_list, request_pagination = list_supply_requests_page(
+        user_id=user.id,
+        endpoint="my_requests",
+    )
+    return render_template("my_requests.html", requests_list=requests_list, request_pagination=request_pagination)
 
 
 
@@ -8437,16 +8553,26 @@ def admin_product_delete(product_id: int):
 @page_access_required("admin_requests")
 def admin_requests():
     selected_status = request.args.get("status", "")
-    requests_list = list_supply_requests(status=selected_status)
-    return render_template("admin/requests.html", requests_list=requests_list, selected_status=selected_status)
+    extra_args: dict[str, Any] = {}
+    if selected_status:
+        extra_args["status"] = selected_status
+    requests_list, request_pagination = list_supply_requests_page(
+        status=selected_status,
+        endpoint="admin_requests",
+        extra_args=extra_args,
+    )
+    return render_template("admin/requests.html", requests_list=requests_list, selected_status=selected_status, request_pagination=request_pagination)
 
 
 @app.route("/admin/requests/attended")
 @admin_required
 @page_access_required("admin_requests_attended")
 def admin_requests_attended():
-    requests_list = list_supply_requests(status="approved")
-    return render_template("admin/requests_attended.html", requests_list=requests_list, selected_status="approved")
+    requests_list, request_pagination = list_supply_requests_page(
+        status="approved",
+        endpoint="admin_requests_attended",
+    )
+    return render_template("admin/requests_attended.html", requests_list=requests_list, selected_status="approved", request_pagination=request_pagination)
 
 
 
@@ -9141,7 +9267,10 @@ def admin_request_detail(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
-    return render_template("admin/request_detail.html", supply_request=supply_request)
+    current = require_current_user()
+    default_back_endpoint = "admin_requests" if user_has_page_access(current, "admin_requests") else "admin_requests_attended"
+    back_url = return_target(default_back_endpoint)
+    return render_template("admin/request_detail.html", supply_request=supply_request, back_url=back_url)
 
 
 
