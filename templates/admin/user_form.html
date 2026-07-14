@@ -82,7 +82,7 @@
     <div class="full access-permission-summary card">
       <div>
         <strong>Páginas liberadas</strong>
-        <span>Base e franquia usam Solicitar insumos e Minhas solicitações. Administradores recebem todas as páginas.</span>
+        <span>O Dev pode ajustar as páginas individualmente por usuário. O limite máximo continua respeitando o cargo do acesso.</span>
       </div>
       <button class="btn ghost" type="button" data-open-permission-modal>{{ 'Editar páginas' if can_edit_pages_field else 'Ver páginas' }}</button>
     </div>
@@ -296,6 +296,7 @@
   const devPasswordChangeConfirmButton = document.querySelector('[data-confirm-dev-password-change]');
   const devPasswordChangeCancelButtons = document.querySelectorAll('[data-cancel-dev-password-change]');
   const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
+  const initialSelectedPageSet = new Set(Array.from(document.querySelectorAll('.permission-option input[type="checkbox"]')).filter(function (checkbox) { return checkbox.checked; }).map(function (checkbox) { return checkbox.value; }));
   let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
   const lockedFields = {
     organization: {{ 'false' if current_can_edit_user_field(user, 'organization_name', is_new) else 'true' }},
@@ -330,26 +331,31 @@
     franchiseNumberInput.required = false;
     cnpjInput.disabled = lockedFields.cnpj || !isFranchise;
 
+    const useInitialPageSelection = role === initialRole;
+    const activePageSelection = useInitialPageSelection ? initialSelectedPageSet : rolePermissionSet;
+
     document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
       const option = checkbox.closest('.permission-option');
       const adminOnly = option && option.dataset.adminOnly === 'true';
       const allowedByRole = rolePermissionSet.has(checkbox.value);
-      if (isCustomRole) {
-        checkbox.checked = allowedByRole;
-        checkbox.disabled = true;
-        option.classList.toggle('disabled', !allowedByRole);
-      } else if (isAdmin) {
+      const selectedForUser = activePageSelection.has(checkbox.value);
+
+      if (isDev) {
         checkbox.checked = true;
-        checkbox.disabled = lockedFields.pages;
+        checkbox.disabled = true;
         option.classList.remove('disabled');
+      } else if (isAdmin || isCustomRole) {
+        checkbox.checked = selectedForUser && allowedByRole;
+        checkbox.disabled = lockedFields.pages || !allowedByRole;
+        option.classList.toggle('disabled', !allowedByRole);
       } else if (adminOnly) {
         checkbox.checked = false;
         checkbox.disabled = true;
         option.classList.add('disabled');
       } else {
-        checkbox.checked = true;
-        checkbox.disabled = lockedFields.pages;
-        option.classList.remove('disabled');
+        checkbox.checked = selectedForUser && allowedByRole;
+        checkbox.disabled = lockedFields.pages || !allowedByRole;
+        option.classList.toggle('disabled', !allowedByRole);
       }
       if (lockedFields.pages) checkbox.disabled = true;
     });

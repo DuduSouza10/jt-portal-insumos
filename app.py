@@ -3246,7 +3246,8 @@ def get_user_page_permissions(user: User | None) -> set[str]:
     cache_key = f"_page_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
-    if role_key in {"admin", "dev"}:
+    if role_key == "dev":
+        # Dev permanece com acesso total para não perder o controle do portal.
         allowed = default_page_keys_for_role(role_key)
     elif not user.page_permissions_configured:
         allowed = default_page_keys_for_role(role_key)
@@ -3256,6 +3257,8 @@ def get_user_page_permissions(user: User | None) -> set[str]:
                 "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
                 (user.id,),
             ).fetchall()
+        # Para Admin e cargos personalizados, respeita o ajuste individual salvo.
+        # O limite máximo continua sendo o que o cargo permite.
         allowed = {str(row["page_key"]) for row in rows} & default_page_keys_for_role(role_key)
     if has_request_context():
         setattr(g, cache_key, set(allowed))
@@ -3388,7 +3391,11 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
 def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
     role_key = canonical_role_key(role, "base")
     allowed_for_role = default_page_keys_for_role(role_key)
-    normalized = allowed_for_role if role_key in {"admin", "dev"} else {key for key in selected_keys if key in allowed_for_role}
+    if role_key == "dev":
+        # O usuário Dev fica sempre completo para manter acesso administrativo total.
+        normalized = allowed_for_role
+    else:
+        normalized = {key for key in selected_keys if key in allowed_for_role}
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     for key in sorted(normalized):
         conn.execute(
