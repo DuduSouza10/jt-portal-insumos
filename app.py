@@ -3248,7 +3248,7 @@ def get_user_page_permissions(user: User | None) -> set[str]:
         return set(getattr(g, cache_key))
     if role_key == "dev":
         # Dev permanece com acesso total para não perder o controle do portal.
-        allowed = default_page_keys_for_role(role_key)
+        allowed = page_permission_key_set()
     elif not user.page_permissions_configured:
         allowed = default_page_keys_for_role(role_key)
     else:
@@ -3257,9 +3257,9 @@ def get_user_page_permissions(user: User | None) -> set[str]:
                 "SELECT page_key FROM user_page_permissions WHERE user_id = ?",
                 (user.id,),
             ).fetchall()
-        # Para Admin e cargos personalizados, respeita o ajuste individual salvo.
-        # O limite máximo continua sendo o que o cargo permite.
-        allowed = {str(row["page_key"]) for row in rows} & default_page_keys_for_role(role_key)
+        # Permissões individuais salvas pelo Dev são independentes do cargo.
+        # Assim o Dev pode liberar/remover páginas por usuário sem depender do tipo de acesso.
+        allowed = {str(row["page_key"]) for row in rows} & page_permission_key_set()
     if has_request_context():
         setattr(g, cache_key, set(allowed))
     return set(allowed)
@@ -3390,17 +3390,22 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
 
 def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
     role_key = canonical_role_key(role, "base")
-    allowed_for_role = default_page_keys_for_role(role_key)
+    valid_pages = page_permission_key_set()
     if role_key == "dev":
         # O usuário Dev fica sempre completo para manter acesso administrativo total.
-        normalized = allowed_for_role
+        normalized = valid_pages
+    elif has_request_context() and (editor := current_user()) is not None and editor.is_dev and editor.is_approved:
+        # Quando quem está editando é Dev, a liberação é individual e não fica limitada ao cargo.
+        normalized = {str(key or "").strip() for key in selected_keys if str(key or "").strip() in valid_pages}
     else:
-        normalized = {key for key in selected_keys if key in allowed_for_role}
+        allowed_for_role = default_page_keys_for_role(role_key)
+        normalized = {str(key or "").strip() for key in selected_keys if str(key or "").strip() in allowed_for_role}
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
+    created_at = now_iso()
     for key in sorted(normalized):
         conn.execute(
             "INSERT OR IGNORE INTO user_page_permissions (user_id, page_key, created_at) VALUES (?, ?, ?)",
-            (user_id, key, now_iso()),
+            (user_id, key, created_at),
         )
     conn.execute(
         "UPDATE users SET page_permissions_configured = 1, updated_at = ? WHERE id = ?",

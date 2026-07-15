@@ -344,6 +344,11 @@
         checkbox.checked = true;
         checkbox.disabled = true;
         option.classList.remove('disabled');
+      } else if (editorIsDev) {
+        // Dev pode liberar ou remover páginas individualmente, sem depender do cargo do usuário.
+        checkbox.checked = selectedForUser;
+        checkbox.disabled = lockedFields.pages;
+        option.classList.toggle('disabled', lockedFields.pages);
       } else if (isAdmin || isCustomRole) {
         checkbox.checked = selectedForUser && allowedByRole;
         checkbox.disabled = lockedFields.pages || !allowedByRole;
