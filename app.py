@@ -494,6 +494,7 @@ class User:
     created_at: datetime
     updated_at: datetime | None = None
     page_permissions_configured: bool = False
+    action_permissions_configured: bool = False
 
     @property
     def is_dev(self) -> bool:
@@ -1075,6 +1076,7 @@ def row_to_user(row: Any | None) -> User | None:
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
         page_permissions_configured=bool(row["page_permissions_configured"]) if "page_permissions_configured" in row.keys() else False,
+        action_permissions_configured=bool(row["action_permissions_configured"]) if "action_permissions_configured" in row.keys() else False,
     )
 
 
@@ -1461,7 +1463,8 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
                 updated_at TEXT,
-                page_permissions_configured INTEGER NOT NULL DEFAULT 0
+                page_permissions_configured INTEGER NOT NULL DEFAULT 0,
+                action_permissions_configured INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS products (
@@ -1634,6 +1637,15 @@ def init_db() -> None:
                 page_key TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 UNIQUE(user_id, page_key),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS user_action_permissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                action_key TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, action_key),
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
@@ -2110,7 +2122,7 @@ def chunked_ids(values: list[int], chunk_size: int = 80) -> list[list[int]]:
 def execute_delete_ids_chunked(conn: Any, table: str, column: str, ids: list[int]) -> int:
     """Apaga IDs em blocos para funcionar bem no SQLite local e no Cloudflare D1."""
     total = 0
-    allowed_tables = {"supply_requests", "request_items", "request_action_logs", "stock_movements", "admin_login_codes", "user_page_permissions"}
+    allowed_tables = {"supply_requests", "request_items", "request_action_logs", "stock_movements", "admin_login_codes", "user_page_permissions", "user_action_permissions"}
     allowed_columns = {"id", "request_id", "product_id", "user_id", "created_by_id"}
     if table not in allowed_tables or column not in allowed_columns:
         raise ValueError("Tabela/coluna não autorizada para exclusão em bloco.")
@@ -2198,6 +2210,7 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
     conn.execute("DELETE FROM product_request_blocks WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM admin_login_codes WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM user_action_permissions WHERE user_id = ?", (user_id,))
     conn.execute("UPDATE assets SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE stock_movements SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE supply_requests SET reviewed_by_id = NULL WHERE reviewed_by_id = ?", (user_id,))
@@ -2786,6 +2799,10 @@ def inject_globals():
         "can_do": lambda action_key: user_has_action_access(user, action_key),
         "can_do_any": lambda action_keys: user_has_any_action_access(user, action_keys),
         "action_permission_options": ACTION_PERMISSION_OPTIONS,
+        "all_action_permission_groups": grouped_action_permissions(page_permission_key_set()),
+        "role_action_permissions_map": role_action_permissions_map(),
+        "get_user_action_permissions": get_user_action_permissions,
+        "selected_action_permissions_for_form": selected_action_permissions_for_form,
         "product_edit_action_keys": PRODUCT_EDIT_ACTION_KEYS,
         "page_permission_options": PAGE_PERMISSION_OPTIONS,
         "base_franchise_options": BASE_FRANCHISE_OPTIONS,
@@ -2924,7 +2941,7 @@ USER_EDIT_FIELD_OPTIONS = [
     {"key": "franchise_name", "label": "Nome da franquia", "description": "Permite alterar a franquia exibida no portal."},
     {"key": "franchise_number", "label": "Telefone da franquia", "description": "Permite alterar o telefone da franquia."},
     {"key": "cnpj", "label": "CNPJ", "description": "Permite alterar o CNPJ da franquia."},
-    {"key": "page_permissions", "label": "Paginas liberadas", "description": "Permite ajustar as paginas individuais do usuario."},
+    {"key": "page_permissions", "label": "Paginas e acoes liberadas", "description": "Permite ajustar paginas e acoes individuais do usuario."},
 ]
 
 
@@ -3210,6 +3227,15 @@ def role_permissions_map(options: list[str] | None = None) -> dict[str, list[str
     return {role: sorted(default_page_keys_for_role(role)) for role in role_options}
 
 
+def role_action_permissions_map(options: list[str] | None = None) -> dict[str, list[str]]:
+    role_options = options or all_role_options()
+    output: dict[str, list[str]] = {}
+    for role in role_options:
+        role_definition = get_access_role_definition(role)
+        output[role] = sorted(role_definition.action_permissions if role_definition is not None else [])
+    return output
+
+
 def role_is_admin_like(role: str | None) -> bool:
     key = canonical_role_key(role, "")
     if key == "dev":
@@ -3272,12 +3298,21 @@ def get_user_action_permissions(user: User | None) -> set[str]:
     cache_key = f"_action_permissions_{user.id}"
     if has_request_context() and hasattr(g, cache_key):
         return set(getattr(g, cache_key))
+    allowed_pages = get_user_page_permissions(user)
     if role_key == "dev":
         allowed = action_permission_key_set()
+    elif user.action_permissions_configured:
+        with db_connect() as conn:
+            rows = conn.execute(
+                "SELECT action_key FROM user_action_permissions WHERE user_id = ?",
+                (user.id,),
+            ).fetchall()
+        selected = {str(row["action_key"] or "").strip() for row in rows}
+        allowed = selected & {item["key"] for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in allowed_pages}
     else:
         role_definition = get_access_role_definition(role_key)
         allowed = set(role_definition.action_permissions) if role_definition is not None else set()
-        allowed = {key for key in allowed if any(item["key"] == key and item["page_key"] in get_user_page_permissions(user) for item in ACTION_PERMISSION_OPTIONS)}
+        allowed = {key for key in allowed if any(item["key"] == key and item["page_key"] in allowed_pages for item in ACTION_PERMISSION_OPTIONS)}
     if has_request_context():
         setattr(g, cache_key, set(allowed))
     return set(allowed)
@@ -3388,18 +3423,36 @@ def user_has_any_page_access(user: User | None, page_keys: list[str]) -> bool:
     return any(key in allowed for key in page_keys)
 
 
-def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
+def normalize_user_page_selection_for_editor(editor: User | None, role: str, selected_keys: list[str] | set[str]) -> set[str]:
     role_key = canonical_role_key(role, "base")
     valid_pages = page_permission_key_set()
     if role_key == "dev":
-        # O usuário Dev fica sempre completo para manter acesso administrativo total.
-        normalized = valid_pages
-    elif has_request_context() and (editor := current_user()) is not None and editor.is_dev and editor.is_approved:
-        # Quando quem está editando é Dev, a liberação é individual e não fica limitada ao cargo.
-        normalized = {str(key or "").strip() for key in selected_keys if str(key or "").strip() in valid_pages}
-    else:
-        allowed_for_role = default_page_keys_for_role(role_key)
-        normalized = {str(key or "").strip() for key in selected_keys if str(key or "").strip() in allowed_for_role}
+        return set(valid_pages)
+    if editor is not None and editor.is_dev and editor.is_approved:
+        return {str(key or "").strip() for key in selected_keys if str(key or "").strip() in valid_pages}
+    allowed_for_role = default_page_keys_for_role(role_key)
+    return {str(key or "").strip() for key in selected_keys if str(key or "").strip() in allowed_for_role}
+
+
+def normalize_user_action_selection_for_editor(editor: User | None, role: str, selected_action_keys: list[str] | set[str], selected_page_keys: list[str] | set[str]) -> set[str]:
+    role_key = canonical_role_key(role, "base")
+    allowed_pages = set(selected_page_keys or []) & page_permission_key_set()
+    valid_actions_for_pages = {item["key"] for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in allowed_pages}
+    if role_key == "dev":
+        return action_permission_key_set()
+    if editor is not None and editor.is_dev and editor.is_approved:
+        return {str(key or "").strip() for key in selected_action_keys if str(key or "").strip() in valid_actions_for_pages}
+    role_definition = get_access_role_definition(role_key)
+    allowed_for_role = set(role_definition.action_permissions) if role_definition is not None else set()
+    return {
+        str(key or "").strip()
+        for key in selected_action_keys
+        if str(key or "").strip() in allowed_for_role and str(key or "").strip() in valid_actions_for_pages
+    }
+
+
+def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys: list[str] | set[str]) -> None:
+    normalized = normalize_user_page_selection_for_editor(current_user() if has_request_context() else None, role, selected_keys)
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     created_at = now_iso()
     for key in sorted(normalized):
@@ -3413,10 +3466,35 @@ def save_user_page_permissions(conn: Any, user_id: int, role: str, selected_keys
     )
 
 
+def save_user_action_permissions(conn: Any, user_id: int, role: str, selected_action_keys: list[str] | set[str], selected_page_keys: list[str] | set[str]) -> None:
+    normalized = normalize_user_action_selection_for_editor(current_user() if has_request_context() else None, role, selected_action_keys, selected_page_keys)
+    conn.execute("DELETE FROM user_action_permissions WHERE user_id = ?", (user_id,))
+    created_at = now_iso()
+    for key in sorted(normalized):
+        conn.execute(
+            "INSERT OR IGNORE INTO user_action_permissions (user_id, action_key, created_at) VALUES (?, ?, ?)",
+            (user_id, key, created_at),
+        )
+    conn.execute(
+        "UPDATE users SET action_permissions_configured = 1, updated_at = ? WHERE id = ?",
+        (now_iso(), user_id),
+    )
+
+
 def selected_permissions_for_form(user: User | None, role: str | None = None) -> set[str]:
     if user is not None:
         return get_user_page_permissions(user)
     return default_page_keys_for_role(role or "base")
+
+
+def selected_action_permissions_for_form(user: User | None, role: str | None = None, selected_pages: list[str] | set[str] | None = None) -> set[str]:
+    pages = set(selected_pages or (get_user_page_permissions(user) if user is not None else default_page_keys_for_role(role or "base")))
+    if user is not None:
+        return get_user_action_permissions(user) & {item["key"] for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in pages}
+    role_key = canonical_role_key(role, "base")
+    role_definition = get_access_role_definition(role_key)
+    allowed = set(role_definition.action_permissions) if role_definition is not None else set()
+    return allowed & {item["key"] for item in ACTION_PERMISSION_OPTIONS if item["page_key"] in pages}
 
 
 def page_access_required(page_key: str):
@@ -6269,6 +6347,7 @@ def user_upsert_sql_rows(rows: list[tuple[int | None, UserImportRecord]], create
             created_at,
             updated_at,
             0,
+            0,
         ]
         values_sql.append("(" + ", ".join(sql_literal(value) for value in values) + ")")
     return ",\n".join(values_sql)
@@ -6288,7 +6367,7 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
     skipped = 0
     fields = (
         "responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
-        "username, email, password_hash, role, status, created_at, updated_at, page_permissions_configured"
+        "username, email, password_hash, role, status, created_at, updated_at, page_permissions_configured, action_permissions_configured"
     )
     update_set = """
         responsible_name = excluded.responsible_name,
@@ -6301,7 +6380,8 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
         role = excluded.role,
         status = excluded.status,
         updated_at = excluded.updated_at,
-        page_permissions_configured = 0
+        page_permissions_configured = 0,
+        action_permissions_configured = 0
     """
 
     def execute_chunk(chunk: list[tuple[int | None, UserImportRecord]]) -> bool:
@@ -6607,12 +6687,21 @@ def create_or_update_product_from_material_entry(
     created_by_id: int | None,
     movement_type: str = "material_entry",
     note: str = "Entrada de materiais.",
+    product_id: int | None = None,
 ) -> int:
     item_name = (item_name or "").strip()[:180]
     unit_measure = (unit_measure or "un").strip()[:40] or "un"
     quantity = int(quantity or 0)
     unit_price_cents = int(unit_price_cents or 0)
-    product = find_product_by_name(conn, item_name, SUPPLY_STOCK_TAG)
+    product = None
+    if product_id:
+        row = conn.execute(
+            "SELECT * FROM products WHERE id = ? AND catalog_archived = 0 AND stock_tag = ? LIMIT 1",
+            (int(product_id), SUPPLY_STOCK_TAG),
+        ).fetchone()
+        product = row_to_product(row) if row is not None else None
+    if product is None:
+        product = find_product_by_name(conn, item_name, SUPPLY_STOCK_TAG)
     now_value = now_iso()
     if product is None:
         cursor = conn.execute(
@@ -6654,6 +6743,7 @@ def create_material_entry_record(
     notes: str = "",
     created_by_id: int | None = None,
     movement_type: str = "material_entry",
+    selected_product_id: int | None = None,
 ) -> int:
     product_id = create_or_update_product_from_material_entry(
         conn,
@@ -6664,6 +6754,7 @@ def create_material_entry_record(
         created_by_id=created_by_id,
         movement_type=movement_type,
         note=f"Entrada de materiais: {item_name}.",
+        product_id=selected_product_id,
     )
     cursor = conn.execute(
         """
@@ -6690,6 +6781,38 @@ def create_material_entry_record(
         ),
     )
     return int(get_cursor_lastrowid(cursor) or 0)
+
+
+def list_products_for_material_entry_options(limit: int = 1200) -> list[Product]:
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+              FROM products
+             WHERE active = 1
+               AND catalog_archived = 0
+               AND stock_tag = ?
+             ORDER BY name COLLATE NOCASE ASC
+             LIMIT ?
+            """,
+            (SUPPLY_STOCK_TAG, bounded_int(limit, 1200, 50, 3000)),
+        ).fetchall()
+    return [product for row in rows if (product := row_to_product(row)) is not None]
+
+
+def material_entry_product_options_payload(products: list[Product]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for product in products:
+        payload.append({
+            "id": product.id,
+            "name": product.name,
+            "unit_measure": product.unit_measure or "un",
+            "unit_price_cents": int(product.price_cents or 0),
+            "unit_price_input": (f"{(int(product.price_cents or 0) / 100):.2f}".replace(".", ",") if int(product.price_cents or 0) else ""),
+            "stock_quantity": int(product.stock_quantity or 0),
+            "category": product.category or "",
+        })
+    return payload
 
 
 def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | None = None, limit: int | None = None) -> list[MaterialEntry]:
@@ -7763,6 +7886,7 @@ def admin_user_new():
                 return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=default_page_keys_for_role("base"), allowed_role_options=allowed_role_options_for_editor(current), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(current), can_edit_dev_password=can_edit_dev_password(current))
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
+        selected_actions = request.form.getlist("action_permissions")
 
         try:
             organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
@@ -7776,9 +7900,10 @@ def admin_user_new():
         except ValueError as exc:
             flash(str(exc), "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
-        selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
+        selected_pages = list(normalize_user_page_selection_for_editor(current, role, selected_pages))
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
+        selected_actions = list(normalize_user_action_selection_for_editor(current, role, selected_actions, selected_pages))
         if not responsible_name or not username or not password:
             flash("Preencha responsável, nome de usuário e senha.", "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
@@ -7794,9 +7919,9 @@ def admin_user_new():
                 """
                 INSERT INTO users (
                     responsible_name, organization_name, franchise_name, franchise_number, cnpj,
-                    username, email, password_hash, role, status, created_at, page_permissions_configured
+                    username, email, password_hash, role, status, created_at, page_permissions_configured, action_permissions_configured
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
                 """,
                 (
                     responsible_name,
@@ -7818,6 +7943,7 @@ def admin_user_new():
                 flash("Não foi possível adicionar o usuário.", "danger")
                 return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
             save_user_page_permissions(conn, new_user_id, role, selected_pages)
+            save_user_action_permissions(conn, new_user_id, role, selected_actions, selected_pages)
             conn.commit()
 
         flash("Usuário adicionado com sucesso.", "success")
@@ -7861,6 +7987,7 @@ def admin_user_edit(user_id: int):
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         password = request.form.get("password", "")
         selected_pages = request.form.getlist("page_permissions")
+        selected_actions = request.form.getlist("action_permissions")
         editable_fields = get_user_editable_fields(current) if not current.is_dev else user_edit_field_key_set()
 
         if "responsible_name" not in editable_fields:
@@ -7876,6 +8003,7 @@ def admin_user_edit(user_id: int):
             status = target.status
         if "page_permissions" not in editable_fields:
             selected_pages = list(get_user_page_permissions(target))
+            selected_actions = list(get_user_action_permissions(target))
 
         # Segurança: o usuário logado não pode remover o próprio acesso administrativo
         # nem bloquear a própria conta sem querer. Se ele estiver criando o primeiro Dev
@@ -7885,6 +8013,7 @@ def admin_user_edit(user_id: int):
                 role = current.role
             status = "approved"
             selected_pages = list(default_page_keys_for_role(role))
+            selected_actions = list(default_static_action_permissions(role))
 
         organization_value = request.form.get("organization_name", "")
         franchise_name_value = request.form.get("franchise_name", "")
@@ -7914,9 +8043,10 @@ def admin_user_edit(user_id: int):
             flash(str(exc), "danger")
             return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
 
-        selected_pages = [key for key in selected_pages if key in default_page_keys_for_role(role)]
+        selected_pages = list(normalize_user_page_selection_for_editor(current, role, selected_pages))
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
+        selected_actions = list(normalize_user_action_selection_for_editor(current, role, selected_actions, selected_pages))
 
         if not responsible_name or not username:
             flash("Preencha responsável e nome de usuário.", "danger")
@@ -7980,6 +8110,7 @@ def admin_user_edit(user_id: int):
                     ),
                 )
             save_user_page_permissions(conn, user_id, role, selected_pages)
+            save_user_action_permissions(conn, user_id, role, selected_actions, selected_pages)
             apply_user_request_block_form(conn, user_id, current, request.form)
             conn.commit()
 
@@ -8295,7 +8426,7 @@ def admin_access_type_edit(role_key: str):
                         role.role_key,
                     ),
                 )
-                conn.execute("UPDATE users SET role = ?, page_permissions_configured = 0, updated_at = ? WHERE role = ?", (updated_role_key, changed_at, role.role_key))
+                conn.execute("UPDATE users SET role = ?, page_permissions_configured = 0, action_permissions_configured = 0, updated_at = ? WHERE role = ?", (updated_role_key, changed_at, role.role_key))
             else:
                 conn.execute(
                     """
@@ -8323,7 +8454,7 @@ def admin_access_type_edit(role_key: str):
                     ),
                 )
             # Usuários desse tipo passam a herdar as permissões novas do tipo.
-            conn.execute("UPDATE users SET page_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, updated_role_key))
+            conn.execute("UPDATE users SET page_permissions_configured = 0, action_permissions_configured = 0, updated_at = ? WHERE role = ?", (changed_at, updated_role_key))
             conn.commit()
         get_access_role_override.cache_clear()
         get_custom_access_role.cache_clear()
@@ -8380,7 +8511,7 @@ def admin_access_type_delete(role_key: str):
                 (role.role_key,),
             )
             conn.execute(
-                "UPDATE users SET role = 'base', organization_name = COALESCE(NULLIF(organization_name, ''), ?), page_permissions_configured = 0, updated_at = ? WHERE role = ?",
+                "UPDATE users SET role = 'base', organization_name = COALESCE(NULLIF(organization_name, ''), ?), page_permissions_configured = 0, action_permissions_configured = 0, updated_at = ? WHERE role = ?",
                 (BASE_UNIT_OPTIONS[0] if BASE_UNIT_OPTIONS else ADMIN_ORGANIZATION_NAME, changed_at, role.role_key),
             )
         conn.execute("DELETE FROM access_role_types WHERE role_key = ?", (role.role_key,))
@@ -9195,11 +9326,26 @@ def admin_material_entries():
         flash("Seu tipo de acesso não pode acessar entrada de materiais.", "warning")
         return redirect(url_for("admin_stock"))
     if request.method == "POST":
+        selected_product_id = parse_required_positive_int(request.form.get("product_id")) or None
         item_name = (request.form.get("item_name") or "").strip()
         quantity = parse_required_positive_int(request.form.get("quantity")) or 0
         unit_price_cents = parse_money_to_cents(request.form.get("unit_price"))
         unit_measure = (request.form.get("unit_measure") or "un").strip() or "un"
         notes = (request.form.get("notes") or "").strip()
+        if selected_product_id:
+            with db_connect() as lookup_conn:
+                existing_row = lookup_conn.execute(
+                    "SELECT * FROM products WHERE id = ? AND active = 1 AND catalog_archived = 0 AND stock_tag = ? LIMIT 1",
+                    (int(selected_product_id), SUPPLY_STOCK_TAG),
+                ).fetchone()
+            existing_product = row_to_product(existing_row) if existing_row is not None else None
+            if existing_product is not None:
+                item_name = existing_product.name
+                unit_measure = unit_measure or existing_product.unit_measure or "un"
+                if unit_price_cents <= 0:
+                    unit_price_cents = int(existing_product.price_cents or 0)
+            else:
+                selected_product_id = None
         invoice_file = request.files.get("invoice_file")
         has_invoice = bool(invoice_file and invoice_file.filename)
         invoice_number = (request.form.get("invoice_number") or "").strip() if has_invoice else ""
@@ -9240,6 +9386,7 @@ def admin_material_entries():
                     notes=notes,
                     created_by_id=require_current_user().id,
                     movement_type="material_entry",
+                    selected_product_id=selected_product_id,
                 )
                 conn.commit()
             flash("Entrada de material registrada e estoque atualizado.", "success")
@@ -9248,7 +9395,13 @@ def admin_material_entries():
             flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
         return redirect_to_return("admin_material_entries")
     entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE)
-    return render_template("admin/material_entries.html", entries=entries)
+    material_product_options = list_products_for_material_entry_options()
+    return render_template(
+        "admin/material_entries.html",
+        entries=entries,
+        material_product_options=material_product_options,
+        material_product_options_json=material_entry_product_options_payload(material_product_options),
+    )
 
 
 @app.get("/admin/material-entries/model")

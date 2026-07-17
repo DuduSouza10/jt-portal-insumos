@@ -4,7 +4,7 @@
 {% block page_subtitle %}Cadastre usuários manualmente, defina o tipo de acesso e confira as páginas liberadas.{% endblock %}
 {% block content %}
 <div class="card wide-card">
-  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}" data-role-admin-keys='{{ (role_admin_keys if role_admin_keys is defined else ["admin", "dev"])|tojson }}' data-role-permissions='{{ (role_permissions_map if role_permissions_map is defined else {})|tojson }}'>
+  <form id="userAccessForm" method="post" class="form-grid two-cols" data-admin-unit-filter-form data-current-dev="{{ '1' if current_is_dev() else '0' }}" data-role-admin-keys='{{ (role_admin_keys if role_admin_keys is defined else ["admin", "dev"])|tojson }}' data-role-permissions='{{ (role_permissions_map if role_permissions_map is defined else {})|tojson }}' data-role-action-permissions='{{ (role_action_permissions_map if role_action_permissions_map is defined else {})|tojson }}'>
     <input type="hidden" name="return_to" value="{{ request.args.get('return_to', '') }}">
     {% set can_edit_responsible = current_can_edit_user_field(user, 'responsible_name', is_new) %}
     {% set can_edit_role_field = current_can_edit_user_field(user, 'role', is_new) %}
@@ -81,10 +81,10 @@
 
     <div class="full access-permission-summary card">
       <div>
-        <strong>Páginas liberadas</strong>
-        <span>O Dev pode ajustar as páginas individualmente por usuário. O limite máximo continua respeitando o cargo do acesso.</span>
+        <strong>Páginas e ações liberadas</strong>
+        <span>O Dev pode liberar a página para visualização e escolher quais ações esse usuário poderá executar dentro dela.</span>
       </div>
-      <button class="btn ghost" type="button" data-open-permission-modal>{{ 'Editar páginas' if can_edit_pages_field else 'Ver páginas' }}</button>
+      <button class="btn ghost" type="button" data-open-permission-modal>{{ 'Editar páginas e ações' if can_edit_pages_field else 'Ver páginas e ações' }}</button>
     </div>
 
     {% if not is_new and can_manage_product_blocks %}
@@ -222,13 +222,14 @@
         <div class="permission-card-head">
           <div>
             <span class="eyebrow">Controle de acesso</span>
-            <h2 id="permissionTitle">Páginas do usuário</h2>
-            <p>As páginas administrativas ficam disponíveis apenas para administradores.</p>
+            <h2 id="permissionTitle">Páginas e ações do usuário</h2>
+            <p>Marque a página para permitir visualização e, abaixo, escolha as ações liberadas dentro dela.</p>
           </div>
           <button class="permission-close" type="button" data-close-permission-modal aria-label="Fechar">×</button>
         </div>
 
-        <div class="permission-grid">
+        <div class="permission-scroll-body" data-permission-scroll-body>
+        <div class="permission-grid user-page-permission-grid" data-user-page-permissions>
           {% for option in permission_options %}
             <label class="permission-option {{ 'admin-only' if option.admin_only else '' }}" data-admin-only="{{ 'true' if option.admin_only else 'false' }}">
               <input
@@ -246,6 +247,44 @@
               </span>
             </label>
           {% endfor %}
+        </div>
+
+        {% set selected_user_actions = selected_action_permissions if selected_action_permissions is defined else selected_action_permissions_for_form(user, user.role if user else 'base', selected_permissions) %}
+        <div class="user-action-permission-section" data-user-action-permissions>
+          <div class="user-action-permission-head">
+            <strong>Ações liberadas por página</strong>
+            <span>Desmarque as ações que o usuário pode visualizar, mas não pode executar.</span>
+          </div>
+          {% for group in all_action_permission_groups %}
+          <section class="access-action-group user-action-group" data-action-group="{{ group.page_key }}">
+            <h3>
+              {{ group.page_label }}
+              <small class="access-action-state" data-enabled-text="Ações disponíveis" data-disabled-text="Marque a página para liberar ações">Ações disponíveis</small>
+            </h3>
+            <div class="permission-grid access-type-permission-grid granular-permission-grid">
+              {% for action in group.actions %}
+              <label class="permission-option action-permission-option">
+                <input
+                  type="checkbox"
+                  form="userAccessForm"
+                  name="action_permissions"
+                  value="{{ action.key }}"
+                  data-page-key="{{ action.page_key }}"
+                  {% if action.key in selected_user_actions %}checked{% endif %}
+                  {% if not can_edit_pages_field %}disabled{% endif %}
+                >
+                <span>
+                  <strong>{{ action.label }}</strong>
+                  <small>{{ action.description }}</small>
+                </span>
+              </label>
+              {% endfor %}
+            </div>
+          </section>
+          {% endfor %}
+          <div class="access-action-empty empty-state" data-user-action-empty>Marque uma página administrativa acima para escolher ações.</div>
+        </div>
+
         </div>
 
         <div class="permission-actions">
@@ -270,8 +309,10 @@
   const editorIsDev = form && form.dataset.currentDev === '1';
   let roleAdminKeys = ['admin', 'dev'];
   let rolePermissionsMap = {};
+  let roleActionPermissionsMap = {};
   try { roleAdminKeys = JSON.parse(form ? (form.dataset.roleAdminKeys || '[]') : '[]') || roleAdminKeys; } catch (err) {}
   try { rolePermissionsMap = JSON.parse(form ? (form.dataset.rolePermissions || '{}') : '{}') || {}; } catch (err) {}
+  try { roleActionPermissionsMap = JSON.parse(form ? (form.dataset.roleActionPermissions || '{}') : '{}') || {}; } catch (err) {}
   const openButton = document.querySelector('[data-open-permission-modal]');
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
   const baseWrap = document.getElementById('baseNameWrap');
@@ -296,7 +337,10 @@
   const devPasswordChangeConfirmButton = document.querySelector('[data-confirm-dev-password-change]');
   const devPasswordChangeCancelButtons = document.querySelectorAll('[data-cancel-dev-password-change]');
   const initialRole = roleSelect ? (roleSelect.value || 'base') : 'base';
-  const initialSelectedPageSet = new Set(Array.from(document.querySelectorAll('.permission-option input[type="checkbox"]')).filter(function (checkbox) { return checkbox.checked; }).map(function (checkbox) { return checkbox.value; }));
+  const pagePermissionInputs = Array.from(document.querySelectorAll('input[name="page_permissions"]'));
+  const actionPermissionInputs = Array.from(document.querySelectorAll('input[name="action_permissions"]'));
+  const initialSelectedPageSet = new Set(pagePermissionInputs.filter(function (checkbox) { return checkbox.checked; }).map(function (checkbox) { return checkbox.value; }));
+  const initialSelectedActionSet = new Set(actionPermissionInputs.filter(function (checkbox) { return checkbox.checked; }).map(function (checkbox) { return checkbox.value; }));
   let devPasswordFallbackRole = initialRole === 'dev' ? 'admin' : initialRole;
   const lockedFields = {
     organization: {{ 'false' if current_can_edit_user_field(user, 'organization_name', is_new) else 'true' }},
@@ -306,13 +350,47 @@
     pages: {{ 'false' if current_can_edit_user_field(user, 'page_permissions', is_new) else 'true' }}
   };
 
+  function allPageKeys() {
+    return pagePermissionInputs.map(function (checkbox) { return checkbox.value; });
+  }
+
+  function allActionKeys() {
+    return actionPermissionInputs.map(function (checkbox) { return checkbox.value; });
+  }
+
+  function syncActionGroups(defaultActionSelection, allowedActionSelection) {
+    const enabledPages = new Set(pagePermissionInputs.filter(function (input) { return input.checked; }).map(function (input) { return input.value; }));
+    const forcedSelection = defaultActionSelection instanceof Set ? defaultActionSelection : null;
+    const allowedActions = allowedActionSelection instanceof Set ? allowedActionSelection : new Set(allActionKeys());
+    let visibleGroups = 0;
+    document.querySelectorAll('[data-user-action-permissions] [data-action-group]').forEach(function (group) {
+      const pageKey = group.getAttribute('data-action-group');
+      const isEnabled = enabledPages.has(pageKey);
+      group.hidden = !isEnabled;
+      if (isEnabled) visibleGroups += 1;
+      const state = group.querySelector('.access-action-state');
+      if (state) state.textContent = isEnabled ? state.dataset.enabledText : state.dataset.disabledText;
+      group.querySelectorAll('input[name="action_permissions"]').forEach(function (input) {
+        const canUseAction = isEnabled && allowedActions.has(input.value);
+        if (forcedSelection) input.checked = canUseAction && forcedSelection.has(input.value);
+        if (!canUseAction) input.checked = false;
+        input.disabled = lockedFields.pages || !canUseAction;
+        const option = input.closest('.permission-option');
+        if (option) option.classList.toggle('disabled', input.disabled);
+      });
+    });
+    const emptyState = document.querySelector('[data-user-action-empty]');
+    if (emptyState) emptyState.hidden = visibleGroups > 0;
+  }
+
   function syncRole() {
     const role = roleSelect ? roleSelect.value : 'base';
     const isBase = role === 'base';
     const isFranchise = role === 'franchise';
     const isAdmin = roleAdminKeys.includes(role);
     const isDev = role === 'dev';
-    const rolePermissionSet = new Set(rolePermissionsMap[role] || (isAdmin ? Array.from(document.querySelectorAll('.permission-option input[type="checkbox"]')).map(function (checkbox) { return checkbox.value; }) : ['home', 'my_requests']));
+    const rolePermissionSet = new Set(rolePermissionsMap[role] || (isAdmin ? allPageKeys() : ['home', 'my_requests']));
+    const roleActionSet = new Set(roleActionPermissionsMap[role] || (isAdmin ? allActionKeys() : []));
     const isCustomRole = role && !['base', 'franchise', 'admin', 'dev'].includes(role);
 
     const showSetorField = editorIsDev && !isFranchise;
@@ -333,8 +411,9 @@
 
     const useInitialPageSelection = role === initialRole;
     const activePageSelection = useInitialPageSelection ? initialSelectedPageSet : rolePermissionSet;
+    const activeActionSelection = useInitialPageSelection ? initialSelectedActionSet : roleActionSet;
 
-    document.querySelectorAll('.permission-option input[type="checkbox"]').forEach(function (checkbox) {
+    pagePermissionInputs.forEach(function (checkbox) {
       const option = checkbox.closest('.permission-option');
       const adminOnly = option && option.dataset.adminOnly === 'true';
       const allowedByRole = rolePermissionSet.has(checkbox.value);
@@ -364,6 +443,8 @@
       }
       if (lockedFields.pages) checkbox.disabled = true;
     });
+
+    syncActionGroups(activeActionSelection, editorIsDev ? new Set(allActionKeys()) : roleActionSet);
 
     if (isAdmin && window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.JT_I18N.refresh(document.querySelector('[data-admin-unit-filter-form]') || document.body);
@@ -502,6 +583,13 @@
 
   if (openButton) openButton.addEventListener('click', openModal);
   closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  pagePermissionInputs.forEach(function (input) {
+    input.addEventListener('change', function () {
+      const role = roleSelect ? roleSelect.value : 'base';
+      const roleActionSet = new Set(roleActionPermissionsMap[role] || []);
+      syncActionGroups(null, editorIsDev ? new Set(allActionKeys()) : roleActionSet);
+    });
+  });
   if (devPasswordConfirmButton) devPasswordConfirmButton.addEventListener('click', confirmDevPasswordModal);
   devPasswordCancelButtons.forEach(function (button) {
     button.addEventListener('click', function () { closeDevPasswordModal(false); });

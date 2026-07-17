@@ -20,22 +20,39 @@
         <p class="hint">Informe item, quantidade, valor e unidade. A nota fiscal é opcional.</p>
       </div>
     </div>
-    <div class="form-grid two-cols">
+    <div class="form-grid two-cols material-entry-fields-v209">
+      <input id="materialProductId" name="product_id" type="hidden" value="">
       <label>
         Nome do item
-        <input name="item_name" required placeholder="Ex.: Envelope de segurança M">
+        <input id="materialItemNameInput" name="item_name" list="materialProductOptions" required placeholder="Digite para buscar ou cadastrar um material" autocomplete="off">
+        <datalist id="materialProductOptions">
+          {% for product in material_product_options|default([]) %}
+            <option value="{{ product.name }}">{{ product.category or 'Produto cadastrado' }}</option>
+          {% endfor %}
+        </datalist>
+        <small class="hint">Produtos já cadastrados aparecem na pesquisa. Se digitar um novo nome, o sistema cria um novo produto.</small>
       </label>
       <label>
-        Quantidade
-        <input name="quantity" type="number" min="1" required placeholder="Ex.: 100">
+        Estoque atual
+        <input id="materialCurrentStockInput" type="text" value="Produto novo" readonly tabindex="-1" class="readonly-stock-input">
+        <small class="hint">Campo apenas para conferência. O estoque será somado após salvar.</small>
+      </label>
+      <label>
+        Quantidade a adicionar
+        <input id="materialQuantityInput" name="quantity" type="number" min="1" required placeholder="Ex.: 100">
       </label>
       <label>
         Valor unitário
-        <input name="unit_price" inputmode="decimal" placeholder="Ex.: 0,65">
+        <input id="materialUnitPriceInput" name="unit_price" inputmode="decimal" placeholder="Ex.: 0,65">
       </label>
       <label>
         Unidade de medida
-        <input name="unit_measure" required value="un" placeholder="Ex.: un, caixa, rolo">
+        <input id="materialUnitMeasureInput" name="unit_measure" required value="un" placeholder="Ex.: un, caixa, rolo">
+      </label>
+      <label class="material-stock-preview-card">
+        Estoque após entrada
+        <input id="materialStockAfterInput" type="text" value="-" readonly tabindex="-1" class="readonly-stock-input">
+        <small class="hint">Prévia calculada com a quantidade que será adicionada.</small>
       </label>
       <label class="full invoice-file-row">
         Anexo da nota fiscal (opcional)
@@ -165,15 +182,77 @@
 (function () {
   const invoiceInput = document.getElementById('materialInvoiceFile');
   const invoiceFields = document.getElementById('invoiceFields');
-  if (!invoiceInput || !invoiceFields) return;
   function syncInvoiceFields() {
+    if (!invoiceInput || !invoiceFields) return;
     invoiceFields.classList.toggle('hidden', !invoiceInput.files || !invoiceInput.files.length);
     if (window.JT_I18N && typeof window.JT_I18N.refresh === 'function') {
       window.JT_I18N.refresh(invoiceFields);
     }
   }
-  invoiceInput.addEventListener('change', syncInvoiceFields);
-  syncInvoiceFields();
+  if (invoiceInput && invoiceFields) {
+    invoiceInput.addEventListener('change', syncInvoiceFields);
+    syncInvoiceFields();
+  }
+
+  const productOptions = {{ material_product_options_json|default([])|tojson }};
+  const productIdInput = document.getElementById('materialProductId');
+  const itemNameInput = document.getElementById('materialItemNameInput');
+  const currentStockInput = document.getElementById('materialCurrentStockInput');
+  const stockAfterInput = document.getElementById('materialStockAfterInput');
+  const quantityInput = document.getElementById('materialQuantityInput');
+  const unitPriceInput = document.getElementById('materialUnitPriceInput');
+  const unitMeasureInput = document.getElementById('materialUnitMeasureInput');
+
+  function normalizeName(value) {
+    return String(value || '')
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  const productsByName = new Map();
+  productOptions.forEach(function (product) {
+    const key = normalizeName(product.name);
+    if (key && !productsByName.has(key)) productsByName.set(key, product);
+  });
+
+  function selectedProduct() {
+    if (!itemNameInput) return null;
+    return productsByName.get(normalizeName(itemNameInput.value)) || null;
+  }
+
+  function updateStockPreview(product) {
+    const quantity = parseInt(quantityInput && quantityInput.value ? quantityInput.value : '0', 10) || 0;
+    if (product) {
+      const currentStock = parseInt(product.stock_quantity || 0, 10) || 0;
+      if (currentStockInput) currentStockInput.value = currentStock + ' ' + (product.unit_measure || 'un');
+      if (stockAfterInput) stockAfterInput.value = quantity > 0 ? ((currentStock + quantity) + ' ' + (product.unit_measure || 'un')) : '-';
+    } else {
+      if (currentStockInput) currentStockInput.value = itemNameInput && itemNameInput.value.trim() ? 'Produto novo' : 'Selecione ou digite um produto';
+      if (stockAfterInput) stockAfterInput.value = quantity > 0 ? (quantity + ' ' + ((unitMeasureInput && unitMeasureInput.value) || 'un')) : '-';
+    }
+  }
+
+  function syncProductFields() {
+    const product = selectedProduct();
+    if (product) {
+      if (productIdInput) productIdInput.value = product.id || '';
+      if (unitMeasureInput) unitMeasureInput.value = product.unit_measure || 'un';
+      if (unitPriceInput) unitPriceInput.value = product.unit_price_input || '';
+    } else if (productIdInput) {
+      productIdInput.value = '';
+    }
+    updateStockPreview(product);
+  }
+
+  if (itemNameInput) {
+    itemNameInput.addEventListener('input', syncProductFields);
+    itemNameInput.addEventListener('change', syncProductFields);
+  }
+  if (quantityInput) quantityInput.addEventListener('input', function () { updateStockPreview(selectedProduct()); });
+  if (unitMeasureInput) unitMeasureInput.addEventListener('input', function () { updateStockPreview(selectedProduct()); });
+  syncProductFields();
 })();
 </script>
 {% endblock %}

@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL,
     updated_at TEXT,
-    page_permissions_configured INTEGER NOT NULL DEFAULT 0
+    page_permissions_configured INTEGER NOT NULL DEFAULT 0,
+    action_permissions_configured INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -168,6 +169,15 @@ CREATE TABLE IF NOT EXISTS user_page_permissions (
     page_key TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE(user_id, page_key),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_action_permissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    action_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, action_key),
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

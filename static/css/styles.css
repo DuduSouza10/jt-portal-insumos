@@ -16256,3 +16256,122 @@ html[data-theme="light"] .request-action-item {
     grid-template-columns: 1fr !important;
   }
 }
+
+
+/* v208 - ações individuais por usuário dentro do modal de páginas. */
+.user-action-permission-section {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.user-action-permission-head {
+  display: grid;
+  gap: 5px;
+}
+.user-action-permission-head strong {
+  color: var(--text-strong);
+  font-size: 16px;
+}
+.user-action-permission-head span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+.permission-modal .user-action-group {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255,255,255,.02);
+}
+.permission-modal .user-action-group h3 {
+  margin: 0 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-strong);
+  font-size: 15px;
+}
+.permission-modal .user-action-group h3 small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+.permission-modal .granular-permission-grid {
+  gap: 10px;
+}
+.permission-modal .action-permission-option {
+  min-height: 72px;
+}
+html[data-theme="light"] .permission-modal .user-action-group {
+  background: rgba(255,255,255,.66);
+}
+
+/* v209 - busca de produto existente na entrada de materiais. */
+.material-entry-fields-v209 {
+  align-items: start;
+}
+.material-entry-fields-v209 label {
+  min-width: 0;
+}
+.material-entry-fields-v209 .hint {
+  display: block;
+  line-height: 1.35;
+}
+.readonly-stock-input,
+.readonly-stock-input:focus {
+  cursor: default;
+  color: var(--text-strong);
+  font-weight: 950;
+  background: rgba(255,255,255,.025) !important;
+  border-color: rgba(255,255,255,.12) !important;
+  box-shadow: none !important;
+}
+.material-stock-preview-card input {
+  color: var(--muted-2);
+}
+html[data-theme="light"] .readonly-stock-input,
+html[data-theme="light"] .readonly-stock-input:focus {
+  background: rgba(0,0,0,.025) !important;
+  border-color: rgba(15,23,42,.10) !important;
+}
+@media (max-width: 760px) {
+  .material-entry-fields-v209 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* v210 - corrige exibição das ações individuais dentro do modal de páginas do usuário. */
+.permission-scroll-body {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 18px;
+  padding-right: 4px;
+}
+.permission-scroll-body > .permission-grid {
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+.permission-scroll-body .user-action-permission-section {
+  margin-top: 0 !important;
+}
+.permission-scroll-body .user-action-group[hidden],
+.permission-scroll-body [data-user-action-empty][hidden] {
+  display: none !important;
+}
+.permission-modal .permission-card {
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+}
+.permission-modal .user-action-permission-head {
+  padding: 2px 2px 0;
+}
+@media (max-width: 720px) {
+  .permission-scroll-body .permission-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
