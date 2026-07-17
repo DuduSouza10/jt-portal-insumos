@@ -1696,6 +1696,10 @@ def init_db() -> None:
         user_columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "page_permissions_configured" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN page_permissions_configured INTEGER NOT NULL DEFAULT 0")
+            user_columns.add("page_permissions_configured")
+        if "action_permissions_configured" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN action_permissions_configured INTEGER NOT NULL DEFAULT 0")
+            user_columns.add("action_permissions_configured")
 
         access_role_columns = {row["name"] for row in conn.execute("PRAGMA table_info(access_role_types)").fetchall()}
         if "action_permissions_json" not in access_role_columns:
