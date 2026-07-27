@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block body_class %}request-detail-page{% endblock %}
 {% block title %}Solicitação #{{ supply_request.id }} • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Solicitação #{{ supply_request.id }}{% endblock %}
 {% block page_subtitle %}{{ supply_request.user.organization_name }} • {{ supply_request.user.responsible_name }}{% endblock %}
@@ -9,7 +10,7 @@
 {% set can_confirm_shipping = supply_request.status in ['approved', 'awaiting_shipment'] and can_do('requests_confirm_shipping') and is_regional_responsible %}
 {% set can_delete_request = supply_request.status != 'deleted' and can_do('requests_delete') %}
 <section class="admin-split detail-grid">
-  <div class="card table-card">
+  <div class="card table-card request-items-card">
     <div class="section-head">
       <h2>Itens solicitados</h2>
       <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
@@ -73,7 +74,7 @@
         <span>Regional</span>
         <strong>{{ request_regional_label(request_regional) }}</strong>
       </div>
-      <div class="request-meta-item">
+      <div class="request-meta-item wide">
         <span>Estoque usado no atendimento</span>
         <strong>{{ current_user.responsible_name }} • {{ request_regional_label(service_regional) }}</strong>
       </div>

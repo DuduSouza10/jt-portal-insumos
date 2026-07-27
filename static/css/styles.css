@@ -16848,3 +16848,209 @@ html[data-theme="light"] .user-bulk-base-admin-card {
   .stock-scope-filter .field-actions { grid-column: auto; justify-content: stretch; }
   .stock-scope-filter .field-actions .btn { flex: 1 1 100%; }
 }
+
+/* v214 - refinamento de layouts e suporte completo ao mandarim. */
+.users-admin-page .user-filter-main {
+  grid-template-columns:
+    minmax(250px, 1.35fr)
+    minmax(130px, .58fr)
+    minmax(130px, .58fr)
+    minmax(150px, .66fr)
+    minmax(170px, .76fr)
+    minmax(100px, .42fr)
+    auto !important;
+  align-items: end !important;
+  gap: 12px !important;
+}
+.users-admin-page .user-filter-actions {
+  grid-column: auto !important;
+  justify-content: flex-end !important;
+  align-items: end !important;
+  margin: 0 !important;
+  min-height: 46px !important;
+}
+.users-admin-page .user-filter-actions .btn {
+  min-height: 46px !important;
+  white-space: nowrap;
+}
+.users-admin-page .user-filter-summary {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.users-admin-page .user-import-form,
+.users-admin-page .user-bulk-regional-card,
+.users-admin-page .user-bulk-base-admin-card {
+  overflow: visible !important;
+}
+.users-admin-page .user-bulk-regional-card {
+  padding: 20px;
+  grid-template-columns: minmax(300px, 1fr) minmax(270px, .62fr) auto;
+  gap: 16px;
+}
+.users-admin-page .user-bulk-regional-card label,
+.users-admin-page .user-bulk-base-admin-card label {
+  min-width: 0;
+}
+.users-admin-page .user-bulk-base-admin-card {
+  padding: 20px;
+  gap: 18px;
+}
+.users-admin-page .bulk-base-admin-options {
+  align-items: stretch;
+}
+.users-admin-page .regional-check-option {
+  min-height: 62px;
+  align-items: center;
+}
+
+.request-detail-page .detail-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(390px, 420px) !important;
+  align-items: start !important;
+  gap: 18px !important;
+}
+.request-detail-page .request-items-card {
+  align-self: start !important;
+  min-width: 0;
+  overflow-x: auto !important;
+}
+.request-detail-page .request-items-card table {
+  min-width: 760px;
+}
+.request-detail-page .request-detail-card {
+  align-self: start !important;
+  padding: 18px !important;
+  gap: 14px !important;
+  overflow: visible !important;
+}
+.request-detail-page .request-meta-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.request-detail-page .request-meta-item {
+  min-height: 72px;
+  align-content: start;
+}
+.request-detail-page .request-meta-item.wide {
+  grid-column: 1 / -1;
+}
+.request-detail-page .request-note-box,
+.request-detail-page .request-action-history,
+.request-detail-page .request-detail-card > form,
+.request-detail-page .request-detail-card > a.btn {
+  width: 100%;
+}
+
+.confirmed-orders-page .compact-header {
+  top: 0 !important;
+}
+.confirmed-orders-page .hero-card {
+  padding-block: 24px;
+}
+.confirmed-orders-page .confirmed-order-kpis article {
+  min-height: 100px;
+  align-content: center;
+}
+.confirmed-orders-page .confirmed-order-filter-card,
+.confirmed-orders-page .confirmed-total-table,
+.confirmed-orders-page .table-card {
+  padding: 22px !important;
+}
+.confirmed-orders-page .confirmed-order-filter {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.confirmed-orders-page .confirmed-order-filter > * {
+  min-width: 0;
+}
+.confirmed-orders-page .confirmed-order-filter .field-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 2px;
+}
+.confirmed-orders-page .section-head {
+  margin-bottom: 16px;
+}
+.confirmed-orders-page .section-head h2,
+.confirmed-orders-page .section-head p {
+  overflow-wrap: anywhere;
+}
+.confirmed-orders-page .table-card {
+  overflow-x: auto !important;
+}
+.confirmed-orders-page .table-card table {
+  min-width: 980px;
+}
+
+html[lang="zh-CN"] .nav-header .top-nav > a,
+html[lang="zh-CN"] .nav-header .nav-dropdown > .nav-drop-toggle,
+html[lang="zh-CN"] .nav-header .nav-drop-menu a {
+  letter-spacing: 0 !important;
+  line-height: 1.25 !important;
+}
+html[lang="zh-CN"] .confirmed-orders-page th,
+html[lang="zh-CN"] .request-detail-page th {
+  white-space: nowrap;
+}
+html[lang="zh-CN"] .confirmed-order-filter label,
+html[lang="zh-CN"] .users-admin-page .user-filter-main label {
+  line-height: 1.35;
+}
+
+@media (max-width: 1450px) {
+  .users-admin-page .user-filter-main {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  .users-admin-page .user-filter-search {
+    grid-column: span 2 !important;
+  }
+  .users-admin-page .user-filter-actions {
+    grid-column: 1 / -1 !important;
+  }
+}
+@media (max-width: 1120px) {
+  .request-detail-page .detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .request-detail-page .request-detail-card {
+    width: 100%;
+  }
+  .users-admin-page .user-bulk-regional-card {
+    grid-template-columns: 1fr 1fr;
+  }
+  .users-admin-page .user-bulk-regional-card > div:first-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
+  .users-admin-page .user-filter-main,
+  .confirmed-orders-page .confirmed-order-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .users-admin-page .user-filter-search,
+  .users-admin-page .user-filter-actions,
+  .confirmed-orders-page .confirmed-order-filter .field-actions {
+    grid-column: 1 / -1 !important;
+  }
+}
+@media (max-width: 640px) {
+  .users-admin-page .user-filter-main,
+  .users-admin-page .user-bulk-regional-card,
+  .confirmed-orders-page .confirmed-order-filter,
+  .request-detail-page .request-meta-list {
+    grid-template-columns: 1fr !important;
+  }
+  .users-admin-page .user-filter-search,
+  .users-admin-page .user-bulk-regional-card > div:first-child,
+  .request-detail-page .request-meta-item.wide {
+    grid-column: auto !important;
+  }
+  .users-admin-page .user-filter-actions,
+  .confirmed-orders-page .confirmed-order-filter .field-actions {
+    justify-content: stretch !important;
+  }
+  .users-admin-page .user-filter-actions .btn,
+  .confirmed-orders-page .confirmed-order-filter .field-actions .btn {
+    width: 100%;
+  }
+}
