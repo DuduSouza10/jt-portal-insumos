@@ -16375,3 +16375,476 @@ html[data-theme="light"] .readonly-stock-input:focus {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* v212 - estoque regional por responsável e direcionamento múltiplo. */
+.regional-assignment-form {
+  display: grid;
+  gap: 18px;
+}
+.regional-assignment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.regional-assignment-card {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+  background: rgba(255,255,255,.025);
+  display: grid;
+  gap: 18px;
+}
+.regional-assignment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.regional-assignment-head > strong {
+  color: var(--text-strong);
+  font-size: 17px;
+}
+.regional-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(230,0,18,.30);
+  background: rgba(230,0,18,.10);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+.regional-pill.unset {
+  border-color: var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+}
+.regional-assignment-block {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.regional-assignment-copy {
+  display: grid;
+  gap: 4px;
+}
+.regional-assignment-copy strong {
+  color: var(--text-strong);
+  font-size: 14px;
+}
+.regional-assignment-copy span,
+.regional-assignment-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+.regional-check-list {
+  display: grid;
+  gap: 9px;
+}
+.regional-check-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 58px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255,255,255,.02);
+  cursor: pointer;
+}
+.regional-check-option:has(input:checked) {
+  border-color: rgba(230,0,18,.45);
+  background: rgba(230,0,18,.09);
+}
+.regional-check-option input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.regional-check-option > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.regional-check-option strong {
+  color: var(--text-strong);
+  line-height: 1.25;
+}
+.regional-check-option small {
+  color: var(--muted);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.regional-assignment-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.user-bulk-regional-card {
+  margin: 14px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(190px, .45fr) auto;
+  align-items: end;
+  gap: 14px;
+  background: rgba(255,255,255,.025);
+}
+.user-bulk-regional-card > div {
+  display: grid;
+  gap: 5px;
+  align-self: center;
+}
+.user-bulk-regional-card > div strong { color: var(--text-strong); }
+.user-bulk-regional-card > div span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.user-select-column { width: 42px; text-align: center !important; }
+.user-select-column input { width: 18px; height: 18px; margin: 0 auto; }
+.stock-scope-card {
+  padding: 20px 22px;
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: minmax(280px, .8fr) minmax(480px, 1.2fr);
+  align-items: end;
+  gap: 20px;
+  overflow: visible;
+}
+.stock-scope-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.stock-scope-copy h2 { margin: 0; color: var(--text-strong); font-size: 19px; }
+.stock-scope-copy p { margin: 0; color: var(--muted); line-height: 1.45; }
+.stock-scope-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+}
+.stock-scope-filter .field-actions {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: nowrap;
+}
+.stock-scope-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.stock-scope-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.035);
+  color: var(--muted-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+.stock-legacy-warning {
+  margin-bottom: 18px;
+}
+.warning-box {
+  border-color: rgba(245,158,11,.35) !important;
+  background: rgba(245,158,11,.08) !important;
+}
+html[data-theme="light"] .regional-assignment-card,
+html[data-theme="light"] .regional-check-option,
+html[data-theme="light"] .user-bulk-regional-card {
+  background: rgba(255,255,255,.65);
+}
+@media (max-width: 1050px) {
+  .regional-assignment-grid,
+  .stock-scope-card {
+    grid-template-columns: 1fr;
+  }
+  .stock-scope-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stock-scope-filter .field-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .regional-assignment-grid,
+  .stock-scope-filter,
+  .user-bulk-regional-card {
+    grid-template-columns: 1fr;
+  }
+  .regional-assignment-actions .btn,
+  .user-bulk-regional-card .btn { width: 100%; }
+  .stock-scope-filter .field-actions { grid-column: auto; flex-wrap: wrap; }
+  .stock-scope-filter .field-actions .btn { flex: 1 1 140px; }
+}
+
+/* v212 - estoque de insumos separado por regional e responsável. */
+#productStockQuantity.regional-stock-readonly,
+#productStockQuantity[readonly] {
+  cursor: not-allowed;
+  opacity: .78;
+  background: rgba(255,255,255,.018);
+}
+html[data-theme="light"] #productStockQuantity.regional-stock-readonly,
+html[data-theme="light"] #productStockQuantity[readonly] {
+  background: rgba(17,24,39,.035);
+}
+
+/* v213 - fluxo Aguardando envio, Troca de Insumos e dashboard geral. */
+.status.awaiting_shipment,
+.status.approved {
+  background: rgba(59, 130, 246, .16);
+  color: #8fc1ff;
+}
+.status.shipped {
+  background: rgba(25, 179, 107, .16);
+  color: #74e0ad;
+}
+html[data-theme="light"] .status.awaiting_shipment,
+html[data-theme="light"] .status.approved { color: #155eb4; }
+html[data-theme="light"] .status.shipped { color: #087348; }
+
+.base-cycle-catalog-warning {
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.base-cycle-catalog-warning a {
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 950;
+  text-decoration: underline;
+}
+
+.exchange-cycle-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.exchange-cycle-card,
+.exchange-rules-card,
+.exchange-history-card {
+  padding: 24px;
+  overflow: visible;
+}
+.exchange-cycle-card.active { border-color: rgba(245, 158, 11, .35); }
+.exchange-cycle-card.available { border-color: rgba(25, 179, 107, .35); }
+.exchange-cycle-head,
+.base-cycle-admin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.exchange-cycle-head > div,
+.base-cycle-admin-head > div { min-width: 0; }
+.exchange-cycle-head h2,
+.base-cycle-admin-head h2,
+.exchange-rules-card h2 {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.exchange-cycle-head p,
+.base-cycle-admin-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+.exchange-cycle-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 950;
+  background: rgba(255,255,255,.035);
+}
+.exchange-cycle-status.active { color: #ffd28a; border-color: rgba(245,158,11,.34); background: rgba(245,158,11,.1); }
+.exchange-cycle-status.available,
+.exchange-cycle-status.none { color: #74e0ad; border-color: rgba(25,179,107,.34); background: rgba(25,179,107,.1); }
+.exchange-cycle-status.inactive { color: var(--muted-2); }
+.exchange-cycle-date {
+  margin: 22px 0 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,.025);
+  display: grid;
+  gap: 6px;
+}
+.exchange-cycle-date span { color: var(--muted); font-size: 12px; font-weight: 900; }
+.exchange-cycle-date strong { color: var(--text-strong); font-size: 18px; line-height: 1.35; }
+.exchange-cycle-note { color: var(--muted-2); line-height: 1.55; margin: 0 0 18px; }
+.exchange-rule-list { margin: 18px 0 0; padding-left: 20px; display: grid; gap: 14px; color: var(--muted-2); line-height: 1.5; }
+.exchange-rule-list b { color: var(--text-strong); }
+
+.dashboard-order-kpis,
+.confirmed-order-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.confirmed-order-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dashboard-order-kpis article,
+.confirmed-order-kpis article {
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+  overflow: visible;
+}
+.dashboard-order-kpis span,
+.confirmed-order-kpis span { color: var(--muted); font-size: 12px; font-weight: 900; }
+.dashboard-order-kpis strong,
+.confirmed-order-kpis strong { color: var(--text-strong); font-size: 27px; }
+.dashboard-order-kpis .warning { border-color: rgba(245,158,11,.3); }
+.dashboard-order-kpis .info { border-color: rgba(59,130,246,.3); }
+.dashboard-order-kpis .success { border-color: rgba(25,179,107,.3); }
+.dashboard-order-kpis .danger { border-color: rgba(230,0,18,.3); }
+
+.request-dashboard-filter-card,
+.confirmed-order-filter-card,
+.base-cycle-filter-card {
+  padding: 20px;
+  margin-bottom: 18px;
+  overflow: visible;
+}
+.request-dashboard-filter,
+.confirmed-order-filter,
+.base-cycle-filter {
+  display: grid;
+  gap: 14px;
+  align-items: end;
+}
+.request-dashboard-filter { grid-template-columns: repeat(5, minmax(150px, 1fr)); }
+.confirmed-order-filter { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+.base-cycle-filter { grid-template-columns: minmax(220px, 1.2fr) minmax(160px, .6fr) minmax(160px, .6fr) auto; }
+.request-dashboard-filter .field-actions,
+.confirmed-order-filter .field-actions { grid-column: 1 / -1; }
+
+.confirmed-summary-card,
+.confirmed-total-table { padding: 20px; margin-bottom: 18px; overflow: visible; }
+.confirmed-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.confirmed-summary-grid article,
+.stock-confirmed-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255,255,255,.025);
+  padding: 14px;
+}
+.confirmed-summary-grid article { display: grid; gap: 5px; }
+.confirmed-summary-grid strong,
+.stock-confirmed-item strong { color: var(--text-strong); overflow-wrap: anywhere; }
+.confirmed-summary-grid span { color: var(--red-2); font-size: 19px; font-weight: 950; }
+.confirmed-summary-grid small,
+.stock-confirmed-item small { color: var(--muted); line-height: 1.4; }
+
+.base-cycle-list { display: grid; gap: 14px; }
+.base-cycle-admin-card { padding: 20px; overflow: visible; }
+.base-cycle-admin-card.active { border-color: rgba(245,158,11,.3); }
+.base-cycle-admin-card.none { border-color: rgba(25,179,107,.22); }
+.base-cycle-admin-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.base-cycle-admin-meta > div {
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(255,255,255,.022);
+  display: grid;
+  gap: 5px;
+}
+.base-cycle-admin-meta span { color: var(--muted); font-size: 11px; font-weight: 900; }
+.base-cycle-admin-meta strong { color: var(--text-strong); overflow-wrap: anywhere; }
+.base-cycle-admin-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.stock-scope-filter {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+.stock-scope-filter .field-actions { grid-column: 1 / -1; justify-content: flex-end; }
+.stock-confirmed-panel { min-width: 0; }
+.stock-confirmed-list { display: grid; gap: 10px; max-height: 440px; overflow: auto; padding-right: 2px; }
+.stock-confirmed-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.stock-confirmed-item > div { min-width: 0; display: grid; gap: 4px; }
+.stock-confirmed-item > span { flex: 0 0 auto; color: var(--muted-2); }
+.stock-confirmed-item > span b { color: var(--red-2); font-size: 20px; }
+
+.user-bulk-base-admin-card {
+  border: 1px solid rgba(230,0,18,.24);
+  border-radius: 20px;
+  padding: 18px;
+  margin: 14px 0;
+  background: rgba(230,0,18,.035);
+  display: grid;
+  gap: 15px;
+  overflow: visible;
+}
+.user-bulk-base-admin-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.user-bulk-base-admin-head > div { display: grid; gap: 5px; min-width: 0; }
+.user-bulk-base-admin-head strong { color: var(--text-strong); }
+.user-bulk-base-admin-head span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.bulk-base-admin-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+
+html[data-theme="light"] .exchange-cycle-date,
+html[data-theme="light"] .confirmed-summary-grid article,
+html[data-theme="light"] .stock-confirmed-item,
+html[data-theme="light"] .base-cycle-admin-meta > div,
+html[data-theme="light"] .user-bulk-base-admin-card {
+  background: rgba(255,255,255,.72);
+}
+
+@media (max-width: 1180px) {
+  .dashboard-order-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .request-dashboard-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .confirmed-summary-grid,
+  .bulk-base-admin-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .exchange-cycle-grid { grid-template-columns: 1fr; }
+  .confirmed-order-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .base-cycle-filter,
+  .base-cycle-admin-form { grid-template-columns: 1fr; }
+  .base-cycle-admin-meta { grid-template-columns: 1fr; }
+  .user-bulk-base-admin-head { display: grid; }
+}
+@media (max-width: 680px) {
+  .dashboard-order-kpis,
+  .confirmed-order-kpis,
+  .request-dashboard-filter,
+  .confirmed-order-filter,
+  .confirmed-summary-grid,
+  .bulk-base-admin-options,
+  .stock-scope-filter { grid-template-columns: 1fr; }
+  .exchange-cycle-head,
+  .base-cycle-admin-head,
+  .stock-confirmed-item { display: grid; }
+  .stock-scope-filter .field-actions { grid-column: auto; justify-content: stretch; }
+  .stock-scope-filter .field-actions .btn { flex: 1 1 100%; }
+}

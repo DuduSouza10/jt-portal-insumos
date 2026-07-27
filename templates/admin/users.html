@@ -47,6 +47,15 @@
         </select>
       </label>
       <label>
+        Filtrar regional
+        <select id="userRegionalFilter" name="regional">
+          <option value="" {{ 'selected' if not user_filters.regional else '' }}>Todas</option>
+          {% for option in user_regional_options %}
+            <option value="{{ option.value }}" {{ 'selected' if user_filters.regional == option.value else '' }}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
         Classificar por
         <select id="userSortFilter" name="sort">
           <option value="responsible_asc" {{ 'selected' if user_filters.sort == 'responsible_asc' else '' }}>Responsável A-Z</option>
@@ -133,10 +142,54 @@
 
   {% set can_manage_user_status = can_do('users_status_delete') %}
   {% set can_edit_users = can_do('users_create_edit') %}
+  {% if current_is_dev() %}
+  <form id="bulkRegionalForm" class="user-bulk-regional-card" method="post" action="{{ url_for('admin_users_bulk_regional', return_to=request.full_path) }}">
+    <div>
+      <strong>Definir regional em massa</strong>
+      <span>Marque os usuários da tabela e aplique MG ou SPN de uma só vez.</span>
+    </div>
+    <label>
+      Regional
+      <select name="regional" required>
+        <option value="">Selecione</option>
+        {% for option in user_regional_options %}<option value="{{ option.value }}">{{ option.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Aplicar aos selecionados</button>
+  </form>
+  <form id="bulkBaseAdminForm" class="user-bulk-base-admin-card" method="post" action="{{ url_for('admin_users_bulk_base_admins', return_to=request.full_path) }}">
+    <div class="user-bulk-base-admin-head">
+      <div>
+        <strong>Definir bases em massa para administradores</strong>
+        <span>Selecione as bases na tabela e marque uma ou mais pessoas responsáveis pelo atendimento. Bases liberadas para ambas as regionais podem ser vinculadas a MG e SPN.</span>
+      </div>
+      <label>
+        Operação
+        <select name="assignment_mode">
+          <option value="replace">Substituir responsáveis atuais</option>
+          <option value="add">Adicionar responsáveis</option>
+          <option value="remove">Remover responsáveis marcados</option>
+        </select>
+      </label>
+    </div>
+    <div class="bulk-base-admin-options">
+      {% for admin in base_assignment_admin_options|default([]) %}
+      <label class="regional-check-option">
+        <input type="checkbox" name="admin_user_ids" value="{{ admin.id }}">
+        <span><strong>{{ admin.responsible_name }}</strong><small>{{ admin.organization_name or admin.username }} • {{ user_regional_label(admin.regional) }}</small></span>
+      </label>
+      {% else %}
+      <p class="muted">Nenhum administrador aprovado disponível.</p>
+      {% endfor %}
+    </div>
+    <div id="bulkBaseAdminSelectedUsers"></div>
+    <div class="form-actions"><button class="btn primary" type="submit">Aplicar responsáveis às bases selecionadas</button></div>
+  </form>
+  {% endif %}
   <table>
     <thead>
       <tr>
-        <th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Setor</th><th>Telefone</th><th>CNPJ</th><th>Status</th><th>Ações</th>
+        {% if current_is_dev() %}<th class="user-select-column"><input id="selectAllRegionalUsers" type="checkbox" aria-label="Selecionar todos os usuários desta página"></th>{% endif %}<th>Responsável</th><th>Usuário</th><th>Tipo</th><th>Regional</th><th>Setor</th><th>Telefone</th><th>CNPJ</th><th>Status</th><th>Ações</th>
       </tr>
     </thead>
     <tbody id="userTableBody">
@@ -147,15 +200,18 @@
         data-user-id="{{ user.id }}"
         data-status="{{ user.status }}"
         data-role="{{ user.role }}"
+        data-regional="{{ user.regional }}"
         data-created="{{ user.created_at.isoformat() if user.created_at else '' }}"
         data-responsible="{{ user.responsible_name|e }}"
         data-username="{{ user.username|e }}"
         data-unit="{{ (user.franchise_name or user.organization_name)|e }}"
         data-search="{{ (user.responsible_name ~ ' ' ~ user.username ~ ' ' ~ user.organization_name ~ ' ' ~ user.franchise_name ~ ' ' ~ user.franchise_number ~ ' ' ~ user.formatted_phone ~ ' ' ~ user.cnpj ~ ' ' ~ user.formatted_cnpj)|e }}"
       >
+        {% if current_is_dev() %}<td class="user-select-column" data-label="Selecionar"><input class="regional-user-checkbox" form="bulkRegionalForm" type="checkbox" name="user_ids" value="{{ user.id }}" aria-label="Selecionar {{ user.responsible_name }}"></td>{% endif %}
         <td data-label="Responsável">{{ user.responsible_name }}</td>
         <td data-label="Usuário">{{ user.username }}</td>
         <td data-label="Tipo">{{ user_role_label(user.role) }}</td>
+        <td data-label="Regional"><span class="regional-pill {{ 'unset' if not user.regional else '' }}">{{ user_regional_label(user.regional) }}</span>{% if user.role == 'base' and user.allow_cross_regional_service %}<br><small>Atendimento MG e SPN</small>{% endif %}</td>
         <td class="user-unit-cell" data-i18n-sector data-i18n-sector-original="{{ (user.franchise_name or user.organization_name)|e }}" data-label="Setor">
           {% if user.role == 'franchise' %}
             <strong>{{ user.franchise_name or user.organization_name }}</strong>
@@ -229,9 +285,9 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted center">Nenhum usuário cadastrado.</td></tr>
+      <tr><td colspan="{{ 10 if current_is_dev() else 9 }}" class="muted center">Nenhum usuário cadastrado.</td></tr>
       {% endfor %}
-      <tr id="userLiveEmpty" class="hidden"><td colspan="8" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
+      <tr id="userLiveEmpty" class="hidden"><td colspan="{{ 10 if current_is_dev() else 9 }}" class="muted center">Nenhum usuário encontrado com os filtros selecionados.</td></tr>
     </tbody>
   </table>
 
@@ -277,6 +333,7 @@
   const search = document.getElementById('userLiveSearch');
   const statusFilter = document.getElementById('userStatusFilter');
   const roleFilter = document.getElementById('userRoleFilter');
+  const regionalFilter = document.getElementById('userRegionalFilter');
   const sortFilter = document.getElementById('userSortFilter');
   const limitFilter = document.getElementById('userLimitFilter');
   const pageInput = document.getElementById('userPageInput');
@@ -411,6 +468,7 @@
     if (search && search.value.trim()) params.set('q', search.value.trim());
     if (statusFilter && statusFilter.value) params.set('status', statusFilter.value);
     if (roleFilter && roleFilter.value) params.set('role', roleFilter.value);
+    if (regionalFilter && regionalFilter.value) params.set('regional', regionalFilter.value);
     if (sortFilter && sortFilter.value) params.set('sort', sortFilter.value);
     const limitControl = limitFilter || (form ? form.querySelector('[name="limit"]') : null);
     if (limitControl && limitControl.value) params.set('limit', limitControl.value);
@@ -439,7 +497,7 @@
       updateExportLink();
     });
 
-    [statusFilter, roleFilter, sortFilter, limitFilter].forEach(function (control) {
+    [statusFilter, roleFilter, regionalFilter, sortFilter, limitFilter].forEach(function (control) {
       if (!control) return;
       control.addEventListener('change', submitServerFilters);
     });
@@ -466,6 +524,7 @@
         if (search) search.value = '';
         if (statusFilter) statusFilter.value = '';
         if (roleFilter) roleFilter.value = '';
+        if (regionalFilter) regionalFilter.value = '';
         if (sortFilter) sortFilter.value = 'responsible_asc';
         if (limitFilter) limitFilter.value = '25';
         submitServerFilters();
@@ -507,6 +566,7 @@
   function applyFilters() {
     const status = statusFilter ? statusFilter.value : '';
     const role = roleFilter ? roleFilter.value : '';
+    const regional = regionalFilter ? regionalFilter.value : '';
     const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
     const counts = { shown: 0, pending: 0, approved: 0, rejected: 0, dev: 0, admin: 0, base: 0, franchise: 0 };
     const ordered = sortedRows();
@@ -514,11 +574,13 @@
     ordered.forEach(function (row) {
       const rowStatus = row.dataset.status || '';
       const rowRole = row.dataset.role || '';
+      const rowRegional = row.dataset.regional || '';
       const searchable = normalize(row.dataset.search || row.textContent || '');
       const matchesStatus = !status || status === 'all' || rowStatus === status;
       const matchesRole = !role || role === 'all' || rowRole === role;
+      const matchesRegional = !regional || rowRegional === regional;
       const matchesSearch = !terms.length || terms.every(function (term) { return searchable.includes(term); });
-      const visible = matchesStatus && matchesRole && matchesSearch;
+      const visible = matchesStatus && matchesRole && matchesRegional && matchesSearch;
 
       row.classList.toggle('user-live-hidden', !visible);
       tbody.appendChild(row);
@@ -567,7 +629,7 @@
     applyFilters();
   });
 
-  [search, statusFilter, roleFilter, sortFilter].forEach(function (control) {
+  [search, statusFilter, roleFilter, regionalFilter, sortFilter].forEach(function (control) {
     if (!control) return;
     control.addEventListener('input', applyFilters);
     control.addEventListener('change', applyFilters);
@@ -586,6 +648,7 @@
       if (search) search.value = '';
       if (statusFilter) statusFilter.value = '';
       if (roleFilter) roleFilter.value = '';
+      if (regionalFilter) regionalFilter.value = '';
       if (sortFilter) sortFilter.value = 'responsible_asc';
       if (limitFilter) limitFilter.value = '25';
       applyFilters();
@@ -595,6 +658,55 @@
 
   window.addEventListener('jt-language-change', function () { applyFilters(); });
   applyFilters();
+})();
+
+(function () {
+  const selectAll = document.getElementById('selectAllRegionalUsers');
+  const boxes = Array.from(document.querySelectorAll('.regional-user-checkbox'));
+  const form = document.getElementById('bulkRegionalForm');
+  const baseAdminForm = document.getElementById('bulkBaseAdminForm');
+  const baseAdminSelectedUsers = document.getElementById('bulkBaseAdminSelectedUsers');
+  if (selectAll) {
+    selectAll.addEventListener('change', function () { boxes.forEach(function (box) { box.checked = selectAll.checked; }); });
+    boxes.forEach(function (box) {
+      box.addEventListener('change', function () {
+        selectAll.checked = boxes.length > 0 && boxes.every(function (item) { return item.checked; });
+        selectAll.indeterminate = boxes.some(function (item) { return item.checked; }) && !selectAll.checked;
+      });
+    });
+  }
+  if (form) {
+    form.addEventListener('submit', function (event) {
+      if (!boxes.some(function (box) { return box.checked; })) {
+        event.preventDefault();
+        window.alert('Selecione pelo menos um usuário.');
+      }
+    });
+  }
+  if (baseAdminForm) {
+    baseAdminForm.addEventListener('submit', function (event) {
+      const selected = boxes.filter(function (box) {
+        if (!box.checked) return false;
+        const row = box.closest('[data-user-row]');
+        return row && row.dataset.role === 'base';
+      });
+      if (!selected.length) {
+        event.preventDefault();
+        window.alert('Selecione pelo menos uma base na tabela.');
+        return;
+      }
+      if (baseAdminSelectedUsers) {
+        baseAdminSelectedUsers.innerHTML = '';
+        selected.forEach(function (box) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'user_ids';
+          input.value = box.value;
+          baseAdminSelectedUsers.appendChild(input);
+        });
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

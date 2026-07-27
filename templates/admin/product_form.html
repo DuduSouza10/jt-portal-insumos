@@ -86,7 +86,7 @@
         <label class="field-card stock-tag-select-field">
           <span class="field-label">Tag de estoque</span>
           {% set selected_stock_tag = product.stock_tag if product else 'insumos' %}
-          <select name="stock_tag" required>
+          <select name="stock_tag" id="productStockTag" required>
             {% for tag in stock_tags|default([]) %}
             <option value="{{ tag.slug }}" {% if tag.slug == selected_stock_tag %}selected{% endif %}>{{ tag.name }}</option>
             {% endfor %}
@@ -189,9 +189,20 @@
         </div>
 
         <div class="form-panel-grid two-cols-grid metrics-grid">
+          {% set form_stock_tag = product.stock_tag if product else 'insumos' %}
           <label class="field-card">
             <span class="field-label">Estoque disponível</span>
-            <input name="stock_quantity" type="number" min="0" value="{{ product.stock_quantity if product else 0 }}" required>
+            <input
+              name="stock_quantity"
+              id="productStockQuantity"
+              type="number"
+              min="0"
+              value="{{ product.stock_quantity if product else 0 }}"
+              data-is-new="{{ '0' if product else '1' }}"
+              {% if form_stock_tag == 'insumos' %}readonly{% endif %}
+              required
+            >
+            <small id="productStockRegionalHint" class="hint{% if form_stock_tag != 'insumos' %} hidden{% endif %}">Para insumos, o saldo é separado por regional e responsável. Atualize pela página Entrada de Materiais.</small>
           </label>
           <label class="field-card">
             <span class="field-label">Valor unitário</span>
@@ -359,6 +370,9 @@
   const kitQuantityWrap = document.getElementById('kitQuantityWrap');
   const kitQuantityInput = document.getElementById('kitQuantityInput');
   const imageInput = document.getElementById('productImage');
+  const productStockTag = document.getElementById('productStockTag');
+  const productStockQuantity = document.getElementById('productStockQuantity');
+  const productStockRegionalHint = document.getElementById('productStockRegionalHint');
   const imagePreviewButton = document.getElementById('productImagePreviewButton');
   const imagePreviewImg = document.getElementById('productImagePreviewImg');
   const imagePlaceholder = document.getElementById('productImagePlaceholder');
@@ -409,6 +423,18 @@
     kitQuantityInput.disabled = !active;
     kitQuantityInput.required = active;
     if (!active) kitQuantityInput.value = '1';
+  }
+
+  function syncRegionalStockField() {
+    if (!productStockQuantity) return;
+    const stockTag = productStockTag ? productStockTag.value : {{ (product.stock_tag if product else 'insumos')|tojson }};
+    const isSupplyStock = stockTag === 'insumos';
+    productStockQuantity.readOnly = isSupplyStock;
+    productStockQuantity.classList.toggle('regional-stock-readonly', isSupplyStock);
+    if (isSupplyStock && productStockQuantity.dataset.isNew === '1') {
+      productStockQuantity.value = '0';
+    }
+    if (productStockRegionalHint) productStockRegionalHint.classList.toggle('hidden', !isSupplyStock);
   }
 
   function releaseTemporaryImage() {
@@ -505,6 +531,9 @@
     isKitProduct.addEventListener('change', syncKitFields);
     syncKitFields();
   }
+
+  if (productStockTag) productStockTag.addEventListener('change', syncRegionalStockField);
+  syncRegionalStockField();
 
   function syncInternalVisibility() {
     if (!internalProduct || !visibleBase || !visibleFranchise) return;

@@ -321,3 +321,14 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Melhorado o card de detalhes da solicitação para exibir dados, observações e histórico de ações de forma alinhada.
 - Cards de movimentação de estoque no Feishu agora informam a unidade/base, solicitante e motivo da saída quando a baixa vier de aprovação de solicitação.
 - Por padrão, apenas Dev pode alterar nome do responsável e nome de usuário/login em usuários existentes. O Dev pode liberar esses campos para outros cargos na edição do tipo de acesso.
+
+## Atualização 2.13 — fluxo regional, pedidos e troca de insumos
+
+- Estoque de insumos separado por regional e por responsável.
+- Seleção múltipla de responsáveis para aprovação e entrada de estoque em MG e SPN.
+- Atribuição em massa de bases a um ou mais administradores.
+- Regional cadastrada por usuário e opção individual de atendimento cruzado MG/SPN para bases.
+- Fluxo de pedidos: Pendente → Aguardando envio → Enviado, com registro de aprovador e responsável pela confirmação do envio.
+- Página Troca de Insumos com ciclo automático de três meses para bases.
+- Dashboard Geral de Pedidos e página Pedidos Confirmados com totais por produto para planejamento de compra.
+- Catálogo de bases exibe todos os insumos liberados, inclusive sem estoque.

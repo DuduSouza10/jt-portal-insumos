@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}Solicitações atendidas • Portal de Insumos J&T{% endblock %}
-{% block page_title %}Solicitações atendidas{% endblock %}
-{% block page_subtitle %}Histórico de solicitações aprovadas e já descontadas do estoque.{% endblock %}
+{% block title %}Aguardando envio e pedidos enviados • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Aguardando envio e pedidos enviados{% endblock %}
+{% block page_subtitle %}Acompanhe pedidos aprovados que aguardam envio, pedidos enviados e solicitações recusadas.{% endblock %}
 {% block content %}
 <div class="card table-card">
   <div class="section-head">
-    <h2>Pedidos atendidos</h2>
+    <h2>Pedidos processados</h2>
     {% if can_access('admin_requests') %}
     <a class="btn ghost" href="{{ url_for('admin_requests') }}">Ver todas as solicitações</a>
     {% endif %}
@@ -14,7 +14,7 @@
   <table>
     <thead>
       <tr>
-        <th>#</th><th>Unidade</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação executada por</th><th>Ação</th>
+        <th>#</th><th>Unidade</th><th>Regional</th><th>Tipo</th><th>Status</th><th>Itens</th><th>Total</th><th>Data</th><th>Ação executada por</th><th>Ação</th>
       </tr>
     </thead>
     <tbody>
@@ -22,6 +22,7 @@
       <tr>
         <td data-label="#">#{{ req.id }}</td>
         <td data-label="Unidade">{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
+        <td data-label="Regional"><span class="regional-pill">{{ request_regional_label(supply_request_regional(req)) }}</span></td>
         <td data-label="Tipo">{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
         <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
         <td data-label="Itens">{{ req.items|length }}</td>
@@ -31,7 +32,7 @@
         <td class="actions-cell" data-label="Acao"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
+      <tr><td colspan="10" class="muted center">Nenhuma solicitação atendida ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>

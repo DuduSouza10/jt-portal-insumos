@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard Geral de Pedidos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Dashboard Geral de Pedidos{% endblock %}
+{% block page_subtitle %}Visão consolidada de pedidos de bases e franquias, com filtros, status e quantidade total de insumos.{% endblock %}
+{% block content %}
+<section class="dashboard-order-kpis">
+  <article class="card"><span>Todos</span><strong>{{ dashboard_metrics.all }}</strong></article>
+  <article class="card warning"><span>Pendentes</span><strong>{{ dashboard_metrics.pending }}</strong></article>
+  <article class="card info"><span>Aguardando envio</span><strong>{{ dashboard_metrics.awaiting_shipment }}</strong></article>
+  <article class="card success"><span>Enviados</span><strong>{{ dashboard_metrics.shipped }}</strong></article>
+  <article class="card danger"><span>Recusados</span><strong>{{ dashboard_metrics.rejected }}</strong></article>
+</section>
+
+<section class="card request-dashboard-filter-card">
+  <form class="request-dashboard-filter" method="get" action="{{ url_for('admin_orders_dashboard') }}">
+    <label>Status
+      <select name="status">
+        <option value="">Todos</option>
+        <option value="pending" {{ 'selected' if selected_status == 'pending' else '' }}>Pendente</option>
+        <option value="awaiting_shipment" {{ 'selected' if selected_status == 'awaiting_shipment' else '' }}>Aguardando envio</option>
+        <option value="shipped" {{ 'selected' if selected_status == 'shipped' else '' }}>Enviado</option>
+        <option value="rejected" {{ 'selected' if selected_status == 'rejected' else '' }}>Recusado</option>
+        <option value="deleted" {{ 'selected' if selected_status == 'deleted' else '' }}>Excluído</option>
+      </select>
+    </label>
+    <label>Tipo
+      <select name="type">
+        <option value="">Base e franquia</option>
+        {% for option in request_type_options %}<option value="{{ option.value }}" {{ 'selected' if request_filters.type == option.value else '' }}>{{ option.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Regional
+      <select name="regional">
+        <option value="">Todas</option>
+        {% for option in request_regional_options %}<option value="{{ option.value }}" {{ 'selected' if request_filters.regional == option.value else '' }}>{{ option.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Produto
+      <select name="product_id">
+        <option value="">Todos os produtos</option>
+        {% for product in request_product_options %}<option value="{{ product.id }}" {{ 'selected' if request_filters.product_id == product.id else '' }}>{{ product.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Classificação
+      <select name="sort">
+        {% for option in request_sort_options %}<option value="{{ option.value }}" {{ 'selected' if request_filters.sort == option.value else '' }}>{{ option.label }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="field-actions">
+      <button class="btn primary" type="submit">Aplicar filtros</button>
+      <a class="btn ghost" href="{{ url_for('admin_orders_dashboard') }}">Limpar</a>
+    </div>
+  </form>
+</section>
+
+<section class="card confirmed-summary-card">
+  <div class="section-head">
+    <div><span class="eyebrow">Planejamento de compra</span><h2>Quantidade consolidada por insumo</h2><p class="hint">Soma dos pedidos em Aguardando envio e Enviados dentro dos filtros selecionados.</p></div>
+    <a class="btn ghost" href="{{ url_for('admin_stock_confirmed_orders') }}" target="_blank" rel="noopener">Abrir Pedidos Confirmados</a>
+  </div>
+  <div class="confirmed-summary-grid">
+    {% for row in confirmed_order_totals %}
+    <article><strong>{{ row.product_name }}</strong><span>{{ row.total_quantity }} {{ row.unit_measure }}</span><small>{{ row.request_count }} pedido(s) • {{ row.base_request_count }} base(s) • {{ row.franchise_request_count }} franquia(s)</small></article>
+    {% else %}<p class="muted">Nenhuma quantidade confirmada para os filtros selecionados.</p>{% endfor %}
+  </div>
+</section>
+
+<section class="card table-card">
+  <div class="section-head"><div><h2>Todos os pedidos</h2><p class="hint">Bases e franquias em uma única visão.</p></div></div>
+  <table>
+    <thead><tr><th>#</th><th>Unidade</th><th>Tipo</th><th>Regional</th><th>Status</th><th>Itens</th><th>Quantidade</th><th>Data</th><th>Ação executada</th><th>Ação</th></tr></thead>
+    <tbody>
+      {% for req in requests_list %}
+      <tr>
+        <td data-label="#">#{{ req.id }}</td>
+        <td data-label="Unidade">{{ req.user.organization_name if req.user else '-' }}<br><small>{{ req.user.responsible_name if req.user else '-' }}</small></td>
+        <td data-label="Tipo">{{ 'Base' if req.user and req.user.role == 'base' else ('Franquia' if req.user and req.user.role == 'franchise' else 'Admin') }}</td>
+        <td data-label="Regional">{{ user_regional_label(supply_request_regional(req)) }}</td>
+        <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td data-label="Itens">{{ req.items|length }}</td>
+        <td data-label="Quantidade">{{ req.items|sum(attribute='quantity') }}</td>
+        <td data-label="Data">{{ format_sao_paulo_datetime(req.created_at) }}</td>
+        <td data-label="Ação executada">{{ request_action_summary(req) }}</td>
+        <td data-label="Ação"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a></td>
+      </tr>
+      {% else %}<tr><td colspan="10" class="muted center">Nenhum pedido encontrado.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% set request_pagination_item_label = 'pedidos' %}
+  {% include '_request_pagination.html' %}
+</section>
+{% endblock %}

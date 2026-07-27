@@ -5,6 +5,12 @@
 Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
 {% endblock %}
 {% block content %}
+{% if active_base_cycle %}
+<div class="flash warning base-cycle-catalog-warning">
+  Esta base está no ciclo de três meses até <strong>{{ active_base_cycle.blocked_until_label }}</strong>. Você pode visualizar todos os insumos, mas uma nova solicitação só será liberada após o prazo ou se o pedido de origem for recusado.
+  <a href="{{ url_for('exchange_supplies') }}">Ver ciclo</a>
+</div>
+{% endif %}
 <section class="portal-layout">
   <div class="products-area">
     <div class="search-card card">
@@ -81,5 +87,5 @@ Pesquise o insumo, informe a quantidade e envie para aprovação administrativa.
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}?v=120"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=213"></script>
 {% endblock %}

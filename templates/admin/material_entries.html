@@ -8,6 +8,10 @@
     <span class="eyebrow">Gestão de estoque</span>
     <h2>Adicionar entrada</h2>
     <p>Os materiais adicionados conversam com Produtos: se o item já existir, o estoque será somado; se não existir, o produto será criado automaticamente.</p>
+    <div class="stock-scope-badges">
+      <span>Regional {{ user_regional_label(stock_regional) }}</span>
+      <span>Estoque de {{ stock_owner.responsible_name }}</span>
+    </div>
   </div>
 </section>
 
@@ -147,13 +151,15 @@
   <table>
     <thead>
       <tr>
-        <th>Data</th><th>Item</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Total</th><th>Nota fiscal</th><th>Responsável</th><th>Observações</th>
+        <th>Data</th><th>Regional</th><th>Estoque de</th><th>Item</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Total</th><th>Nota fiscal</th><th>Responsável</th><th>Observações</th>
       </tr>
     </thead>
     <tbody>
       {% for entry in entries %}
       <tr>
         <td data-label="Data">{{ format_sao_paulo_datetime(entry.created_at) }}</td>
+        <td data-label="Regional"><span class="regional-pill">{{ user_regional_label(entry.regional) }}</span></td>
+        <td data-label="Estoque de"><strong>{{ entry.stock_owner_name or stock_owner.responsible_name }}</strong></td>
         <td data-label="Item"><strong>{{ entry.item_name }}</strong></td>
         <td data-label="Qtd.">{{ entry.quantity }}</td>
         <td data-label="Unidade">{{ entry.unit_measure }}</td>
@@ -171,7 +177,7 @@
         <td data-label="Observações">{{ entry.notes or '-' }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="muted center">Nenhuma entrada de material registrada ainda.</td></tr>
+      <tr><td colspan="11" class="muted center">Nenhuma entrada de material registrada ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>

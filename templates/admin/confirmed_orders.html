@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block body_class %}confirmed-orders-page{% endblock %}
+{% block title %}Pedidos Confirmados • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Pedidos Confirmados{% endblock %}
+{% block page_subtitle %}Pedidos aprovados para envio ou já enviados, consolidados para planejamento de reposição.{% endblock %}
+{% block content %}
+<section class="confirmed-order-kpis">
+  <article class="card"><span>Produtos distintos</span><strong>{{ confirmed_product_count }}</strong></article>
+  <article class="card"><span>Quantidade total</span><strong>{{ confirmed_quantity }}</strong></article>
+  <article class="card"><span>Pedidos listados</span><strong>{{ request_pagination.total }}</strong></article>
+</section>
+<section class="card confirmed-order-filter-card">
+  <form class="confirmed-order-filter" method="get" action="{{ url_for('admin_stock_confirmed_orders') }}">
+    <label>Tipo
+      <select name="requester_type"><option value="">Base e franquia</option>{% for option in type_options %}<option value="{{ option.value }}" {{ 'selected' if confirmed_filters.requester_type == option.value else '' }}>{{ option.label }}</option>{% endfor %}</select>
+    </label>
+    <label>Regional
+      <select name="regional"><option value="">Todas</option>{% for option in regional_options %}<option value="{{ option.value }}" {{ 'selected' if confirmed_filters.regional == option.value else '' }}>{{ option.label }}</option>{% endfor %}</select>
+    </label>
+    <label>Produto
+      <select name="product_id"><option value="">Todos</option>{% for product in product_options %}<option value="{{ product.id }}" {{ 'selected' if confirmed_filters.product_id == product.id else '' }}>{{ product.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Status
+      <select name="order_status"><option value="">Aguardando + enviados</option><option value="awaiting_shipment" {{ 'selected' if confirmed_filters.order_status == 'awaiting_shipment' else '' }}>Aguardando envio</option><option value="shipped" {{ 'selected' if confirmed_filters.order_status == 'shipped' else '' }}>Enviado</option></select>
+    </label>
+    <label>Data inicial<input type="date" name="start_date" value="{{ confirmed_filters.start_date }}"></label>
+    <label>Data final<input type="date" name="end_date" value="{{ confirmed_filters.end_date }}"></label>
+    <div class="field-actions"><button class="btn primary" type="submit">Aplicar filtros</button><a class="btn ghost" href="{{ url_for('admin_stock_confirmed_orders') }}">Limpar</a></div>
+  </form>
+</section>
+<section class="card confirmed-total-table table-card">
+  <div class="section-head"><div><h2>Total de insumos solicitados</h2><p class="hint">Use esta soma para definir a quantidade a ser comprada ou separada.</p></div></div>
+  <table><thead><tr><th>Produto</th><th>Total</th><th>Aguardando envio</th><th>Enviado</th><th>Pedidos</th><th>Bases</th><th>Franquias</th></tr></thead>
+    <tbody>{% for row in confirmed_totals %}<tr><td data-label="Produto"><strong>{{ row.product_name }}</strong></td><td data-label="Total">{{ row.total_quantity }} {{ row.unit_measure }}</td><td data-label="Aguardando envio">{{ row.awaiting_quantity }}</td><td data-label="Enviado">{{ row.shipped_quantity }}</td><td data-label="Pedidos">{{ row.request_count }}</td><td data-label="Bases">{{ row.base_request_count }}</td><td data-label="Franquias">{{ row.franchise_request_count }}</td></tr>{% else %}<tr><td colspan="7" class="muted center">Nenhum item confirmado.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+<section class="card table-card">
+  <div class="section-head"><div><h2>Pedidos do período</h2><p class="hint">Abra o pedido para conferir itens, aprovador e responsável pelo envio.</p></div></div>
+  <table><thead><tr><th>#</th><th>Unidade</th><th>Tipo</th><th>Regional</th><th>Status</th><th>Itens</th><th>Quantidade</th><th>Aprovado por</th><th>Envio</th><th>Ação</th></tr></thead>
+    <tbody>{% for req in requests_list %}<tr>
+      <td data-label="#">#{{ req.id }}</td><td data-label="Unidade">{{ req.user.organization_name if req.user else '-' }}</td><td data-label="Tipo">{{ 'Base' if req.user and req.user.role == 'base' else 'Franquia' }}</td><td data-label="Regional">{{ user_regional_label(supply_request_regional(req)) }}</td><td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td><td data-label="Itens">{{ req.items|length }}</td><td data-label="Quantidade">{{ req.items|sum(attribute='quantity') }}</td><td data-label="Aprovado por">{{ req.reviewed_by.responsible_name if req.reviewed_by else '-' }}</td><td data-label="Envio">{{ req.shipped_by.responsible_name if req.shipped_by else '-' }}</td><td data-label="Ação"><a class="btn tiny primary" href="{{ url_for('admin_request_detail', request_id=req.id, return_to=request.full_path) }}">Abrir</a></td>
+    </tr>{% else %}<tr><td colspan="10" class="muted center">Nenhum pedido encontrado.</td></tr>{% endfor %}</tbody>
+  </table>
+  {% set request_pagination_item_label = 'pedidos confirmados' %}{% include '_request_pagination.html' %}
+</section>
+{% endblock %}

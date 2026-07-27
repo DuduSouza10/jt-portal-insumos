@@ -7,7 +7,7 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=211">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=213">
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <div class="bg-orb orb-one"></div>
@@ -41,17 +41,23 @@
           {% if can_access('my_requests') %}
             <a href="{{ url_for('my_requests') }}" class="{{ 'active' if request.endpoint == 'my_requests' else '' }}">Minhas solicitações</a>
           {% endif %}
+          {% if current_user.role == 'base' and can_access('exchange_supplies') %}
+            <a href="{{ url_for('exchange_supplies') }}" class="{{ 'active' if request.endpoint == 'exchange_supplies' else '' }}">Troca de Insumos</a>
+          {% endif %}
           {% if current_user.is_admin %}
             {% if can_access('admin_dashboard') %}<a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' else '' }}">Painel admin</a>{% endif %}
+            {% if can_access('orders_dashboard') %}<a href="{{ url_for('admin_orders_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_orders_dashboard' else '' }}">Dashboard Geral</a>{% endif %}
             {% if can_access('admin_products') %}<a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint in ['admin_products','admin_product_new','admin_product_edit'] else '' }}">Produtos</a>{% endif %}
             {% if can_access('admin_stock') %}
-              <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_assets','admin_asset_new','admin_stock','admin_material_entries'] else '' }}">
+              <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_assets','admin_asset_new','admin_stock','admin_material_entries','admin_stock_confirmed_orders','admin_base_cycles'] else '' }}">
                 <button class="nav-drop-toggle" type="button" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle>
                   Gestão <span aria-hidden="true">▾</span>
                 </button>
                 <div class="nav-drop-menu" role="menu">
                   <a role="menuitem" href="{{ url_for('admin_assets') }}" class="{{ 'active' if request.endpoint in ['admin_assets','admin_asset_new'] else '' }}">Gestão de Ativos</a>
                   <a role="menuitem" href="{{ url_for('admin_stock') }}" class="{{ 'active' if request.endpoint == 'admin_stock' else '' }}">Gestão de Insumos</a>
+                  <a role="menuitem" href="{{ url_for('admin_stock_confirmed_orders') }}" class="{{ 'active' if request.endpoint == 'admin_stock_confirmed_orders' else '' }}" target="_blank" rel="noopener">Pedidos Confirmados</a>
+                  {% if can_access('base_cycles') %}<a role="menuitem" href="{{ url_for('admin_base_cycles') }}" class="{{ 'active' if request.endpoint == 'admin_base_cycles' else '' }}">Troca de Insumos - Bases</a>{% endif %}
                   {% if can_do('stock_material_entries') %}
                     <a role="menuitem" href="{{ url_for('admin_material_entries') }}" class="{{ 'active' if request.endpoint == 'admin_material_entries' else '' }}">Entrada de Materiais</a>
                   {% endif %}
@@ -66,7 +72,7 @@
                 </button>
                 <div class="nav-drop-menu" role="menu">
                   {% if can_access('admin_requests') %}<a role="menuitem" href="{{ url_for('admin_requests', status='pending') }}" class="{{ 'active' if request.endpoint in ['admin_requests','admin_request_detail'] else '' }}">Pendentes</a>{% endif %}
-                  {% if can_access('admin_requests_attended') %}<a role="menuitem" href="{{ url_for('admin_requests_attended') }}" class="{{ 'active' if request.endpoint == 'admin_requests_attended' else '' }}">Atendidas</a>{% endif %}
+                  {% if can_access('admin_requests_attended') %}<a role="menuitem" href="{{ url_for('admin_requests_attended') }}" class="{{ 'active' if request.endpoint == 'admin_requests_attended' else '' }}">Aguardando envio / Enviadas</a>{% endif %}
                 </div>
               </div>
             {% endif %}
@@ -275,7 +281,10 @@
           '/admin/material-entries',
           '/admin/stock',
           '/admin/requests',
-          '/admin/requests/attended'
+          '/admin/requests/attended',
+          '/admin/orders-dashboard',
+          '/admin/stock/confirmed-orders',
+          '/admin/base-cycles'
         ].includes(path);
       }
 

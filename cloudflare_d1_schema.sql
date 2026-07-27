@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'base',
     status TEXT NOT NULL DEFAULT 'pending',
+    regional TEXT NOT NULL DEFAULT '',
+    allow_cross_regional_service INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT,
     page_permissions_configured INTEGER NOT NULL DEFAULT 0,
@@ -57,11 +59,15 @@ CREATE TABLE IF NOT EXISTS supply_requests (
     user_note TEXT,
     admin_note TEXT,
     people_count INTEGER,
+    regional TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     reviewed_at TEXT,
     reviewed_by_id INTEGER,
+    shipped_at TEXT,
+    shipped_by_id INTEGER,
     FOREIGN KEY(user_id) REFERENCES users(id),
-    FOREIGN KEY(reviewed_by_id) REFERENCES users(id)
+    FOREIGN KEY(reviewed_by_id) REFERENCES users(id),
+    FOREIGN KEY(shipped_by_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS request_items (
@@ -123,6 +129,8 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     product_id INTEGER NOT NULL,
     request_id INTEGER,
     created_by_id INTEGER,
+    stock_owner_user_id INTEGER,
+    regional TEXT NOT NULL DEFAULT '',
     movement_type TEXT NOT NULL,
     quantity_delta INTEGER NOT NULL,
     stock_before INTEGER NOT NULL,
@@ -131,7 +139,8 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     created_at TEXT NOT NULL,
     FOREIGN KEY(product_id) REFERENCES products(id),
     FOREIGN KEY(request_id) REFERENCES supply_requests(id),
-    FOREIGN KEY(created_by_id) REFERENCES users(id)
+    FOREIGN KEY(created_by_id) REFERENCES users(id),
+    FOREIGN KEY(stock_owner_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -210,9 +219,12 @@ CREATE TABLE IF NOT EXISTS material_entries (
     invoice_value_cents INTEGER NOT NULL DEFAULT 0,
     notes TEXT,
     created_by_id INTEGER,
+    regional TEXT NOT NULL DEFAULT '',
+    stock_owner_user_id INTEGER,
     created_at TEXT NOT NULL,
     FOREIGN KEY(product_id) REFERENCES products(id),
-    FOREIGN KEY(created_by_id) REFERENCES users(id)
+    FOREIGN KEY(created_by_id) REFERENCES users(id),
+    FOREIGN KEY(stock_owner_user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_material_entries_created_at ON material_entries(created_at);
 CREATE INDEX IF NOT EXISTS idx_material_entries_product_id ON material_entries(product_id);
@@ -239,3 +251,69 @@ CREATE TABLE IF NOT EXISTS request_regional_admin_assignments (
 CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id);
 
 CREATE INDEX IF NOT EXISTS idx_request_action_logs_request ON request_action_logs(request_id, created_at DESC);
+
+
+-- v212 - responsáveis múltiplos e estoque separado por regional/usuário
+CREATE TABLE IF NOT EXISTS regional_user_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regional TEXT NOT NULL,
+    assignment_type TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    updated_by_id INTEGER,
+    UNIQUE(regional, assignment_type, user_id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(updated_by_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_regional_user_assignments_lookup ON regional_user_assignments(regional, assignment_type, user_id);
+
+CREATE TABLE IF NOT EXISTS admin_base_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_user_id INTEGER NOT NULL,
+    base_user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    updated_by_id INTEGER,
+    UNIQUE(admin_user_id, base_user_id),
+    FOREIGN KEY(admin_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(base_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(updated_by_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_base ON admin_base_assignments(base_user_id, admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_admin ON admin_base_assignments(admin_user_id, base_user_id);
+
+CREATE TABLE IF NOT EXISTS base_request_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    blocked_until TEXT NOT NULL,
+    source_request_id INTEGER,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    revoked_at TEXT,
+    updated_by_id INTEGER,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(source_request_id) REFERENCES supply_requests(id) ON DELETE SET NULL,
+    FOREIGN KEY(updated_by_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_base_request_cycles_blocked_until ON base_request_cycles(blocked_until);
+
+CREATE TABLE IF NOT EXISTS regional_stock_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    regional TEXT NOT NULL,
+    stock_owner_user_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    UNIQUE(regional, stock_owner_user_id, product_id),
+    FOREIGN KEY(stock_owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_owner ON regional_stock_balances(regional, stock_owner_user_id, product_id);
+CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_product ON regional_stock_balances(product_id, regional);
+CREATE INDEX IF NOT EXISTS idx_users_regional ON users(regional);
+CREATE INDEX IF NOT EXISTS idx_supply_requests_regional ON supply_requests(regional, status);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_owner_regional ON stock_movements(regional, stock_owner_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_material_entries_owner_regional ON material_entries(regional, stock_owner_user_id, created_at DESC);

@@ -472,6 +472,7 @@ SUPPLY_STOCK_TAG = "insumos"
 ASSET_STOCK_TAG = "ativos"
 DEFAULT_STOCK_TAG = SUPPLY_STOCK_TAG
 DEFAULT_PRODUCT_REQUEST_BLOCK_MONTHS = 2
+DEFAULT_BASE_REQUEST_CYCLE_MONTHS = 3
 SYSTEM_STOCK_TAGS = [
     (SUPPLY_STOCK_TAG, "Insumos", "Estoque usado nas solicitacoes de insumos."),
     (ASSET_STOCK_TAG, "Ativos", "Estoque usado no cadastro e baixa de ativos."),
@@ -491,7 +492,9 @@ class User:
     password_hash: str
     role: str
     status: str
-    created_at: datetime
+    regional: str = ""
+    allow_cross_regional_service: bool = False
+    created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
     page_permissions_configured: bool = False
     action_permissions_configured: bool = False
@@ -601,14 +604,18 @@ class SupplyRequest:
     id: int
     user_id: int
     status: str
+    regional: str
     user_note: str
     admin_note: str
     people_count: int | None
     created_at: datetime
     reviewed_at: datetime | None = None
     reviewed_by_id: int | None = None
+    shipped_at: datetime | None = None
+    shipped_by_id: int | None = None
     user: User | None = None
     reviewed_by: User | None = None
+    shipped_by: User | None = None
     items: list[RequestItem] = field(default_factory=list)
     action_logs: list[dict[str, Any]] = field(default_factory=list)
 
@@ -636,7 +643,7 @@ class ProductRequestBlock:
     def is_active(self) -> bool:
         if self.revoked_at is not None or self.blocked_until <= datetime.utcnow():
             return False
-        if self.created_by_request_id is not None and self.source_request_status not in {"pending", "approved"}:
+        if self.created_by_request_id is not None and self.source_request_status not in {"pending", "approved", "awaiting_shipment", "shipped"}:
             return False
         return True
 
@@ -648,6 +655,38 @@ class ProductRequestBlock:
     @property
     def blocked_until_label(self) -> str:
         return format_sao_paulo_datetime(self.blocked_until)
+
+
+@dataclass
+class BaseRequestCycle:
+    id: int
+    user_id: int
+    blocked_until: datetime
+    source_request_id: int | None = None
+    reason: str = ""
+    created_at: datetime = field(default_factory=datetime.utcnow)
+    updated_at: datetime | None = None
+    revoked_at: datetime | None = None
+    updated_by_id: int | None = None
+    source_request_status: str = ""
+    user: User | None = None
+
+    @property
+    def is_active(self) -> bool:
+        if self.revoked_at is not None or self.blocked_until <= datetime.utcnow():
+            return False
+        if self.source_request_id is not None and self.source_request_status in {"rejected", "deleted"}:
+            return False
+        return True
+
+    @property
+    def blocked_until_label(self) -> str:
+        return format_sao_paulo_datetime(self.blocked_until)
+
+    @property
+    def blocked_until_date_input(self) -> str:
+        local_dt = to_sao_paulo_dt(self.blocked_until)
+        return local_dt.strftime("%Y-%m-%d") if local_dt else ""
 
 
 @dataclass
@@ -689,10 +728,13 @@ class MaterialEntry:
     invoice_date: datetime | None = None
     invoice_value_cents: int = 0
     notes: str = ""
+    regional: str = ""
+    stock_owner_user_id: int | None = None
     created_by_id: int | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     product: Product | None = None
     created_by_name: str = ""
+    stock_owner_name: str = ""
 
     @property
     def total_cents(self) -> int:
@@ -1073,6 +1115,8 @@ def row_to_user(row: Any | None) -> User | None:
         password_hash=row["password_hash"] or "",
         role=role,
         status=row["status"] or "pending",
+        regional=normalize_user_regional(row["regional"] if "regional" in row.keys() else ""),
+        allow_cross_regional_service=bool(row["allow_cross_regional_service"]) if "allow_cross_regional_service" in row.keys() else False,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         updated_at=parse_dt(row["updated_at"]),
         page_permissions_configured=bool(row["page_permissions_configured"]) if "page_permissions_configured" in row.keys() else False,
@@ -1242,17 +1286,22 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
         id=int(row["id"]),
         user_id=int(row["user_id"]),
         status=row["status"] or "pending",
+        regional=normalize_user_regional(row["regional"] if "regional" in row_keys else ""),
         user_note=row["user_note"] or "",
         admin_note=row["admin_note"] or "",
         people_count=int(row["people_count"] or 0) if "people_count" in row_keys and row["people_count"] is not None else None,
         created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
         reviewed_at=parse_dt(row["reviewed_at"]) if "reviewed_at" in row_keys else None,
         reviewed_by_id=int(reviewed_by_id) if reviewed_by_id is not None else None,
+        shipped_at=parse_dt(row["shipped_at"]) if "shipped_at" in row_keys else None,
+        shipped_by_id=int(row["shipped_by_id"]) if "shipped_by_id" in row_keys and row["shipped_by_id"] is not None else None,
     )
     if include_user:
         req.user = get_user(req.user_id)
     if req.reviewed_by_id is not None:
         req.reviewed_by = get_user(req.reviewed_by_id)
+    if req.shipped_by_id is not None:
+        req.shipped_by = get_user(req.shipped_by_id)
     if include_items:
         req.items = get_request_items(req.id)
     if include_actions:
@@ -1282,6 +1331,27 @@ def row_to_product_request_block(row: Any | None) -> ProductRequestBlock | None:
         updated_by_id=(int(row["updated_by_id"]) if "updated_by_id" in row.keys() and row["updated_by_id"] is not None else None),
         source_request_status=((row["source_request_status"] if "source_request_status" in row.keys() else "") or ""),
     )
+
+
+def row_to_base_request_cycle(row: Any | None, include_user: bool = True) -> BaseRequestCycle | None:
+    if row is None:
+        return None
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    cycle = BaseRequestCycle(
+        id=int(row["id"]),
+        user_id=int(row["user_id"]),
+        blocked_until=parse_dt(row["blocked_until"]) or datetime.utcnow(),
+        source_request_id=int(row["source_request_id"]) if "source_request_id" in keys and row["source_request_id"] is not None else None,
+        reason=(row["reason"] if "reason" in keys else "") or "",
+        created_at=parse_dt(row["created_at"]) or datetime.utcnow(),
+        updated_at=parse_dt(row["updated_at"]) if "updated_at" in keys else None,
+        revoked_at=parse_dt(row["revoked_at"]) if "revoked_at" in keys else None,
+        updated_by_id=int(row["updated_by_id"]) if "updated_by_id" in keys and row["updated_by_id"] is not None else None,
+        source_request_status=(row["source_request_status"] if "source_request_status" in keys else "") or "",
+    )
+    if include_user:
+        cycle.user = get_user(cycle.user_id)
+    return cycle
 
 
 def row_to_asset_item(row: Any | None) -> AssetItem | None:
@@ -1461,6 +1531,8 @@ def init_db() -> None:
                 password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'base',
                 status TEXT NOT NULL DEFAULT 'pending',
+                regional TEXT NOT NULL DEFAULT '',
+                allow_cross_regional_service INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT,
                 page_permissions_configured INTEGER NOT NULL DEFAULT 0,
@@ -1514,11 +1586,15 @@ def init_db() -> None:
                 user_note TEXT,
                 admin_note TEXT,
                 people_count INTEGER,
+                regional TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 reviewed_at TEXT,
                 reviewed_by_id INTEGER,
+                shipped_at TEXT,
+                shipped_by_id INTEGER,
                 FOREIGN KEY(user_id) REFERENCES users(id),
-                FOREIGN KEY(reviewed_by_id) REFERENCES users(id)
+                FOREIGN KEY(reviewed_by_id) REFERENCES users(id),
+                FOREIGN KEY(shipped_by_id) REFERENCES users(id)
             );
 
             CREATE TABLE IF NOT EXISTS request_items (
@@ -1576,6 +1652,8 @@ def init_db() -> None:
                 product_id INTEGER NOT NULL,
                 request_id INTEGER,
                 created_by_id INTEGER,
+                stock_owner_user_id INTEGER,
+                regional TEXT NOT NULL DEFAULT '',
                 movement_type TEXT NOT NULL,
                 quantity_delta INTEGER NOT NULL,
                 stock_before INTEGER NOT NULL,
@@ -1584,7 +1662,8 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(product_id) REFERENCES products(id),
                 FOREIGN KEY(request_id) REFERENCES supply_requests(id),
-                FOREIGN KEY(created_by_id) REFERENCES users(id)
+                FOREIGN KEY(created_by_id) REFERENCES users(id),
+                FOREIGN KEY(stock_owner_user_id) REFERENCES users(id)
             );
 
             CREATE TABLE IF NOT EXISTS assets (
@@ -1625,9 +1704,12 @@ def init_db() -> None:
                 invoice_date TEXT,
                 invoice_value_cents INTEGER NOT NULL DEFAULT 0,
                 notes TEXT,
+                regional TEXT NOT NULL DEFAULT '',
+                stock_owner_user_id INTEGER,
                 created_by_id INTEGER,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(product_id) REFERENCES products(id),
+                FOREIGN KEY(stock_owner_user_id) REFERENCES users(id),
                 FOREIGN KEY(created_by_id) REFERENCES users(id)
             );
 
@@ -1674,6 +1756,66 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id);
 
+            CREATE TABLE IF NOT EXISTS regional_user_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regional TEXT NOT NULL,
+                assignment_type TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                updated_by_id INTEGER,
+                UNIQUE(regional, assignment_type, user_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_regional_user_assignments_lookup ON regional_user_assignments(regional, assignment_type, user_id);
+
+            CREATE TABLE IF NOT EXISTS admin_base_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_user_id INTEGER NOT NULL,
+                base_user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                updated_by_id INTEGER,
+                UNIQUE(admin_user_id, base_user_id),
+                FOREIGN KEY(admin_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(base_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_base ON admin_base_assignments(base_user_id, admin_user_id);
+            CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_admin ON admin_base_assignments(admin_user_id, base_user_id);
+
+            CREATE TABLE IF NOT EXISTS base_request_cycles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                blocked_until TEXT NOT NULL,
+                source_request_id INTEGER,
+                reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                revoked_at TEXT,
+                updated_by_id INTEGER,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(source_request_id) REFERENCES supply_requests(id),
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_base_request_cycles_blocked_until ON base_request_cycles(blocked_until);
+
+            CREATE TABLE IF NOT EXISTS regional_stock_balances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regional TEXT NOT NULL,
+                stock_owner_user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                UNIQUE(regional, stock_owner_user_id, product_id),
+                FOREIGN KEY(stock_owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_owner ON regional_stock_balances(regional, stock_owner_user_id, product_id);
+            CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_product ON regional_stock_balances(product_id, regional);
+
             CREATE INDEX IF NOT EXISTS idx_users_status_created ON users(status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_users_role_status ON users(role, status);
             CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -1700,6 +1842,85 @@ def init_db() -> None:
         if "action_permissions_configured" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN action_permissions_configured INTEGER NOT NULL DEFAULT 0")
             user_columns.add("action_permissions_configured")
+        if "allow_cross_regional_service" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN allow_cross_regional_service INTEGER NOT NULL DEFAULT 0")
+            user_columns.add("allow_cross_regional_service")
+        if "regional" not in user_columns:
+            conn.execute("ALTER TABLE users ADD COLUMN regional TEXT NOT NULL DEFAULT ''")
+            user_columns.add("regional")
+
+        supply_request_columns = {row["name"] for row in conn.execute("PRAGMA table_info(supply_requests)").fetchall()}
+        if "regional" not in supply_request_columns:
+            conn.execute("ALTER TABLE supply_requests ADD COLUMN regional TEXT NOT NULL DEFAULT ''")
+        if "shipped_at" not in supply_request_columns:
+            conn.execute("ALTER TABLE supply_requests ADD COLUMN shipped_at TEXT")
+        if "shipped_by_id" not in supply_request_columns:
+            conn.execute("ALTER TABLE supply_requests ADD COLUMN shipped_by_id INTEGER")
+
+        material_entry_columns = {row["name"] for row in conn.execute("PRAGMA table_info(material_entries)").fetchall()}
+        if "regional" not in material_entry_columns:
+            conn.execute("ALTER TABLE material_entries ADD COLUMN regional TEXT NOT NULL DEFAULT ''")
+        if "stock_owner_user_id" not in material_entry_columns:
+            conn.execute("ALTER TABLE material_entries ADD COLUMN stock_owner_user_id INTEGER")
+
+        stock_movement_columns = {row["name"] for row in conn.execute("PRAGMA table_info(stock_movements)").fetchall()}
+        if "regional" not in stock_movement_columns:
+            conn.execute("ALTER TABLE stock_movements ADD COLUMN regional TEXT NOT NULL DEFAULT ''")
+        if "stock_owner_user_id" not in stock_movement_columns:
+            conn.execute("ALTER TABLE stock_movements ADD COLUMN stock_owner_user_id INTEGER")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS regional_user_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regional TEXT NOT NULL,
+                assignment_type TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                updated_by_id INTEGER,
+                UNIQUE(regional, assignment_type, user_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(updated_by_id) REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_regional_user_assignments_lookup ON regional_user_assignments(regional, assignment_type, user_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS regional_stock_balances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                regional TEXT NOT NULL,
+                stock_owner_user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                UNIQUE(regional, stock_owner_user_id, product_id),
+                FOREIGN KEY(stock_owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_owner ON regional_stock_balances(regional, stock_owner_user_id, product_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_regional_stock_balances_product ON regional_stock_balances(product_id, regional)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admin_base_assignments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, base_user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT, updated_by_id INTEGER, UNIQUE(admin_user_id, base_user_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_base ON admin_base_assignments(base_user_id, admin_user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_admin_base_assignments_admin ON admin_base_assignments(admin_user_id, base_user_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS base_request_cycles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, blocked_until TEXT NOT NULL,
+                source_request_id INTEGER, reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT,
+                revoked_at TEXT, updated_by_id INTEGER
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_base_request_cycles_blocked_until ON base_request_cycles(blocked_until)")
+        conn.execute("UPDATE supply_requests SET status = 'awaiting_shipment' WHERE status = 'approved'")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_regional ON users(regional)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_supply_requests_regional ON supply_requests(regional, status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_movements_owner_regional ON stock_movements(regional, stock_owner_user_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_material_entries_owner_regional ON material_entries(regional, stock_owner_user_id, created_at DESC)")
 
         access_role_columns = {row["name"] for row in conn.execute("PRAGMA table_info(access_role_types)").fetchall()}
         if "action_permissions_json" not in access_role_columns:
@@ -1717,7 +1938,7 @@ def init_db() -> None:
             "products_edit_price", "products_edit_stock", "products_edit_limits", "products_edit_visibility",
             "products_import", "products_export", "products_delete", "stock_material_entries",
             "stock_assets_create", "stock_reports", "requests_edit_items", "requests_approve_reject",
-            "requests_delete", "users_create_edit", "users_import_export", "users_status_delete",
+            "requests_confirm_shipping", "requests_delete", "users_create_edit", "users_import_export", "users_status_delete",
         ], ensure_ascii=False)
         admin_full_editable_roles = json.dumps(["base", "franchise", "admin"], ensure_ascii=False)
         admin_default_editable_fields = json.dumps(default_static_user_edit_fields("admin"), ensure_ascii=False)
@@ -1726,9 +1947,10 @@ def init_db() -> None:
             INSERT INTO access_role_types (role_key, name, description, permissions_json, action_permissions_json, editable_roles_json, editable_user_fields_json, created_at, updated_at)
             VALUES ('admin', 'Administrador', ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(role_key) DO UPDATE SET
+                permissions_json = excluded.permissions_json,
                 action_permissions_json = excluded.action_permissions_json,
                 editable_roles_json = excluded.editable_roles_json,
-                updated_at = COALESCE(access_role_types.updated_at, excluded.updated_at)
+                updated_at = excluded.updated_at
             """,
             (
                 STATIC_ROLE_DESCRIPTIONS.get("admin", "Tipo padrão administrativo."),
@@ -1853,6 +2075,19 @@ def init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_request_regional_admin_user ON request_regional_admin_assignments(admin_user_id)")
+        legacy_assignment_rows = conn.execute("SELECT regional, admin_user_id FROM request_regional_admin_assignments").fetchall()
+        for legacy_assignment in legacy_assignment_rows:
+            regional = normalize_user_regional(legacy_assignment["regional"])
+            if not regional:
+                continue
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO regional_user_assignments
+                    (regional, assignment_type, user_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (regional, REGIONAL_ASSIGNMENT_APPROVAL, int(legacy_assignment["admin_user_id"]), now_iso(), now_iso()),
+            )
 
         product_columns = {row["name"] for row in conn.execute("PRAGMA table_info(products)").fetchall()}
         if "category_emoji" not in product_columns:
@@ -2034,7 +2269,9 @@ def request_action_label(action: str) -> str:
     labels = {
         "created": "Criada",
         "items_updated": "Itens editados",
-        "approved": "Aprovada",
+        "approved": "Aguardando envio",
+        "awaiting_shipment": "Aguardando envio",
+        "shipped": "Enviada",
         "rejected": "Recusada",
         "deleted": "Excluída",
     }
@@ -2091,7 +2328,7 @@ def record_request_action(conn: Any, request_id: int, action: str, actor_user_id
 def request_action_summary(supply_request: SupplyRequest | None) -> str:
     if supply_request is None:
         return "-"
-    terminal_actions = {"approved", "rejected", "deleted"}
+    terminal_actions = {"approved", "awaiting_shipment", "shipped", "rejected", "deleted"}
     action_log = None
     for log in reversed(supply_request.action_logs or []):
         if log.get("action") in terminal_actions:
@@ -2101,7 +2338,12 @@ def request_action_summary(supply_request: SupplyRequest | None) -> str:
         date_text = format_sao_paulo_datetime(action_log.get("created_at"))
         return f"{action_log.get('action_label', 'Ação')} por {action_log.get('actor_name') or 'Sistema'} em {date_text}"
     if supply_request.status in terminal_actions:
-        label = {"approved": "Aprovada", "rejected": "Recusada", "deleted": "Excluída"}.get(supply_request.status, status_label(supply_request.status))
+        label = {"approved": "Aguardando envio", "awaiting_shipment": "Aguardando envio", "shipped": "Enviada", "rejected": "Recusada", "deleted": "Excluída"}.get(supply_request.status, status_label(supply_request.status))
+        if supply_request.status == "shipped":
+            actor = request_action_actor_name(supply_request.shipped_by, "Não registrado")
+            if supply_request.shipped_at:
+                return f"{label} por {actor} em {format_sao_paulo_datetime(supply_request.shipped_at)}"
+            return f"{label} por {actor}"
         actor = request_action_actor_name(supply_request.reviewed_by, "Não registrado")
         if supply_request.reviewed_at:
             return f"{label} por {actor} em {format_sao_paulo_datetime(supply_request.reviewed_at)}"
@@ -2215,6 +2457,10 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
     conn.execute("DELETE FROM admin_login_codes WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM user_page_permissions WHERE user_id = ?", (user_id,))
     conn.execute("DELETE FROM user_action_permissions WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM regional_user_assignments WHERE user_id = ?", (user_id,))
+    conn.execute("DELETE FROM regional_stock_balances WHERE stock_owner_user_id = ?", (user_id,))
+    conn.execute("UPDATE material_entries SET stock_owner_user_id = NULL WHERE stock_owner_user_id = ?", (user_id,))
+    conn.execute("UPDATE stock_movements SET stock_owner_user_id = NULL WHERE stock_owner_user_id = ?", (user_id,))
     conn.execute("UPDATE assets SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE stock_movements SET created_by_id = NULL WHERE created_by_id = ?", (user_id,))
     conn.execute("UPDATE supply_requests SET reviewed_by_id = NULL WHERE reviewed_by_id = ?", (user_id,))
@@ -2223,11 +2469,28 @@ def permanently_delete_user(conn: Any, user_id: int) -> tuple[int, int]:
 
 
 
-REQUEST_REGIONAL_OPTIONS = [
+USER_REGIONAL_OPTIONS = [
     {"value": "MG", "label": "MG"},
-    {"value": "SP", "label": "SP"},
+    {"value": "SPN", "label": "SPN"},
 ]
-REQUEST_REGIONAL_VALUES = {item["value"] for item in REQUEST_REGIONAL_OPTIONS}
+USER_REGIONAL_VALUES = {item["value"] for item in USER_REGIONAL_OPTIONS}
+REQUEST_REGIONAL_OPTIONS = USER_REGIONAL_OPTIONS
+REQUEST_REGIONAL_VALUES = USER_REGIONAL_VALUES
+REGIONAL_ASSIGNMENT_APPROVAL = "request_approval"
+REGIONAL_ASSIGNMENT_STOCK = "stock_upload"
+REGIONAL_ASSIGNMENT_TYPES = {REGIONAL_ASSIGNMENT_APPROVAL, REGIONAL_ASSIGNMENT_STOCK}
+
+def normalize_user_regional(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if raw in {"SP", "SPN", "SAO PAULO", "SÃO PAULO", "NORTE DE SAO PAULO", "NORTE DE SÃO PAULO"}:
+        return "SPN"
+    if raw in {"MG", "MINAS", "MINAS GERAIS"}:
+        return "MG"
+    return ""
+
+def user_regional_label(value: Any) -> str:
+    regional = normalize_user_regional(value)
+    return regional if regional else "Sem regional"
 REQUEST_SORT_OPTIONS = [
     {"value": "newest", "label": "Mais recentes"},
     {"value": "oldest", "label": "Mais antigas"},
@@ -2246,12 +2509,16 @@ REQUEST_TYPE_OPTIONS = [
 REQUEST_TYPE_VALUES = {item["value"] for item in REQUEST_TYPE_OPTIONS}
 REQUEST_REGION_SQL = """
 CASE
+  WHEN UPPER(COALESCE(sr.regional, '')) IN ('MG', 'SPN') THEN UPPER(sr.regional)
+  WHEN UPPER(COALESCE(u.regional, '')) IN ('MG', 'SPN') THEN UPPER(u.regional)
   WHEN UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '%-MG%'
     OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '% MG'
     THEN 'MG'
   WHEN UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '%-SP%'
     OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '% SP'
-    THEN 'SP'
+    OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '%-SPN%'
+    OR UPPER(COALESCE(u.organization_name, '') || ' ' || COALESCE(u.franchise_name, '')) LIKE '% SPN'
+    THEN 'SPN'
   ELSE ''
 END
 """
@@ -2261,12 +2528,7 @@ REQUEST_ITEM_COUNT_SQL = "COALESCE((SELECT COUNT(*) FROM request_items ric WHERE
 
 
 def normalize_request_regional(value: Any) -> str:
-    raw = str(value or "").strip().upper()
-    if raw in {"SP", "SPN", "SAO PAULO", "SÃO PAULO"}:
-        return "SP"
-    if raw in {"MG", "MINAS", "MINAS GERAIS"}:
-        return "MG"
-    return ""
+    return normalize_user_regional(value)
 
 
 def request_regional_label(value: str) -> str:
@@ -2276,14 +2538,15 @@ def request_regional_label(value: str) -> str:
 
 def request_regional_for_unit_name(unit_name: Any) -> str:
     regional = asset_regional_for_base(str(unit_name or ""))
-    if regional == "SPN":
-        return "SP"
-    return regional if regional == "MG" else ""
+    return normalize_user_regional(regional)
 
 
 def request_regional_for_user(user: User | None) -> str:
     if user is None:
         return ""
+    explicit = normalize_user_regional(user.regional)
+    if explicit:
+        return explicit
     return request_regional_for_unit_name(user.organization_name or user.franchise_name)
 
 
@@ -2347,75 +2610,276 @@ def list_products_for_request_filters(limit: int = 1000) -> list[Product]:
     return [product for row in rows if (product := row_to_product(row)) is not None]
 
 
-def request_admin_assignment_admin_options() -> list[User]:
+def regional_assignment_user_options() -> list[User]:
     with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT *
               FROM users
              WHERE status = 'approved'
-               AND role <> 'dev'
-             ORDER BY responsible_name COLLATE NOCASE ASC, organization_name COLLATE NOCASE ASC
+             ORDER BY regional COLLATE NOCASE ASC, responsible_name COLLATE NOCASE ASC, organization_name COLLATE NOCASE ASC
             """
         ).fetchall()
     users = [user for row in rows if (user := row_to_user(row)) is not None]
     return [user for user in users if user.is_admin]
 
 
-def list_request_regional_admin_assignments(conn: Any | None = None) -> dict[str, int]:
-    sql = "SELECT regional, admin_user_id FROM request_regional_admin_assignments"
+def list_regional_user_assignments(assignment_type: str = "", conn: Any | None = None) -> dict[str, set[int]]:
+    assignment_type = str(assignment_type or "").strip()
+    params: list[Any] = []
+    sql = "SELECT regional, assignment_type, user_id FROM regional_user_assignments"
+    if assignment_type in REGIONAL_ASSIGNMENT_TYPES:
+        sql += " WHERE assignment_type = ?"
+        params.append(assignment_type)
+    if conn is not None:
+        rows = conn.execute(sql, params).fetchall()
+    else:
+        with db_connect() as local_conn:
+            rows = local_conn.execute(sql, params).fetchall()
+    result: dict[str, set[int]] = {item["value"]: set() for item in USER_REGIONAL_OPTIONS}
+    for row in rows:
+        regional = normalize_user_regional(row["regional"])
+        if regional:
+            result.setdefault(regional, set()).add(int(row["user_id"]))
+    return result
+
+
+def list_regional_assignment_details() -> dict[str, dict[str, Any]]:
+    approval = list_regional_user_assignments(REGIONAL_ASSIGNMENT_APPROVAL)
+    stock = list_regional_user_assignments(REGIONAL_ASSIGNMENT_STOCK)
+    return {
+        option["value"]: {
+            "regional": option["value"],
+            "label": option["label"],
+            "approval_user_ids": sorted(approval.get(option["value"], set())),
+            "stock_user_ids": sorted(stock.get(option["value"], set())),
+        }
+        for option in USER_REGIONAL_OPTIONS
+    }
+
+
+def set_regional_user_assignments(
+    conn: Any,
+    regional: str,
+    assignment_type: str,
+    user_ids: list[int] | set[int],
+    updated_by_id: int | None = None,
+) -> None:
+    normalized = normalize_user_regional(regional)
+    if normalized not in USER_REGIONAL_VALUES:
+        raise ValueError("Regional inválida.")
+    assignment_type = str(assignment_type or "").strip()
+    if assignment_type not in REGIONAL_ASSIGNMENT_TYPES:
+        raise ValueError("Tipo de direcionamento inválido.")
+    clean_ids = sorted({int(user_id) for user_id in user_ids if int(user_id) > 0})
+    valid_ids: list[int] = []
+    if clean_ids:
+        placeholders = ",".join("?" for _ in clean_ids)
+        rows = conn.execute(
+            f"SELECT * FROM users WHERE id IN ({placeholders}) AND status = 'approved'",
+            clean_ids,
+        ).fetchall()
+        for row in rows:
+            user = row_to_user(row)
+            if user is None or not user.is_admin:
+                continue
+            user_regional = normalize_user_regional(user.regional)
+            if not user_regional:
+                raise ValueError(f"Cadastre a regional de {user.responsible_name} antes de selecioná-lo.")
+            if user_regional != normalized:
+                raise ValueError(f"{user.responsible_name} pertence à regional {user_regional}.")
+            valid_ids.append(user.id)
+    conn.execute(
+        "DELETE FROM regional_user_assignments WHERE regional = ? AND assignment_type = ?",
+        (normalized, assignment_type),
+    )
+    for user_id in sorted(set(valid_ids)):
+        conn.execute(
+            """
+            INSERT INTO regional_user_assignments
+                (regional, assignment_type, user_id, created_at, updated_at, updated_by_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (normalized, assignment_type, user_id, now_iso(), now_iso(), updated_by_id),
+        )
+
+
+def user_is_regional_assignee(user: User | None, regional: str, assignment_type: str, conn: Any | None = None) -> bool:
+    if user is None:
+        return False
+    normalized = normalize_user_regional(regional)
+    if not normalized or assignment_type not in REGIONAL_ASSIGNMENT_TYPES:
+        return False
+    sql = "SELECT 1 FROM regional_user_assignments WHERE regional = ? AND assignment_type = ? AND user_id = ? LIMIT 1"
+    params = (normalized, assignment_type, user.id)
+    if conn is not None:
+        return conn.execute(sql, params).fetchone() is not None
+    with db_connect() as local_conn:
+        return local_conn.execute(sql, params).fetchone() is not None
+
+
+def regional_assignment_is_configured(regional: str, assignment_type: str, conn: Any | None = None) -> bool:
+    normalized = normalize_user_regional(regional)
+    if not normalized:
+        return False
+    sql = "SELECT 1 FROM regional_user_assignments WHERE regional = ? AND assignment_type = ? LIMIT 1"
+    params = (normalized, assignment_type)
+    if conn is not None:
+        return conn.execute(sql, params).fetchone() is not None
+    with db_connect() as local_conn:
+        return local_conn.execute(sql, params).fetchone() is not None
+
+
+def list_admin_base_assignment_map(conn: Any | None = None) -> dict[int, set[int]]:
+    sql = "SELECT base_user_id, admin_user_id FROM admin_base_assignments ORDER BY base_user_id, admin_user_id"
     if conn is not None:
         rows = conn.execute(sql).fetchall()
     else:
         with db_connect() as local_conn:
             rows = local_conn.execute(sql).fetchall()
-    assignments: dict[str, int] = {}
+    result: dict[int, set[int]] = {}
     for row in rows:
-        regional = normalize_request_regional(row["regional"])
-        if regional:
-            assignments[regional] = int(row["admin_user_id"])
-    return assignments
+        result.setdefault(int(row["base_user_id"]), set()).add(int(row["admin_user_id"]))
+    return result
 
 
-def list_request_regional_admin_assignment_details() -> dict[str, dict[str, Any]]:
-    assignments = list_request_regional_admin_assignments()
-    details: dict[str, dict[str, Any]] = {}
-    for option in REQUEST_REGIONAL_OPTIONS:
-        regional = option["value"]
-        admin_id = assignments.get(regional)
-        details[regional] = {"regional": regional, "label": option["label"], "admin_id": admin_id, "admin": get_user(admin_id) if admin_id else None}
-    return details
-
-
-def set_request_regional_admin_assignment(conn: Any, regional: str, admin_user_id: int | None, updated_by_id: int | None = None) -> None:
-    normalized = normalize_request_regional(regional)
-    if normalized not in REQUEST_REGIONAL_VALUES:
-        raise ValueError("Regional inválida.")
-    if admin_user_id is None:
-        conn.execute("DELETE FROM request_regional_admin_assignments WHERE regional = ?", (normalized,))
-        return
-    admin_row = conn.execute("SELECT * FROM users WHERE id = ?", (int(admin_user_id),)).fetchone()
-    admin = row_to_user(admin_row)
-    if admin is None or admin.status != "approved" or admin.is_dev or not admin.is_admin:
-        raise ValueError("Selecione um Admin aprovado para receber os pedidos da regional.")
-    existing = conn.execute("SELECT regional FROM request_regional_admin_assignments WHERE regional = ?", (normalized,)).fetchone()
-    if existing:
-        conn.execute(
-            """
-            UPDATE request_regional_admin_assignments
-               SET admin_user_id = ?, updated_at = ?, updated_by_id = ?
-             WHERE regional = ?
-            """,
-            (int(admin_user_id), now_iso(), updated_by_id, normalized),
-        )
+def base_assignment_admin_ids(base_user_id: int, conn: Any | None = None) -> set[int]:
+    sql = "SELECT admin_user_id FROM admin_base_assignments WHERE base_user_id = ?"
+    params = (int(base_user_id),)
+    if conn is not None:
+        rows = conn.execute(sql, params).fetchall()
     else:
-        conn.execute(
-            """
-            INSERT INTO request_regional_admin_assignments (regional, admin_user_id, created_at, updated_at, updated_by_id)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (normalized, int(admin_user_id), now_iso(), now_iso(), updated_by_id),
-        )
+        with db_connect() as local_conn:
+            rows = local_conn.execute(sql, params).fetchall()
+    return {int(row["admin_user_id"]) for row in rows}
+
+
+def user_is_base_assignee(viewer: User | None, base_user_id: int, conn: Any | None = None) -> bool:
+    if viewer is None:
+        return False
+    if viewer.is_dev:
+        return True
+    sql = "SELECT 1 FROM admin_base_assignments WHERE base_user_id = ? AND admin_user_id = ? LIMIT 1"
+    params = (int(base_user_id), int(viewer.id))
+    if conn is not None:
+        return conn.execute(sql, params).fetchone() is not None
+    with db_connect() as local_conn:
+        return local_conn.execute(sql, params).fetchone() is not None
+
+
+def set_base_admin_assignments(conn: Any, base_user_ids: list[int] | set[int], admin_user_ids: list[int] | set[int], updated_by_id: int | None = None, mode: str = "replace") -> int:
+    base_ids = sorted({int(value) for value in base_user_ids if int(value) > 0})
+    admin_ids = sorted({int(value) for value in admin_user_ids if int(value) > 0})
+    if not base_ids:
+        raise ValueError("Selecione pelo menos uma base.")
+    mode = str(mode or "replace").strip().lower()
+    if mode not in {"replace", "add", "remove"}:
+        mode = "replace"
+    base_placeholders = ",".join("?" for _ in base_ids)
+    base_rows = conn.execute(f"SELECT * FROM users WHERE id IN ({base_placeholders}) AND role = 'base'", base_ids).fetchall()
+    bases = [user for row in base_rows if (user := row_to_user(row)) is not None]
+    if len(bases) != len(base_ids):
+        raise ValueError("A seleção contém usuário que não é base.")
+    admins: list[User] = []
+    if admin_ids:
+        admin_placeholders = ",".join("?" for _ in admin_ids)
+        admin_rows = conn.execute(f"SELECT * FROM users WHERE id IN ({admin_placeholders}) AND status = 'approved'", admin_ids).fetchall()
+        admins = [user for row in admin_rows if (user := row_to_user(row)) is not None and user.is_admin]
+        if len(admins) != len(admin_ids):
+            raise ValueError("Selecione apenas administradores aprovados.")
+    changed = 0
+    for base in bases:
+        if mode == "replace":
+            conn.execute("DELETE FROM admin_base_assignments WHERE base_user_id = ?", (base.id,))
+        for admin in admins:
+            if not base.allow_cross_regional_service:
+                base_regional = request_regional_for_user(base)
+                admin_regional = normalize_user_regional(admin.regional)
+                if base_regional and admin_regional and base_regional != admin_regional:
+                    raise ValueError(f"A base {base.organization_name} não está liberada para atendimento por outra regional.")
+            if mode == "remove":
+                cursor = conn.execute("DELETE FROM admin_base_assignments WHERE base_user_id = ? AND admin_user_id = ?", (base.id, admin.id))
+                changed += max(0, int(getattr(cursor, "rowcount", 0) or 0))
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO admin_base_assignments (admin_user_id, base_user_id, created_at, updated_at, updated_by_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(admin_user_id, base_user_id) DO UPDATE SET updated_at = excluded.updated_at, updated_by_id = excluded.updated_by_id
+                    """,
+                    (admin.id, base.id, now_iso(), now_iso(), updated_by_id),
+                )
+                changed += 1
+    return changed
+
+
+def add_calendar_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + max(0, int(months or 0))
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
+def get_base_request_cycle(user_id: int, conn: Any | None = None) -> BaseRequestCycle | None:
+    sql = """
+        SELECT brc.*, COALESCE(sr.status, '') AS source_request_status
+          FROM base_request_cycles brc
+          LEFT JOIN supply_requests sr ON sr.id = brc.source_request_id
+         WHERE brc.user_id = ?
+         LIMIT 1
+    """
+    if conn is not None:
+        row = conn.execute(sql, (int(user_id),)).fetchone()
+    else:
+        with db_connect() as local_conn:
+            row = local_conn.execute(sql, (int(user_id),)).fetchone()
+    return row_to_base_request_cycle(row)
+
+
+def get_active_base_request_cycle(user_id: int, conn: Any | None = None) -> BaseRequestCycle | None:
+    cycle = get_base_request_cycle(user_id, conn)
+    return cycle if cycle is not None and cycle.is_active else None
+
+
+def upsert_base_request_cycle(conn: Any, user_id: int, source_request_id: int | None, blocked_until: datetime, reason: str, updated_by_id: int | None = None) -> None:
+    conn.execute(
+        """
+        INSERT INTO base_request_cycles (user_id, blocked_until, source_request_id, reason, created_at, updated_at, revoked_at, updated_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            blocked_until = excluded.blocked_until, source_request_id = excluded.source_request_id, reason = excluded.reason,
+            updated_at = excluded.updated_at, revoked_at = NULL, updated_by_id = excluded.updated_by_id
+        """,
+        (int(user_id), blocked_until.strftime("%Y-%m-%d %H:%M:%S"), source_request_id, reason, now_iso(), now_iso(), updated_by_id),
+    )
+
+
+def list_base_request_cycles(status_filter: str = "", regional: str = "", q: str = "") -> list[BaseRequestCycle]:
+    clauses = ["u.role = 'base'"]
+    params: list[Any] = []
+    normalized_regional = normalize_user_regional(regional)
+    if normalized_regional:
+        clauses.append("u.regional = ?")
+        params.append(normalized_regional)
+    if q:
+        like = like_term(q)
+        clauses.append("(u.organization_name LIKE ? OR u.responsible_name LIKE ? OR u.username LIKE ?)")
+        params.extend([like, like, like])
+    sql = """
+        SELECT brc.*, COALESCE(sr.status, '') AS source_request_status
+          FROM base_request_cycles brc
+          JOIN users u ON u.id = brc.user_id
+          LEFT JOIN supply_requests sr ON sr.id = brc.source_request_id
+         WHERE """ + " AND ".join(clauses) + " ORDER BY brc.blocked_until DESC, u.organization_name COLLATE NOCASE ASC"
+    with db_connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    cycles = [cycle for row in rows if (cycle := row_to_base_request_cycle(row)) is not None]
+    if status_filter == "active":
+        cycles = [cycle for cycle in cycles if cycle.is_active]
+    elif status_filter == "inactive":
+        cycles = [cycle for cycle in cycles if not cycle.is_active]
+    return cycles
 
 
 def request_assignment_visibility_condition(viewer: User | None) -> tuple[str, list[Any]]:
@@ -2423,20 +2887,65 @@ def request_assignment_visibility_condition(viewer: User | None) -> tuple[str, l
         return "", []
     return f"""
       AND (
-            ({REQUEST_REGION_SQL}) = ''
-         OR NOT EXISTS (
-              SELECT 1
-                FROM request_regional_admin_assignments raa_any
-               WHERE raa_any.regional = ({REQUEST_REGION_SQL})
+            (
+              u.role = 'base'
+              AND EXISTS (SELECT 1 FROM admin_base_assignments aba_any WHERE aba_any.base_user_id = u.id)
+              AND EXISTS (SELECT 1 FROM admin_base_assignments aba_viewer WHERE aba_viewer.base_user_id = u.id AND aba_viewer.admin_user_id = ?)
             )
-         OR EXISTS (
-              SELECT 1
-                FROM request_regional_admin_assignments raa_viewer
-               WHERE raa_viewer.regional = ({REQUEST_REGION_SQL})
-                 AND raa_viewer.admin_user_id = ?
+         OR (
+              NOT (u.role = 'base' AND EXISTS (SELECT 1 FROM admin_base_assignments aba_any2 WHERE aba_any2.base_user_id = u.id))
+              AND (
+                    ({REQUEST_REGION_SQL}) = ''
+                 OR NOT EXISTS (
+                      SELECT 1 FROM regional_user_assignments rua_any
+                       WHERE rua_any.regional = ({REQUEST_REGION_SQL})
+                         AND rua_any.assignment_type = '{REGIONAL_ASSIGNMENT_APPROVAL}'
+                    )
+                 OR EXISTS (
+                      SELECT 1 FROM regional_user_assignments rua_viewer
+                       WHERE rua_viewer.regional = ({REQUEST_REGION_SQL})
+                         AND rua_viewer.assignment_type = '{REGIONAL_ASSIGNMENT_APPROVAL}'
+                         AND rua_viewer.user_id = ?
+                    )
+              )
             )
       )
-    """, [viewer.id]
+    """, [viewer.id, viewer.id]
+
+
+def supply_request_regional(supply_request: SupplyRequest | None) -> str:
+    if supply_request is None:
+        return ""
+    regional = normalize_user_regional(supply_request.regional)
+    if regional:
+        return regional
+    requester = supply_request.user or get_user(supply_request.user_id)
+    return request_regional_for_user(requester)
+
+
+def supply_request_service_regional(supply_request: SupplyRequest | None, viewer: User | None = None) -> str:
+    """Regional cujo estoque individual será utilizado no atendimento.
+
+    Bases liberadas para atendimento cruzado podem ser atendidas pelo estoque da
+    regional do administrador designado. Para os demais casos, usa a regional
+    original da solicitação.
+    """
+    if supply_request is None:
+        return ""
+    request_regional = supply_request_regional(supply_request)
+    viewer = viewer or current_user()
+    requester = supply_request.user or get_user(supply_request.user_id)
+    if (
+        viewer is not None
+        and viewer.is_admin
+        and requester is not None
+        and requester.role == "base"
+        and requester.allow_cross_regional_service
+    ):
+        viewer_regional = normalize_user_regional(viewer.regional)
+        if viewer_regional:
+            return viewer_regional
+    return request_regional
 
 
 def can_view_supply_request_by_assignment(supply_request: SupplyRequest | None, viewer: User | None = None) -> bool:
@@ -2446,12 +2955,48 @@ def can_view_supply_request_by_assignment(supply_request: SupplyRequest | None, 
     if viewer is None or viewer.is_dev:
         return True
     requester = supply_request.user or get_user(supply_request.user_id)
-    regional = request_regional_for_user(requester)
+    if requester is not None and requester.role == "base":
+        assigned_admin_ids = base_assignment_admin_ids(requester.id)
+        if assigned_admin_ids:
+            return viewer.id in assigned_admin_ids
+    regional = supply_request_regional(supply_request)
     if not regional:
         return True
-    assignments = list_request_regional_admin_assignments()
-    assigned_admin_id = assignments.get(regional)
-    return assigned_admin_id is None or assigned_admin_id == viewer.id
+    if not regional_assignment_is_configured(regional, REGIONAL_ASSIGNMENT_APPROVAL):
+        return viewer.is_admin
+    return user_is_regional_assignee(viewer, regional, REGIONAL_ASSIGNMENT_APPROVAL)
+
+
+def can_approve_supply_request_by_assignment(supply_request: SupplyRequest | None, viewer: User | None = None) -> bool:
+    if supply_request is None:
+        return False
+    viewer = viewer or current_user()
+    if viewer is None:
+        return False
+    if viewer.is_dev:
+        return True
+    requester = supply_request.user or get_user(supply_request.user_id)
+    if requester is not None and requester.role == "base":
+        assigned_admin_ids = base_assignment_admin_ids(requester.id)
+        if assigned_admin_ids:
+            return viewer.id in assigned_admin_ids
+    regional = supply_request_regional(supply_request)
+    if not regional:
+        return False
+    if not regional_assignment_is_configured(regional, REGIONAL_ASSIGNMENT_APPROVAL):
+        return viewer.is_admin
+    return user_is_regional_assignee(viewer, regional, REGIONAL_ASSIGNMENT_APPROVAL)
+
+
+def can_upload_regional_stock(user: User | None, regional: str = "") -> bool:
+    if user is None:
+        return False
+    normalized = normalize_user_regional(regional or user.regional)
+    if not normalized:
+        return False
+    if not regional_assignment_is_configured(normalized, REGIONAL_ASSIGNMENT_STOCK):
+        return user.is_admin
+    return user_is_regional_assignee(user, normalized, REGIONAL_ASSIGNMENT_STOCK)
 
 
 def request_list_query_parts(status: str = "", user_id: int | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> tuple[str, list[Any], str]:
@@ -2460,8 +3005,14 @@ def request_list_query_parts(status: str = "", user_id: int | None = None, filte
     params: list[Any] = []
     status = (status or "").strip().lower()
     if status:
-        clauses.append("sr.status = ?")
-        params.append(status)
+        status_values = [item.strip() for item in status.split(",") if item.strip()]
+        if len(status_values) == 1:
+            clauses.append("sr.status = ?")
+            params.append(status_values[0])
+        elif status_values:
+            placeholders = ",".join("?" for _ in status_values)
+            clauses.append(f"sr.status IN ({placeholders})")
+            params.extend(status_values)
     if user_id is not None:
         clauses.append("sr.user_id = ?")
         params.append(int(user_id))
@@ -2480,6 +3031,15 @@ def request_list_query_parts(status: str = "", user_id: int | None = None, filte
     if product_id:
         clauses.append("EXISTS (SELECT 1 FROM request_items rif WHERE rif.request_id = sr.id AND rif.product_id = ?)")
         params.append(int(product_id))
+
+    start_dt = parse_optional_report_date(filters.get("start_date")) if filters.get("start_date") else None
+    end_dt = parse_optional_report_date(filters.get("end_date"), end_of_day=True) if filters.get("end_date") else None
+    if start_dt is not None:
+        clauses.append("sr.created_at >= ?")
+        params.append(start_dt.strftime("%Y-%m-%d %H:%M:%S"))
+    if end_dt is not None:
+        clauses.append("sr.created_at <= ?")
+        params.append(end_dt.strftime("%Y-%m-%d %H:%M:%S"))
 
     if apply_assignment_visibility:
         visibility_sql, visibility_params = request_assignment_visibility_condition(viewer)
@@ -2516,7 +3076,7 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
     where_sql, params, order_sql = request_list_query_parts(status, user_id, filters, viewer, apply_assignment_visibility)
     sql = f"""
         SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
-               sr.created_at, sr.reviewed_at, sr.reviewed_by_id
+               sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id
           FROM supply_requests sr
           JOIN users u ON u.id = sr.user_id
           {where_sql}
@@ -2594,7 +3154,7 @@ def list_supply_requests_page(status: str = "", user_id: int | None = None, page
         rows = conn.execute(
             f"""
             SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
-                   sr.created_at, sr.reviewed_at, sr.reviewed_by_id
+                   sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id
               FROM supply_requests sr
               JOIN users u ON u.id = sr.user_id
               {where_sql}
@@ -2815,6 +3375,11 @@ def inject_globals():
         "asset_unit_options": BASE_FRANCHISE_OPTIONS,
         "admin_organization_options": ADMIN_ORGANIZATION_OPTIONS,
         "asset_regional_options": ASSET_REGIONAL_OPTIONS,
+        "user_regional_options": USER_REGIONAL_OPTIONS,
+        "user_regional_label": user_regional_label,
+        "request_regional_label": request_regional_label,
+        "supply_request_regional": supply_request_regional,
+        "can_approve_regional_request": lambda target: can_approve_supply_request_by_assignment(target, user),
         "asset_regional_for_base": asset_regional_for_base,
         "current_is_dev": current_is_dev,
         "current_can_manage_dev_roles": current_can_manage_dev_roles,
@@ -2841,7 +3406,9 @@ def format_brl(cents: int | None) -> str:
 def status_label(status: str) -> str:
     labels = {
         "pending": "Pendente",
-        "approved": "Aprovado",
+        "approved": "Aguardando envio",
+        "awaiting_shipment": "Aguardando envio",
+        "shipped": "Enviado",
         "rejected": "Recusado",
         "deleted": "Excluído",
     }
@@ -2862,9 +3429,27 @@ PAGE_PERMISSION_OPTIONS = [
         "admin_only": False,
     },
     {
+        "key": "exchange_supplies",
+        "label": "Troca de Insumos - 3 meses",
+        "description": "Exibe o ciclo de três meses da base, o último pedido e a próxima data disponível.",
+        "admin_only": False,
+    },
+    {
         "key": "admin_dashboard",
         "label": "Painel admin",
         "description": "Permite acessar o resumo administrativo do portal.",
+        "admin_only": True,
+    },
+    {
+        "key": "orders_dashboard",
+        "label": "Dashboard Geral de Pedidos",
+        "description": "Permite acompanhar todos os pedidos de bases e franquias com filtros e totais.",
+        "admin_only": True,
+    },
+    {
+        "key": "base_cycles",
+        "label": "Troca de Insumos - Bases",
+        "description": "Permite acompanhar e gerenciar o ciclo automático de três meses das bases.",
         "admin_only": True,
     },
     {
@@ -2917,6 +3502,7 @@ ACTION_PERMISSION_OPTIONS = [
     {"key": "stock_reports", "page_key": "admin_stock", "label": "Gerar relatórios de estoque", "description": "Permite gerar relatórios de solicitações, entradas e ativos."},
     {"key": "requests_edit_items", "page_key": "admin_requests", "label": "Editar itens de solicitações", "description": "Permite alterar quantidades de pedidos pendentes."},
     {"key": "requests_approve_reject", "page_key": "admin_requests", "label": "Aprovar ou recusar solicitações", "description": "Permite aprovar, recusar e movimentar estoque por solicitação."},
+    {"key": "requests_confirm_shipping", "page_key": "admin_requests", "label": "Confirmar envio de solicitações", "description": "Permite confirmar que os insumos foram enviados e registrar o responsável."},
     {"key": "requests_delete", "page_key": "admin_requests", "label": "Excluir solicitações", "description": "Permite excluir solicitações definitivamente do banco de dados."},
     {"key": "users_create_edit", "page_key": "admin_users", "label": "Criar/editar usuários", "description": "Permite cadastrar usuários e alterar dados de acesso."},
     {"key": "users_import_export", "page_key": "admin_users", "label": "Importar/exportar usuários", "description": "Permite baixar modelos, exportar tabela e importar usuários."},
@@ -2986,7 +3572,9 @@ def default_static_page_permissions(role: str) -> list[str]:
     key = canonical_role_key(role, "")
     if key in {"admin", "dev"}:
         return [item["key"] for item in PAGE_PERMISSION_OPTIONS]
-    return [item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
+    if key == "base":
+        return ["home", "my_requests", "exchange_supplies"]
+    return ["home", "my_requests"]
 
 
 def default_static_action_permissions(role: str) -> list[str]:
@@ -3255,7 +3843,7 @@ def default_page_keys_for_role(role: str) -> set[str]:
     role_definition = get_access_role_definition(role)
     if role_definition is not None:
         return set(role_definition.permissions)
-    return {item["key"] for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]}
+    return set(default_static_page_permissions(role))
 
 
 def permission_options_for_role(role: str) -> list[dict[str, Any]]:
@@ -3266,7 +3854,8 @@ def permission_options_for_role(role: str) -> list[dict[str, Any]]:
     if role_definition is not None:
         allowed = set(role_definition.permissions)
         return [item for item in PAGE_PERMISSION_OPTIONS if item["key"] in allowed]
-    return [item for item in PAGE_PERMISSION_OPTIONS if not item["admin_only"]]
+    allowed = set(default_static_page_permissions(role))
+    return [item for item in PAGE_PERMISSION_OPTIONS if item["key"] in allowed]
 
 
 def get_user_page_permissions(user: User | None) -> set[str]:
@@ -3578,6 +4167,94 @@ def movement_type_label(movement_type: str) -> str:
     return labels.get(movement_type, movement_type)
 
 
+def get_regional_stock_quantity(
+    conn: Any,
+    product_id: int,
+    stock_owner_user_id: int,
+    regional: str,
+) -> int:
+    normalized = normalize_user_regional(regional)
+    row = conn.execute(
+        """
+        SELECT quantity
+          FROM regional_stock_balances
+         WHERE regional = ? AND stock_owner_user_id = ? AND product_id = ?
+         LIMIT 1
+        """,
+        (normalized, int(stock_owner_user_id), int(product_id)),
+    ).fetchone()
+    return int(row["quantity"] or 0) if row is not None else 0
+
+
+def apply_regional_stock_delta(
+    conn: Any,
+    product_id: int,
+    stock_owner_user_id: int,
+    regional: str,
+    quantity_delta: int,
+) -> tuple[int, int]:
+    normalized = normalize_user_regional(regional)
+    if normalized not in USER_REGIONAL_VALUES:
+        raise ValueError("Regional de estoque inválida.")
+    owner_id = int(stock_owner_user_id)
+    delta = int(quantity_delta or 0)
+    stock_before = get_regional_stock_quantity(conn, product_id, owner_id, normalized)
+    stock_after = stock_before + delta
+    if stock_after < 0:
+        raise ValueError("Estoque regional insuficiente para esta operação.")
+    existing = conn.execute(
+        "SELECT id FROM regional_stock_balances WHERE regional = ? AND stock_owner_user_id = ? AND product_id = ?",
+        (normalized, owner_id, int(product_id)),
+    ).fetchone()
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO regional_stock_balances
+                (regional, stock_owner_user_id, product_id, quantity, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (normalized, owner_id, int(product_id), stock_after, now_iso(), now_iso()),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE regional_stock_balances
+               SET quantity = ?, updated_at = ?
+             WHERE regional = ? AND stock_owner_user_id = ? AND product_id = ?
+            """,
+            (stock_after, now_iso(), normalized, owner_id, int(product_id)),
+        )
+    return stock_before, stock_after
+
+
+def regional_stock_scope_for_user(user: User | None) -> tuple[str, int | None]:
+    if user is None:
+        return "", None
+    return normalize_user_regional(user.regional), user.id
+
+
+def regional_stock_total_for_product(
+    conn: Any,
+    product_id: int,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
+) -> int:
+    clauses = ["product_id = ?"]
+    params: list[Any] = [int(product_id)]
+    normalized = normalize_user_regional(regional)
+    if normalized:
+        clauses.append("regional = ?")
+        params.append(normalized)
+    if stock_owner_user_id is not None:
+        clauses.append("stock_owner_user_id = ?")
+        params.append(int(stock_owner_user_id))
+    row = conn.execute(
+        "SELECT COALESCE(SUM(quantity), 0) AS total FROM regional_stock_balances WHERE " + " AND ".join(clauses),
+        params,
+    ).fetchone()
+    return int(row["total"] or 0) if row is not None else 0
+
+
 def record_stock_movement(
     conn: Any,
     product_id: int,
@@ -3588,14 +4265,18 @@ def record_stock_movement(
     note: str = "",
     request_id: int | None = None,
     created_by_id: int | None = None,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
 ) -> None:
     created_at = now_iso()
+    normalized_regional = normalize_user_regional(regional)
     conn.execute(
         """
-        INSERT INTO stock_movements (product_id, request_id, created_by_id, movement_type, quantity_delta, stock_before, stock_after, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO stock_movements
+            (product_id, request_id, created_by_id, stock_owner_user_id, regional, movement_type, quantity_delta, stock_before, stock_after, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (product_id, request_id, created_by_id, movement_type, quantity_delta, stock_before, stock_after, note, created_at),
+        (product_id, request_id, created_by_id, stock_owner_user_id, normalized_regional, movement_type, quantity_delta, stock_before, stock_after, note, created_at),
     )
     notify_feishu_stock_movement(
         conn,
@@ -3608,6 +4289,8 @@ def record_stock_movement(
         request_id=request_id,
         created_by_id=created_by_id,
         created_at=created_at,
+        regional=normalized_regional,
+        stock_owner_user_id=stock_owner_user_id,
     )
 
 
@@ -3768,14 +4451,15 @@ def notify_feishu_supply_request_action(supply_request: SupplyRequest, action: s
     requester_name = requester.responsible_name if requester else f"Usuario #{supply_request.user_id}"
     requester_org = requester.organization_name if requester else "-"
     requester_role = user_role_label(requester.role if requester else "")
-    status_text = {"approved": "Aprovada", "rejected": "Recusada", "deleted": "Excluída"}.get(action, request_action_label(action))
-    actor_label = {"approved": "Aprovada por", "rejected": "Recusada por", "deleted": "Excluída por"}.get(action, "Executada por")
+    status_text = {"approved": "Aguardando envio", "shipped": "Enviada", "rejected": "Recusada", "deleted": "Excluída"}.get(action, request_action_label(action))
+    actor_label = {"approved": "Aprovada por", "shipped": "Envio confirmado por", "rejected": "Recusada por", "deleted": "Excluída por"}.get(action, "Executada por")
     title = {
-        "approved": "Solicitação de insumos aprovada",
+        "approved": "Solicitação aprovada - aguardando envio",
+        "shipped": "Envio de insumos confirmado",
         "rejected": "Solicitação de insumos recusada",
         "deleted": "Solicitação de insumos excluída",
     }.get(action, "Solicitação de insumos atualizada")
-    template = "green" if action == "approved" else "red"
+    template = "green" if action in {"approved", "shipped"} else "red"
     lines = [
         feishu_line("Solicitação", f"#{supply_request.id}"),
         feishu_line("Pedido por", requester_name),
@@ -3871,6 +4555,8 @@ def notify_feishu_stock_movement(
     request_id: int | None = None,
     created_by_id: int | None = None,
     created_at: str | None = None,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
 ) -> None:
     if not has_request_context() or not quantity_delta:
         return
@@ -3902,9 +4588,16 @@ def notify_feishu_stock_movement(
             if request_row is not None:
                 request_unit = str(request_row["organization_name"] or "").strip()
                 request_requester = str(request_row["responsible_name"] or request_row["username"] or "").strip()
+        stock_owner_name = responsible
+        if stock_owner_user_id:
+            owner_row = conn.execute("SELECT responsible_name, username FROM users WHERE id = ?", (stock_owner_user_id,)).fetchone()
+            if owner_row:
+                stock_owner_name = owner_row["responsible_name"] or owner_row["username"] or f"Usuário #{stock_owner_user_id}"
         responsible_label = "Aprovado por" if movement_type == "request_approved" else "Responsável"
         lines = [
             feishu_line(responsible_label, responsible),
+            feishu_line("Regional", user_regional_label(regional)),
+            feishu_line("Estoque de", stock_owner_name),
             feishu_line("Produto", product_name),
             feishu_line("Movimentação", direction),
             feishu_line("Quantidade", qty_text),
@@ -4144,7 +4837,7 @@ def get_active_product_request_block(user_id: int, product_id: int, conn: Any | 
            AND prb.product_id = ?
            AND prb.revoked_at IS NULL
            AND prb.blocked_until > ?
-           AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved'))
+           AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped'))
          LIMIT 1
     """
     params = (int(user_id), int(product_id), now_iso())
@@ -4163,7 +4856,7 @@ def list_product_request_blocks_for_user(user_id: int, conn: Any | None = None) 
           LEFT JOIN products p ON p.id = prb.product_id
           LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
          WHERE prb.user_id = ?
-         ORDER BY (prb.revoked_at IS NULL AND prb.blocked_until > ? AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved'))) DESC, prb.blocked_until DESC, prb.id DESC
+         ORDER BY (prb.revoked_at IS NULL AND prb.blocked_until > ? AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped'))) DESC, prb.blocked_until DESC, prb.id DESC
     """
     params = (int(user_id), now_iso())
     if conn is not None:
@@ -4210,7 +4903,7 @@ def product_requested_in_period(user_id: int, product: Product, conn: Any | None
               JOIN supply_requests sr ON sr.id = ri.request_id
              WHERE sr.user_id = ?
                AND ri.product_id = ?
-               AND sr.status IN ('pending', 'approved')
+               AND sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped')
                AND sr.created_at >= ?
             """,
             (int(user_id), int(product.id), since_iso),
@@ -4364,6 +5057,11 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
     if not items_payload:
         return [], "Adicione pelo menos um insumo ao pedido."
 
+    if user.role == "base":
+        active_cycle = get_active_base_request_cycle(user.id)
+        if active_cycle is not None:
+            return [], f"Esta base está no ciclo de 3 meses e poderá fazer uma nova solicitação após {active_cycle.blocked_until_label}."
+
     seen: dict[int, int] = {}
     for raw in items_payload:
         if not isinstance(raw, dict):
@@ -4381,8 +5079,12 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             return [], "Um dos insumos selecionados não está disponível."
         if normalize_stock_tag_slug(product.stock_tag) != SUPPLY_STOCK_TAG:
             return [], f"{product.name} pertence a outro estoque e não está disponível para solicitação de insumos."
-        if not user.is_admin and product.stock_quantity <= 0:
-            return [], f"{product.name} está sem estoque no momento."
+        user_regional = request_regional_for_user(user)
+        regional_available = regional_stock_total_for_product(product.id, user_regional) if user_regional else 0
+        if not user.is_admin and not user_regional:
+            return [], "Seu usuário ainda não possui regional cadastrada."
+        if not user.is_admin and user.role != "base" and regional_available <= 0:
+            return [], f"{product.name} está sem estoque na regional {user_regional}."
         if not user.is_admin and product.internal:
             return [], f"{product.name} é um produto interno e não está disponível para solicitação."
         if user.role == "base" and not product.visible_base:
@@ -4411,6 +5113,8 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
                     return [], f"Limite de insumos excedido para {product.name}. Restam {remaining} {limit_label} no período de bloqueio."
 
         effective_quantity = effective_product_quantity(product, requested_quantity)
+        if not user.is_admin and user.role != "base" and effective_quantity > regional_available:
+            return [], f"Estoque insuficiente de {product.name} na regional {user_regional}. Disponível: {regional_available} {product.unit_measure or 'un'}."
 
         minimum = product.min_order_quantity
         if minimum is not None and minimum > 0 and effective_quantity < minimum:
@@ -4486,10 +5190,15 @@ def list_product_categories(user: User | None = None, stock_tag: str = "") -> li
     tag_filter = normalize_stock_tag_slug(stock_tag, "") if stock_tag else ""
     if user is not None:
         tag_filter = SUPPLY_STOCK_TAG
+        request_regional = request_regional_for_user(user)
+        regional_stock_clause = "stock_quantity > 0"
+        if request_regional:
+            regional_stock_clause = "EXISTS (SELECT 1 FROM regional_stock_balances rsb WHERE rsb.product_id = products.id AND rsb.regional = ? AND rsb.quantity > 0)"
+            params.append(request_regional)
         if user.role == "base":
-            clauses.extend(["visible_base = 1", "COALESCE(internal, 0) = 0", "active = 1", "stock_quantity > 0"])
+            clauses.extend(["visible_base = 1", "COALESCE(internal, 0) = 0", "active = 1"])
         elif user.role == "franchise":
-            clauses.extend(["visible_franchise = 1", "COALESCE(internal, 0) = 0", "active = 1", "stock_quantity > 0"])
+            clauses.extend(["visible_franchise = 1", "COALESCE(internal, 0) = 0", "active = 1", regional_stock_clause])
     if tag_filter:
         clauses.append("stock_tag = ?")
         params.append(tag_filter)
@@ -5044,7 +5753,7 @@ def build_supply_requests_period_report_pdf(
         [Paragraph("SOLICITAÇÕES", styles["ReportLabel"]), Paragraph("BASES/FRANQUIAS", styles["ReportLabel"]), Paragraph("ITENS", styles["ReportLabel"]), Paragraph("VALOR TOTAL", styles["ReportLabel"])],
         [p(len(requests_list), "ReportMeta"), p(len(requester_units), "ReportMeta"), p(f"{total_items} linhas / {total_units} un.", "ReportMeta"), p(format_brl(total_value), "ReportMeta")],
         [Paragraph("PENDENTES", styles["ReportLabel"]), Paragraph("APROVADAS", styles["ReportLabel"]), Paragraph("REJEITADAS", styles["ReportLabel"]), Paragraph("PESSOAS NAS BASES", styles["ReportLabel"])],
-        [p(status_counts.get("pending", 0), "ReportMeta"), p(status_counts.get("approved", 0), "ReportMeta"), p(status_counts.get("rejected", 0), "ReportMeta"), p(total_people if total_people else "-", "ReportMeta")],
+        [p(status_counts.get("pending", 0), "ReportMeta"), p(status_counts.get("awaiting_shipment", 0) + status_counts.get("shipped", 0), "ReportMeta"), p(status_counts.get("rejected", 0), "ReportMeta"), p(total_people if total_people else "-", "ReportMeta")],
     ]
     summary_table = Table(summary_data, colWidths=[44.5 * mm, 44.5 * mm, 44.5 * mm, 44.5 * mm])
     summary_table.setStyle(TableStyle([
@@ -6221,6 +6930,7 @@ USER_IMPORT_HEADER_ALIASES = {
     "franchise_name": ["Nome da franquia", "Franquia", "Setor", "Unidade / Franquia", "Unidade/Franquia", "Nome da base/franquia", "Base ou franquia"],
     "franchise_number": ["Telefone", "Número de telefone", "Numero de telefone", "Telefone da franquia", "Número da franquia", "Numero da franquia", "Código da franquia", "Codigo da franquia"],
     "cnpj": ["CNPJ", "CNPJ da franquia"],
+    "regional": ["Regional", "Região", "Regiao", "UF regional"],
 }
 
 
@@ -6236,6 +6946,7 @@ class UserImportRecord:
     franchise_name: str
     franchise_number: str
     cnpj: str
+    regional: str
 
 
 def get_user_import_value(row_values: list[Any], header_map: dict[str, int], field_key: str) -> Any:
@@ -6247,7 +6958,7 @@ def user_header_map_score(header_map: dict[str, int]) -> int:
     for key in ["responsible_name", "username", "password", "role", "status"]:
         if header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key]):
             score += 3
-    for key in ["base_name", "franchise_name", "franchise_number", "cnpj"]:
+    for key in ["base_name", "franchise_name", "franchise_number", "cnpj", "regional"]:
         if header_map_contains_alias(header_map, USER_IMPORT_HEADER_ALIASES[key]):
             score += 1
     return score
@@ -6331,6 +7042,7 @@ def parse_user_import_record(row_number: int, row_values: list[Any], header_map:
         franchise_name=franchise_name,
         franchise_number=franchise_number,
         cnpj=cnpj,
+        regional=normalize_user_regional(get_user_import_value(row_values, header_map, "regional")) or request_regional_for_unit_name(organization_name or franchise_name),
     )
 
 
@@ -6348,6 +7060,7 @@ def user_upsert_sql_rows(rows: list[tuple[int | None, UserImportRecord]], create
             record.password_hash,
             record.role,
             record.status,
+            record.regional,
             created_at,
             updated_at,
             0,
@@ -6371,7 +7084,7 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
     skipped = 0
     fields = (
         "responsible_name, organization_name, franchise_name, franchise_number, cnpj, "
-        "username, email, password_hash, role, status, created_at, updated_at, page_permissions_configured, action_permissions_configured"
+        "username, email, password_hash, role, status, regional, created_at, updated_at, page_permissions_configured, action_permissions_configured"
     )
     update_set = """
         responsible_name = excluded.responsible_name,
@@ -6383,6 +7096,7 @@ def execute_user_upsert_chunked(conn: Any, rows: list[tuple[int | None, UserImpo
         password_hash = excluded.password_hash,
         role = excluded.role,
         status = excluded.status,
+        regional = excluded.regional,
         updated_at = excluded.updated_at,
         page_permissions_configured = 0,
         action_permissions_configured = 0
@@ -6639,10 +7353,13 @@ def row_to_material_entry(row: Any | None, product: Product | None = None) -> Ma
         invoice_date=parse_dt(row["invoice_date"]) if "invoice_date" in row.keys() and row["invoice_date"] else None,
         invoice_value_cents=int(row["invoice_value_cents"] or 0),
         notes=row["notes"] or "",
+        regional=normalize_user_regional(row["regional"] if "regional" in row.keys() else ""),
+        stock_owner_user_id=row["stock_owner_user_id"] if "stock_owner_user_id" in row.keys() and row["stock_owner_user_id"] is not None else None,
         created_by_id=row["created_by_id"] if "created_by_id" in row.keys() and row["created_by_id"] is not None else None,
         created_at=parse_dt(row["created_at"]),
         product=product,
         created_by_name=row["created_by_name"] if "created_by_name" in row.keys() and row["created_by_name"] else "",
+        stock_owner_name=row["stock_owner_name"] if "stock_owner_name" in row.keys() and row["stock_owner_name"] else "",
     )
 
 
@@ -6692,11 +7409,17 @@ def create_or_update_product_from_material_entry(
     movement_type: str = "material_entry",
     note: str = "Entrada de materiais.",
     product_id: int | None = None,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
 ) -> int:
     item_name = (item_name or "").strip()[:180]
     unit_measure = (unit_measure or "un").strip()[:40] or "un"
     quantity = int(quantity or 0)
     unit_price_cents = int(unit_price_cents or 0)
+    regional = normalize_user_regional(regional)
+    if regional not in USER_REGIONAL_VALUES or stock_owner_user_id is None:
+        raise ValueError("Defina a regional e o responsável pelo estoque antes de registrar a entrada.")
+    stock_owner_user_id = int(stock_owner_user_id)
     product = None
     if product_id:
         row = conn.execute(
@@ -6716,19 +7439,27 @@ def create_or_update_product_from_material_entry(
             (item_name, "Entrada de Materiais", unit_measure, "Produto criado automaticamente pela entrada de materiais.", quantity, unit_price_cents, None, None, None, None, 1, SUPPLY_STOCK_TAG, now_value),
         )
         product_id = int(get_cursor_lastrowid(cursor) or 0)
-        record_stock_movement(conn, product_id, quantity, 0, quantity, movement_type, note, created_by_id=created_by_id)
+        owner_before, owner_after = apply_regional_stock_delta(conn, product_id, stock_owner_user_id, regional, quantity)
+        record_stock_movement(
+            conn, product_id, quantity, owner_before, owner_after, movement_type, note,
+            created_by_id=created_by_id, regional=regional, stock_owner_user_id=stock_owner_user_id,
+        )
         return product_id
-    stock_before = int(product.stock_quantity or 0)
-    stock_after = stock_before + quantity
+    global_stock_before = int(product.stock_quantity or 0)
+    global_stock_after = global_stock_before + quantity
     conn.execute(
         """
         UPDATE products
            SET stock_quantity = ?, unit_measure = ?, price_cents = CASE WHEN ? > 0 THEN ? ELSE price_cents END, updated_at = ?
          WHERE id = ?
         """,
-        (stock_after, unit_measure, unit_price_cents, unit_price_cents, now_value, product.id),
+        (global_stock_after, unit_measure, unit_price_cents, unit_price_cents, now_value, product.id),
     )
-    record_stock_movement(conn, product.id, quantity, stock_before, stock_after, movement_type, note, created_by_id=created_by_id)
+    owner_before, owner_after = apply_regional_stock_delta(conn, product.id, stock_owner_user_id, regional, quantity)
+    record_stock_movement(
+        conn, product.id, quantity, owner_before, owner_after, movement_type, note,
+        created_by_id=created_by_id, regional=regional, stock_owner_user_id=stock_owner_user_id,
+    )
     return product.id
 
 
@@ -6748,6 +7479,8 @@ def create_material_entry_record(
     created_by_id: int | None = None,
     movement_type: str = "material_entry",
     selected_product_id: int | None = None,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
 ) -> int:
     product_id = create_or_update_product_from_material_entry(
         conn,
@@ -6759,14 +7492,16 @@ def create_material_entry_record(
         movement_type=movement_type,
         note=f"Entrada de materiais: {item_name}.",
         product_id=selected_product_id,
+        regional=regional,
+        stock_owner_user_id=stock_owner_user_id,
     )
     cursor = conn.execute(
         """
         INSERT INTO material_entries (
             product_id, item_name, quantity, unit_measure, unit_price_cents,
             invoice_file_name, invoice_file_key, invoice_number, invoice_date,
-            invoice_value_cents, notes, created_by_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            invoice_value_cents, notes, regional, stock_owner_user_id, created_by_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             product_id,
@@ -6780,6 +7515,8 @@ def create_material_entry_record(
             invoice_date.isoformat() if invoice_date else None,
             int(invoice_value_cents or 0),
             notes[:1000],
+            normalize_user_regional(regional),
+            stock_owner_user_id,
             created_by_id,
             now_iso(),
         ),
@@ -6787,7 +7524,12 @@ def create_material_entry_record(
     return int(get_cursor_lastrowid(cursor) or 0)
 
 
-def list_products_for_material_entry_options(limit: int = 1200) -> list[Product]:
+def list_products_for_material_entry_options(
+    limit: int = 1200,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
+) -> list[Product]:
+    normalized = normalize_user_regional(regional)
     with db_connect() as conn:
         rows = conn.execute(
             """
@@ -6801,7 +7543,11 @@ def list_products_for_material_entry_options(limit: int = 1200) -> list[Product]
             """,
             (SUPPLY_STOCK_TAG, bounded_int(limit, 1200, 50, 3000)),
         ).fetchall()
-    return [product for row in rows if (product := row_to_product(row)) is not None]
+        products = [product for row in rows if (product := row_to_product(row)) is not None]
+        if normalized and stock_owner_user_id is not None:
+            for product in products:
+                product.stock_quantity = get_regional_stock_quantity(conn, product.id, int(stock_owner_user_id), normalized)
+    return products
 
 
 def material_entry_product_options_payload(products: list[Product]) -> list[dict[str, Any]]:
@@ -6819,7 +7565,13 @@ def material_entry_product_options_payload(products: list[Product]) -> list[dict
     return payload
 
 
-def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | None = None, limit: int | None = None) -> list[MaterialEntry]:
+def list_material_entries(
+    start_dt: datetime | None = None,
+    end_dt: datetime | None = None,
+    limit: int | None = None,
+    regional: str = "",
+    stock_owner_user_id: int | None = None,
+) -> list[MaterialEntry]:
     clauses: list[str] = []
     params: list[Any] = []
     if start_dt is not None:
@@ -6828,10 +7580,18 @@ def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | N
     if end_dt is not None:
         clauses.append("me.created_at <= ?")
         params.append(end_dt.strftime("%Y-%m-%d %H:%M:%S"))
+    normalized = normalize_user_regional(regional)
+    if normalized:
+        clauses.append("me.regional = ?")
+        params.append(normalized)
+    if stock_owner_user_id is not None:
+        clauses.append("me.stock_owner_user_id = ?")
+        params.append(int(stock_owner_user_id))
     sql = """
-        SELECT me.*, u.responsible_name AS created_by_name
+        SELECT me.*, u.responsible_name AS created_by_name, owner.responsible_name AS stock_owner_name
           FROM material_entries me
           LEFT JOIN users u ON u.id = me.created_by_id
+          LEFT JOIN users owner ON owner.id = me.stock_owner_user_id
     """
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
@@ -6844,7 +7604,12 @@ def list_material_entries(start_dt: datetime | None = None, end_dt: datetime | N
     return [entry for row in rows if (entry := row_to_material_entry(row)) is not None]
 
 
-def import_material_entries_from_workbook_bytes(uploaded_bytes: bytes, created_by_id: int | None) -> tuple[int, int, list[str]]:
+def import_material_entries_from_workbook_bytes(
+    uploaded_bytes: bytes,
+    created_by_id: int | None,
+    regional: str,
+    stock_owner_user_id: int,
+) -> tuple[int, int, list[str]]:
     workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
     worksheet = workbook.active
     if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
@@ -6884,6 +7649,8 @@ def import_material_entries_from_workbook_bytes(uploaded_bytes: bytes, created_b
                     notes=notes,
                     created_by_id=created_by_id,
                     movement_type="material_import",
+                    regional=regional,
+                    stock_owner_user_id=stock_owner_user_id,
                 )
                 imported += 1
             except Exception as exc:
@@ -6979,7 +7746,31 @@ def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: da
 @login_required
 @page_access_required("home")
 def home():
-    return render_template("index.html", product_categories=list_product_categories(require_current_user()))
+    user = require_current_user()
+    active_base_cycle = get_active_base_request_cycle(user.id) if user.role == "base" else None
+    return render_template(
+        "index.html",
+        product_categories=list_product_categories(user),
+        active_base_cycle=active_base_cycle,
+    )
+
+
+@app.get("/troca-de-insumos")
+@login_required
+@page_access_required("exchange_supplies")
+def exchange_supplies():
+    user = require_current_user()
+    if user.role != "base":
+        flash("A área Troca de Insumos é exclusiva para bases.", "warning")
+        return redirect(url_for("home"))
+    cycle = get_base_request_cycle(user.id)
+    latest_requests = list_supply_requests(user_id=user.id, limit=8)
+    return render_template(
+        "exchange_supplies.html",
+        cycle=cycle,
+        latest_requests=latest_requests,
+        can_request=not bool(cycle and cycle.is_active),
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -7069,18 +7860,30 @@ def api_products():
     category = request.args.get("category", "").strip()
     sort = request.args.get("sort", "name").strip().lower()
     limit = api_page_limit(default=120, maximum=250)
-    sql = """
+    regional = request_regional_for_user(user)
+    stock_expression = "stock_quantity"
+    params: list[Any] = []
+    if regional:
+        stock_expression = "COALESCE((SELECT SUM(rsb.quantity) FROM regional_stock_balances rsb WHERE rsb.product_id = products.id AND rsb.regional = ?), 0)"
+        params.append(regional)
+    sql = f"""
         SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
-               unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
+               unit_measure, is_kit, kit_quantity, description, {stock_expression} AS stock_quantity, price_cents,
                limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
-               active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
+               active, visible_base, visible_franchise, internal, catalog_archived, stock_tag, created_at, updated_at
          FROM products
          WHERE active = 1 AND catalog_archived = 0
            AND stock_tag = ?
     """
-    params: list[Any] = [SUPPLY_STOCK_TAG]
+    params.append(SUPPLY_STOCK_TAG)
     if not user.is_admin:
-        sql += " AND stock_quantity > 0 AND COALESCE(internal, 0) = 0"
+        if user.role != "base":
+            if regional:
+                sql += " AND " + stock_expression + " > 0"
+                params.append(regional)
+            else:
+                sql += " AND 1 = 0"
+        sql += " AND COALESCE(internal, 0) = 0"
     if user.role == "base":
         sql += " AND visible_base = 1"
     elif user.role == "franchise":
@@ -7165,10 +7968,10 @@ def api_create_request():
     with db_connect() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO supply_requests (user_id, status, user_note, admin_note, people_count, created_at)
-            VALUES (?, 'pending', ?, '', ?, ?)
+            INSERT INTO supply_requests (user_id, status, user_note, admin_note, people_count, regional, created_at)
+            VALUES (?, 'pending', ?, '', ?, ?, ?)
             """,
-            (user.id, user_note, people_count, now_iso()),
+            (user.id, user_note, people_count, request_regional_for_user(user), now_iso()),
         )
         request_id = get_cursor_lastrowid(cursor)
         if request_id is None:
@@ -7185,6 +7988,12 @@ def api_create_request():
             )
         record_request_action(conn, int(request_id), "created", user.id, "Solicitação criada pelo solicitante.")
         apply_automatic_blocks_after_request(conn, user, int(request_id), normalized)
+        if user.role == "base":
+            cycle_until = add_calendar_months(datetime.utcnow(), DEFAULT_BASE_REQUEST_CYCLE_MONTHS)
+            upsert_base_request_cycle(
+                conn, user.id, int(request_id), cycle_until,
+                "Ciclo automático de 3 meses iniciado após a solicitação.", user.id,
+            )
         conn.commit()
 
     try:
@@ -7279,7 +8088,268 @@ def asset_pdf(asset_id: int):
     return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=filename)
 
 
+def parse_optional_report_date(value: Any, end_of_day: bool = False) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        local_date = datetime.strptime(raw, "%Y-%m-%d")
+    except ValueError:
+        return None
+    if end_of_day:
+        local_date = local_date.replace(hour=23, minute=59, second=59)
+    return local_date
+
+
+def confirmed_order_filters_from_args(args: Any | None = None) -> dict[str, Any]:
+    source = args if args is not None else request.args
+    requester_type = str(source.get("requester_type", "") or "").strip().lower()
+    if requester_type not in {"base", "franchise"}:
+        requester_type = ""
+    regional = normalize_user_regional(source.get("regional", ""))
+    product_id = parse_required_positive_int(source.get("product_id"))
+    status = str(source.get("order_status", "") or "").strip().lower()
+    if status not in {"awaiting_shipment", "shipped"}:
+        status = ""
+    return {
+        "requester_type": requester_type,
+        "regional": regional,
+        "product_id": product_id,
+        "order_status": status,
+        "start_date": str(source.get("start_date", "") or "").strip(),
+        "end_date": str(source.get("end_date", "") or "").strip(),
+    }
+
+
+def list_confirmed_order_totals(filters: dict[str, Any] | None = None, viewer: User | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    filters = filters or {}
+    viewer = viewer or current_user()
+    clauses = ["sr.status IN ('awaiting_shipment', 'shipped')"]
+    params: list[Any] = []
+    requester_type = filters.get("requester_type")
+    if requester_type in {"base", "franchise"}:
+        clauses.append("u.role = ?")
+        params.append(requester_type)
+    regional = normalize_user_regional(filters.get("regional", ""))
+    if regional:
+        clauses.append(f"({REQUEST_REGION_SQL}) = ?")
+        params.append(regional)
+    product_id = filters.get("product_id")
+    if product_id:
+        clauses.append("p.id = ?")
+        params.append(int(product_id))
+    order_status = filters.get("order_status")
+    if order_status in {"awaiting_shipment", "shipped"}:
+        clauses.append("sr.status = ?")
+        params.append(order_status)
+    start_dt = parse_optional_report_date(filters.get("start_date"))
+    end_dt = parse_optional_report_date(filters.get("end_date"), end_of_day=True)
+    if start_dt is not None:
+        clauses.append("sr.created_at >= ?")
+        params.append(start_dt.strftime("%Y-%m-%d %H:%M:%S"))
+    if end_dt is not None:
+        clauses.append("sr.created_at <= ?")
+        params.append(end_dt.strftime("%Y-%m-%d %H:%M:%S"))
+    visibility_sql, visibility_params = request_assignment_visibility_condition(viewer)
+    if visibility_sql:
+        cleaned = visibility_sql.strip()
+        if cleaned.upper().startswith("AND "):
+            cleaned = cleaned[4:]
+        clauses.append(cleaned)
+        params.extend(visibility_params)
+    sql = f"""
+        SELECT p.id AS product_id, p.name AS product_name, p.unit_measure,
+               SUM(ri.quantity) AS total_quantity,
+               SUM(CASE WHEN sr.status = 'awaiting_shipment' THEN ri.quantity ELSE 0 END) AS awaiting_quantity,
+               SUM(CASE WHEN sr.status = 'shipped' THEN ri.quantity ELSE 0 END) AS shipped_quantity,
+               COUNT(DISTINCT sr.id) AS request_count,
+               COUNT(DISTINCT CASE WHEN u.role = 'base' THEN sr.id END) AS base_request_count,
+               COUNT(DISTINCT CASE WHEN u.role = 'franchise' THEN sr.id END) AS franchise_request_count
+          FROM request_items ri
+          JOIN supply_requests sr ON sr.id = ri.request_id
+          JOIN users u ON u.id = sr.user_id
+          JOIN products p ON p.id = ri.product_id
+         WHERE {" AND ".join(f"({clause})" for clause in clauses)}
+         GROUP BY p.id, p.name, p.unit_measure
+         ORDER BY total_quantity DESC, p.name COLLATE NOCASE ASC
+         LIMIT ?
+    """
+    params.append(bounded_int(limit, 500, 1, 2000))
+    with db_connect() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [
+        {
+            "product_id": int(row["product_id"]),
+            "product_name": row["product_name"] or "-",
+            "unit_measure": row["unit_measure"] or "un",
+            "total_quantity": int(row["total_quantity"] or 0),
+            "awaiting_quantity": int(row["awaiting_quantity"] or 0),
+            "shipped_quantity": int(row["shipped_quantity"] or 0),
+            "request_count": int(row["request_count"] or 0),
+            "base_request_count": int(row["base_request_count"] or 0),
+            "franchise_request_count": int(row["franchise_request_count"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def order_dashboard_metrics(filters: dict[str, Any] | None = None, viewer: User | None = None) -> dict[str, int]:
+    filters = filters or {}
+    viewer = viewer or current_user()
+    request_filters = {
+        "type": filters.get("requester_type", ""),
+        "regional": filters.get("regional", ""),
+        "product_id": filters.get("product_id"),
+        "sort": "newest",
+    }
+    return {
+        "all": count_supply_requests(filters=request_filters, viewer=viewer, apply_assignment_visibility=True),
+        "pending": count_supply_requests(status="pending", filters=request_filters, viewer=viewer, apply_assignment_visibility=True),
+        "awaiting_shipment": count_supply_requests(status="awaiting_shipment", filters=request_filters, viewer=viewer, apply_assignment_visibility=True),
+        "shipped": count_supply_requests(status="shipped", filters=request_filters, viewer=viewer, apply_assignment_visibility=True),
+        "rejected": count_supply_requests(status="rejected", filters=request_filters, viewer=viewer, apply_assignment_visibility=True),
+    }
+
+
 # ---------- Admin ----------
+
+@app.get("/admin/orders-dashboard")
+@admin_required
+@page_access_required("orders_dashboard")
+def admin_orders_dashboard():
+    current = require_current_user()
+    selected_status = str(request.args.get("status", "") or "").strip().lower()
+    valid_statuses = {"", "pending", "awaiting_shipment", "shipped", "rejected", "deleted"}
+    if selected_status not in valid_statuses:
+        selected_status = ""
+    request_filters = normalize_request_filters_from_args()
+    extra_args = request_filters_to_query_args(request_filters)
+    if selected_status:
+        extra_args["status"] = selected_status
+    requests_list, request_pagination = list_supply_requests_page(
+        status=selected_status,
+        endpoint="admin_orders_dashboard",
+        filters=request_filters,
+        extra_args=extra_args,
+        viewer=current,
+        apply_assignment_visibility=True,
+    )
+    confirmed_filters = {
+        "requester_type": request_filters.get("type", ""),
+        "regional": request_filters.get("regional", ""),
+        "product_id": request_filters.get("product_id"),
+        "order_status": "",
+        "start_date": "",
+        "end_date": "",
+    }
+    return render_template(
+        "admin/orders_dashboard.html",
+        requests_list=requests_list,
+        request_pagination=request_pagination,
+        request_filters=request_filters,
+        selected_status=selected_status,
+        dashboard_metrics=order_dashboard_metrics(confirmed_filters, current),
+        confirmed_order_totals=list_confirmed_order_totals(confirmed_filters, current, limit=20),
+        request_product_options=list_products_for_request_filters(),
+        request_sort_options=REQUEST_SORT_OPTIONS,
+        request_type_options=REQUEST_TYPE_OPTIONS,
+        request_regional_options=REQUEST_REGIONAL_OPTIONS,
+    )
+
+
+@app.get("/admin/base-cycles")
+@admin_required
+@page_access_required("base_cycles")
+def admin_base_cycles():
+    current = require_current_user()
+    selected_status = str(request.args.get("status", "") or "").strip().lower()
+    if selected_status not in {"", "active", "inactive", "none"}:
+        selected_status = ""
+    selected_regional = normalize_user_regional(request.args.get("regional", ""))
+    q = str(request.args.get("q", "") or "").strip()
+    clauses = ["u.role = 'base'"]
+    params: list[Any] = []
+    if selected_regional:
+        clauses.append("u.regional = ?")
+        params.append(selected_regional)
+    if q:
+        like = like_term(q)
+        clauses.append("(u.organization_name LIKE ? OR u.responsible_name LIKE ? OR u.username LIKE ?)")
+        params.extend([like, like, like])
+    with db_connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT u.*, brc.id AS cycle_id, brc.blocked_until, brc.source_request_id,
+                   brc.reason AS cycle_reason, brc.created_at AS cycle_created_at,
+                   brc.updated_at AS cycle_updated_at, brc.revoked_at AS cycle_revoked_at,
+                   brc.updated_by_id AS cycle_updated_by_id, COALESCE(sr.status, '') AS source_request_status
+              FROM users u
+              LEFT JOIN base_request_cycles brc ON brc.user_id = u.id
+              LEFT JOIN supply_requests sr ON sr.id = brc.source_request_id
+             WHERE """ + " AND ".join(clauses) + " ORDER BY u.organization_name COLLATE NOCASE ASC, u.responsible_name COLLATE NOCASE ASC",
+            params,
+        ).fetchall()
+    cycle_rows: list[dict[str, Any]] = []
+    for row in rows:
+        user = row_to_user(row)
+        cycle = None
+        if row["cycle_id"] is not None:
+            cycle = BaseRequestCycle(
+                id=int(row["cycle_id"]), user_id=user.id if user else int(row["id"]),
+                blocked_until=parse_dt(row["blocked_until"]) or datetime.utcnow(),
+                source_request_id=int(row["source_request_id"]) if row["source_request_id"] is not None else None,
+                reason=row["cycle_reason"] or "", created_at=parse_dt(row["cycle_created_at"]) or datetime.utcnow(),
+                updated_at=parse_dt(row["cycle_updated_at"]), revoked_at=parse_dt(row["cycle_revoked_at"]),
+                updated_by_id=int(row["cycle_updated_by_id"]) if row["cycle_updated_by_id"] is not None else None,
+                source_request_status=row["source_request_status"] or "", user=user,
+            )
+        state = "none" if cycle is None else ("active" if cycle.is_active else "inactive")
+        if selected_status and state != selected_status:
+            continue
+        cycle_rows.append({"user": user, "cycle": cycle, "state": state})
+    return render_template(
+        "admin/base_cycles.html",
+        cycle_rows=cycle_rows,
+        selected_status=selected_status,
+        selected_regional=selected_regional,
+        search_query=q,
+        regional_options=USER_REGIONAL_OPTIONS,
+        can_manage=current.is_dev,
+    )
+
+
+@app.post("/admin/base-cycles/<int:user_id>")
+@admin_required
+@page_access_required("base_cycles")
+def admin_base_cycle_update(user_id: int):
+    current = require_current_user()
+    if not current.is_dev:
+        abort(403)
+    target = get_user(user_id)
+    if target is None or target.role != "base":
+        abort(404)
+    action = str(request.form.get("action", "save") or "save").strip().lower()
+    with db_connect() as conn:
+        if action == "revoke":
+            conn.execute("UPDATE base_request_cycles SET revoked_at = ?, updated_at = ?, updated_by_id = ? WHERE user_id = ?", (now_iso(), now_iso(), current.id, target.id))
+            flash("Ciclo de três meses revogado para a base selecionada.", "success")
+        elif action == "clear":
+            conn.execute("DELETE FROM base_request_cycles WHERE user_id = ?", (target.id,))
+            flash("Histórico do ciclo removido para a base selecionada.", "success")
+        else:
+            blocked_until = parse_optional_report_date(request.form.get("blocked_until"), end_of_day=True)
+            if blocked_until is None:
+                flash("Informe uma data final válida para o ciclo.", "warning")
+                return redirect_to_return("admin_base_cycles")
+            existing = get_base_request_cycle(target.id, conn)
+            upsert_base_request_cycle(
+                conn, target.id, existing.source_request_id if existing else None, blocked_until,
+                "Prazo definido manualmente pelo Dev.", current.id,
+            )
+            flash("Prazo do ciclo atualizado para a base selecionada.", "success")
+        conn.commit()
+    return redirect_to_return("admin_base_cycles")
+
 
 @app.route("/admin")
 @admin_required
@@ -7320,7 +8390,7 @@ def admin_dashboard():
     if "admin_requests" in dashboard_pages:
         latest_requests = list_supply_requests(limit=8, viewer=current_user(), apply_assignment_visibility=True)
     elif "admin_requests_attended" in dashboard_pages:
-        latest_requests = list_supply_requests(status="approved", limit=8, viewer=current_user(), apply_assignment_visibility=True)
+        latest_requests = list_supply_requests(status="awaiting_shipment,shipped,rejected", limit=8, viewer=current_user(), apply_assignment_visibility=True)
     else:
         latest_requests = []
     return render_template("admin/dashboard.html", counts=counts, low_stock=low_stock, latest_requests=latest_requests)
@@ -7341,6 +8411,7 @@ def admin_users():
     if selected_role not in valid_filter_roles:
         selected_role = ""
 
+    selected_regional = normalize_user_regional(request.args.get("regional", ""))
     search_query = (request.args.get("q", "") or "").strip()
     selected_sort = (request.args.get("sort", "responsible_asc") or "responsible_asc").strip().lower()
     sort_map = {
@@ -7369,6 +8440,9 @@ def admin_users():
     if selected_role:
         clauses.append("role = ?")
         params.append(selected_role)
+    if selected_regional:
+        clauses.append("regional = ?")
+        params.append(selected_regional)
     if search_query:
         like = like_term(search_query)
         clauses.append(
@@ -7381,15 +8455,16 @@ def admin_users():
                 OR cnpj LIKE ?
                 OR role LIKE ?
                 OR status LIKE ?
+                OR regional LIKE ?
             )"""
         )
-        params.extend([like, like, like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like, like])
 
     where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     sql = f"""
         SELECT id, responsible_name, organization_name, franchise_name, franchise_number,
-               cnpj, username, email, password_hash, role, status, created_at,
-               updated_at, page_permissions_configured
+               cnpj, username, email, password_hash, role, status, regional, allow_cross_regional_service, created_at,
+               updated_at, page_permissions_configured, action_permissions_configured
           FROM users
           {where_sql}
          ORDER BY {order_clause}
@@ -7435,6 +8510,8 @@ def admin_users():
             args["status"] = selected_status
         if selected_role:
             args["role"] = selected_role
+        if selected_regional:
+            args["regional"] = selected_regional
         if selected_sort:
             args["sort"] = selected_sort
         return url_for("admin_users", **args)
@@ -7488,6 +8565,7 @@ def admin_users():
         "q": search_query,
         "status": selected_status,
         "role": selected_role,
+        "regional": selected_regional,
         "sort": selected_sort,
         "limit": per_page,
         "page": page,
@@ -7501,7 +8579,75 @@ def admin_users():
         user_pagination=user_pagination,
         role_labels=role_option_labels(),
         role_filter_options=all_role_options(),
+        user_regional_options=USER_REGIONAL_OPTIONS,
+        selected_regional=selected_regional,
+        base_assignment_admin_options=regional_assignment_user_options() if current_user() and current_user().is_dev else [],
+        base_assignment_map=list_admin_base_assignment_map() if current_user() and current_user().is_dev else {},
     )
+
+
+@app.post("/admin/users/bulk-regional")
+@admin_required
+@page_access_required("admin_users")
+def admin_users_bulk_regional():
+    current = require_current_user()
+    if not current.is_dev:
+        abort(403)
+    regional = normalize_user_regional(request.form.get("regional", ""))
+    user_ids = sorted({int(value) for value in request.form.getlist("user_ids") if str(value).isdigit() and int(value) > 0})
+    if regional not in USER_REGIONAL_VALUES:
+        flash("Selecione uma regional válida.", "warning")
+        return redirect_to_return("admin_users")
+    if not user_ids:
+        flash("Selecione pelo menos um usuário.", "warning")
+        return redirect_to_return("admin_users")
+    placeholders = ",".join("?" for _ in user_ids)
+    try:
+        with db_connect() as conn:
+            conn.execute(
+                f"UPDATE users SET regional = ?, updated_at = ? WHERE id IN ({placeholders})",
+                [regional, now_iso(), *user_ids],
+            )
+            conn.execute(
+                f"DELETE FROM regional_user_assignments WHERE user_id IN ({placeholders}) AND regional <> ?",
+                [*user_ids, regional],
+            )
+            conn.execute(
+                f"UPDATE supply_requests SET regional = ? WHERE status = 'pending' AND user_id IN ({placeholders})",
+                [regional, *user_ids],
+            )
+            conn.commit()
+        flash(f"Regional {regional} aplicada a {len(user_ids)} usuário(s).", "success")
+    except Exception as exc:
+        app.logger.exception("Falha ao atualizar regional em massa")
+        flash(f"Não consegui atualizar as regionais. Erro: {type(exc).__name__}.", "danger")
+    return redirect_to_return("admin_users")
+
+
+@app.post("/admin/users/bulk-base-admins")
+@admin_required
+@page_access_required("admin_users")
+def admin_users_bulk_base_admins():
+    current = require_current_user()
+    if not current.is_dev:
+        abort(403)
+    base_user_ids = sorted({int(value) for value in request.form.getlist("user_ids") if str(value).isdigit() and int(value) > 0})
+    admin_user_ids = sorted({int(value) for value in request.form.getlist("admin_user_ids") if str(value).isdigit() and int(value) > 0})
+    mode = (request.form.get("assignment_mode") or "replace").strip().lower()
+    if mode != "remove" and not admin_user_ids:
+        flash("Selecione pelo menos um administrador.", "warning")
+        return redirect_to_return("admin_users")
+    try:
+        with db_connect() as conn:
+            set_base_admin_assignments(conn, base_user_ids, admin_user_ids, current.id, mode)
+            conn.commit()
+        flash("Atendimento das bases atualizado para os administradores selecionados.", "success")
+    except ValueError as exc:
+        flash(str(exc), "warning")
+    except Exception as exc:
+        app.logger.exception("Falha ao definir bases por administrador")
+        flash(f"Não consegui atualizar o atendimento das bases. Erro: {type(exc).__name__}.", "danger")
+    return redirect_to_return("admin_users")
 
 
 def filter_and_sort_users_for_export(users: list[User], q: str, status: str, role: str, sort_mode: str) -> list[User]:
@@ -7574,6 +8720,7 @@ def admin_users_export():
     valid_filter_roles = {"", *all_role_options()}
     if selected_role not in valid_filter_roles:
         selected_role = ""
+    selected_regional = normalize_user_regional(request.args.get("regional", ""))
     search_query = (request.args.get("q", "") or "").strip()
     selected_sort = (request.args.get("sort", "responsible_asc") or "responsible_asc").strip().lower()
     sort_map = {
@@ -7600,6 +8747,9 @@ def admin_users_export():
     if selected_role:
         clauses.append("role = ?")
         params.append(selected_role)
+    if selected_regional:
+        clauses.append("regional = ?")
+        params.append(selected_regional)
     if search_query:
         like = like_term(search_query)
         clauses.append(
@@ -7612,17 +8762,18 @@ def admin_users_export():
                 OR cnpj LIKE ?
                 OR role LIKE ?
                 OR status LIKE ?
+                OR regional LIKE ?
             )"""
         )
-        params.extend([like, like, like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like, like, like])
     where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
 
     with db_connect() as conn:
         rows = conn.execute(
             f"""
             SELECT id, responsible_name, organization_name, franchise_name, franchise_number,
-                   cnpj, username, email, password_hash, role, status, created_at,
-                   updated_at, page_permissions_configured
+                   cnpj, username, email, password_hash, role, status, regional, created_at,
+                   updated_at, page_permissions_configured, action_permissions_configured
               FROM users
               {where_sql}
              ORDER BY {order_clause}
@@ -7639,6 +8790,7 @@ def admin_users_export():
         "Responsável",
         "Usuário",
         "Tipo de acesso",
+        "Regional",
         "Setor",
         "Telefone",
         "CNPJ",
@@ -7652,6 +8804,7 @@ def admin_users_export():
             user.responsible_name,
             user.username,
             user_role_label(user.role),
+            user_regional_label(user.regional),
             user.franchise_name or user.organization_name,
             user.formatted_phone if user.role == "franchise" else "",
             user.formatted_cnpj or "",
@@ -7673,11 +8826,11 @@ def admin_users_export():
         for cell in row:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
-    widths = [34, 24, 18, 34, 22, 22, 16, 20, 20]
+    widths = [34, 24, 18, 14, 34, 22, 22, 16, 20, 20]
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(index)].width = width
     worksheet.freeze_panes = "A2"
-    worksheet.auto_filter.ref = f"A1:I{max(1, worksheet.max_row)}"
+    worksheet.auto_filter.ref = f"A1:J{max(1, worksheet.max_row)}"
 
     buffer = BytesIO()
     workbook.save(buffer)
@@ -7707,6 +8860,7 @@ def admin_users_template():
         "Senha",
         "Tipo de acesso",
         "Status do cadastro",
+        "Regional",
         "Nome da base",
         "Nome da franquia",
         "Telefone",
@@ -7724,14 +8878,14 @@ def admin_users_template():
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
 
-    widths = [32, 24, 24, 20, 22, 24, 34, 26, 22]
+    widths = [32, 24, 24, 20, 22, 14, 24, 34, 26, 22]
     for index, width in enumerate(widths, start=1):
         worksheet.column_dimensions[get_column_letter(index)].width = width
     worksheet.freeze_panes = "A2"
-    worksheet.auto_filter.ref = "A1:I1"
+    worksheet.auto_filter.ref = "A1:J1"
 
     lists = workbook.create_sheet("Listas")
-    lists.append(["Tipos de acesso", "Status", "Bases"])
+    lists.append(["Tipos de acesso", "Status", "Bases", "Regionais"])
     import_role_labels = [role_option_labels().get(role, role) for role in all_role_options()]
     for row_index, role_label in enumerate(import_role_labels, start=2):
         lists.cell(row=row_index, column=1, value=role_label)
@@ -7739,23 +8893,27 @@ def admin_users_template():
         lists.cell(row=row_index, column=2, value=status_label)
     for row_index, base_name in enumerate(BASE_UNIT_OPTIONS, start=2):
         lists.cell(row=row_index, column=3, value=base_name)
+    for row_index, regional_option in enumerate(USER_REGIONAL_OPTIONS, start=2):
+        lists.cell(row=row_index, column=4, value=regional_option["value"])
     lists.sheet_state = "hidden"
 
     role_validation = DataValidation(type="list", formula1=f"'Listas'!$A$2:$A${max(2, len(import_role_labels) + 1)}", allow_blank=False)
     status_validation = DataValidation(type="list", formula1="'Listas'!$B$2:$B$4", allow_blank=False)
+    regional_validation = DataValidation(type="list", formula1="'Listas'!$D$2:$D$3", allow_blank=True)
     base_validation = DataValidation(
         type="list",
         formula1=f"'Listas'!$C$2:$C${max(2, len(BASE_UNIT_OPTIONS) + 1)}",
         allow_blank=True,
     )
-    for validation in [role_validation, status_validation, base_validation]:
+    for validation in [role_validation, status_validation, regional_validation, base_validation]:
         worksheet.add_data_validation(validation)
     role_validation.add("D2:D1000")
     status_validation.add("E2:E1000")
-    base_validation.add("F2:F1000")
+    regional_validation.add("F2:F1000")
+    base_validation.add("G2:G1000")
     for row in range(2, 1001):
-        worksheet.cell(row=row, column=8).number_format = "@"
         worksheet.cell(row=row, column=9).number_format = "@"
+        worksheet.cell(row=row, column=10).number_format = "@"
 
     instructions = workbook.create_sheet("Instruções")
     instructions.column_dimensions["A"].width = 30
@@ -7768,6 +8926,7 @@ def admin_users_template():
         ("Dev", "Use apenas com autorização. Somente um usuário Dev pode importar/promover usuários como Dev."),
         ("Senha", "Obrigatória para novos usuários. Para usuários existentes, o Dev pode marcar a opção de atualizar senhas para substituir pela senha da planilha; sem essa opção, a senha atual é preservada."),
         ("Status", "Use Aprovado, Pendente ou Recusado."),
+        ("Regional", "Use MG ou SPN. O Dev também pode alterar a regional em massa na lista de usuários."),
     ]
     for row in instruction_rows:
         instructions.append(row)
@@ -7891,6 +9050,8 @@ def admin_user_new():
         status = normalize_user_status(request.form.get("status", "approved"), default="approved") or "approved"
         selected_pages = request.form.getlist("page_permissions") or list(default_page_keys_for_role(role))
         selected_actions = request.form.getlist("action_permissions")
+        regional = normalize_user_regional(request.form.get("regional", "")) if current.is_dev else ""
+        allow_cross_regional_service = bool(current.is_dev and role == "base" and request.form.get("allow_cross_regional_service") == "on")
 
         try:
             organization_name, franchise_name, franchise_number, cnpj = validate_user_profile_fields(
@@ -7904,6 +9065,8 @@ def admin_user_new():
         except ValueError as exc:
             flash(str(exc), "danger")
             return render_template("admin/user_form.html", user=None, is_new=True, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(require_current_user()), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(require_current_user()), can_edit_dev_password=can_edit_dev_password(require_current_user()))
+        if not regional:
+            regional = request_regional_for_unit_name(organization_name or franchise_name)
         selected_pages = list(normalize_user_page_selection_for_editor(current, role, selected_pages))
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
@@ -7923,9 +9086,9 @@ def admin_user_new():
                 """
                 INSERT INTO users (
                     responsible_name, organization_name, franchise_name, franchise_number, cnpj,
-                    username, email, password_hash, role, status, created_at, page_permissions_configured, action_permissions_configured
+                    username, email, password_hash, role, status, regional, allow_cross_regional_service, created_at, page_permissions_configured, action_permissions_configured
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
                 """,
                 (
                     responsible_name,
@@ -7938,6 +9101,8 @@ def admin_user_new():
                     generate_password_hash(password),
                     role,
                     status,
+                    regional,
+                    1 if allow_cross_regional_service else 0,
                     now_iso(),
                 ),
             )
@@ -7992,6 +9157,10 @@ def admin_user_edit(user_id: int):
         password = request.form.get("password", "")
         selected_pages = request.form.getlist("page_permissions")
         selected_actions = request.form.getlist("action_permissions")
+        regional = normalize_user_regional(request.form.get("regional", "")) if current.is_dev else normalize_user_regional(target.regional)
+        allow_cross_regional_service = target.allow_cross_regional_service
+        if current.is_dev:
+            allow_cross_regional_service = bool(role == "base" and request.form.get("allow_cross_regional_service") == "on")
         editable_fields = get_user_editable_fields(current) if not current.is_dev else user_edit_field_key_set()
 
         if "responsible_name" not in editable_fields:
@@ -8047,6 +9216,8 @@ def admin_user_edit(user_id: int):
             flash(str(exc), "danger")
             return render_template("admin/user_form.html", user=target, is_new=False, permission_options=PAGE_PERMISSION_OPTIONS, selected_permissions=set(selected_pages), allowed_role_options=allowed_role_options_for_editor(current, target), role_labels=role_option_labels(), role_admin_keys=[key for key in all_role_options() if role_is_admin_like(key)], role_permissions_map=role_permissions_map(allowed_role_options_for_editor(current) if 'current' in locals() else None), can_edit_admin_role=can_change_admin_role(current, target), can_edit_dev_password=can_edit_dev_password(current))
 
+        if not regional:
+            regional = request_regional_for_unit_name(organization_name or franchise_name)
         selected_pages = list(normalize_user_page_selection_for_editor(current, role, selected_pages))
         if not selected_pages:
             selected_pages = list(default_page_keys_for_role(role))
@@ -8073,7 +9244,7 @@ def admin_user_edit(user_id: int):
                     """
                     UPDATE users
                        SET responsible_name = ?, organization_name = ?, franchise_name = ?, franchise_number = ?, cnpj = ?,
-                           username = ?, email = ?, password_hash = ?, role = ?, status = ?, updated_at = ?
+                           username = ?, email = ?, password_hash = ?, role = ?, status = ?, regional = ?, allow_cross_regional_service = ?, updated_at = ?
                      WHERE id = ?
                     """,
                     (
@@ -8087,6 +9258,8 @@ def admin_user_edit(user_id: int):
                         generate_password_hash(password),
                         role,
                         status,
+                        regional,
+                        1 if allow_cross_regional_service else 0,
                         now_iso(),
                         user_id,
                     ),
@@ -8096,7 +9269,7 @@ def admin_user_edit(user_id: int):
                     """
                     UPDATE users
                        SET responsible_name = ?, organization_name = ?, franchise_name = ?, franchise_number = ?, cnpj = ?,
-                           username = ?, email = ?, role = ?, status = ?, updated_at = ?
+                           username = ?, email = ?, role = ?, status = ?, regional = ?, allow_cross_regional_service = ?, updated_at = ?
                      WHERE id = ?
                     """,
                     (
@@ -8109,10 +9282,13 @@ def admin_user_edit(user_id: int):
                         email,
                         role,
                         status,
+                        regional,
+                        1 if allow_cross_regional_service else 0,
                         now_iso(),
                         user_id,
                     ),
                 )
+            conn.execute("UPDATE supply_requests SET regional = ? WHERE status = 'pending' AND user_id = ?", (regional, user_id))
             save_user_page_permissions(conn, user_id, role, selected_pages)
             save_user_action_permissions(conn, user_id, role, selected_actions, selected_pages)
             apply_user_request_block_form(conn, user_id, current, request.form)
@@ -8998,6 +10174,13 @@ def admin_product_new():
             return denied
 
         product = fill_product_from_form(Product())
+        supply_stock_ignored = False
+        if normalize_stock_tag_slug(product.stock_tag) == SUPPLY_STOCK_TAG and product.stock_quantity > 0:
+            # Estoque de insumos deve sempre entrar pelo fluxo regional/individual.
+            # Isso evita criar saldo global sem dono e garante que a futura baixa
+            # aconteça somente no estoque da pessoa que aprovou a solicitação.
+            product.stock_quantity = 0
+            supply_stock_ignored = True
         if not product.name:
             flash("Informe o nome do produto.", "warning")
             return redirect_to_return("admin_product_new")
@@ -9056,6 +10239,8 @@ def admin_product_new():
                 record_stock_movement(conn, int(new_id), product.stock_quantity, 0, product.stock_quantity, "product_created", "Produto cadastrado manualmente.", created_by_id=require_current_user().id)
             conn.commit()
         flash("Produto cadastrado.", "success")
+        if supply_stock_ignored:
+            flash("O estoque inicial de insumos não foi aplicado. Use Entrada de Materiais para vincular o saldo à regional e ao responsável correto.", "warning")
         return redirect_to_return("admin_products")
     if not user_has_action_access(current_user(), "products_create"):
         flash("Seu tipo de acesso não pode criar produtos.", "warning")
@@ -9084,6 +10269,12 @@ def admin_product_edit(product_id: int):
         old_stock_quantity = product.stock_quantity
         old_image_key = product.image_key
         fill_product_from_form(product)
+        supply_stock_change_ignored = False
+        if normalize_stock_tag_slug(product.stock_tag) == SUPPLY_STOCK_TAG and product.stock_quantity != old_stock_quantity:
+            # O total exibido no cadastro é apenas o agregado. Alterá-lo aqui não
+            # identifica a regional nem o dono do saldo, então a mudança é ignorada.
+            product.stock_quantity = old_stock_quantity
+            supply_stock_change_ignored = True
         if not product.name:
             flash("Informe o nome do produto.", "warning")
             return redirect_to_return("admin_product_edit", product_id=product_id)
@@ -9153,6 +10344,8 @@ def admin_product_edit(product_id: int):
         if old_image_key and old_image_key != product.image_key:
             remove_local_product_image(old_image_key)
         flash("Produto atualizado.", "success")
+        if supply_stock_change_ignored:
+            flash("O estoque de insumos não foi alterado pelo cadastro do produto. Use Entrada de Materiais para atualizar o saldo da regional e do responsável.", "warning")
         return redirect_to_return("admin_products")
     return render_template(
         "admin/product_form.html",
@@ -9224,7 +10417,7 @@ def admin_product_delete(product_id: int):
 def admin_requests():
     current = require_current_user()
     selected_status = (request.args.get("status", "") or "").strip().lower()
-    if selected_status not in {"", "pending", "approved", "rejected", "deleted"}:
+    if selected_status not in {"", "pending", "awaiting_shipment", "shipped", "rejected", "deleted"}:
         selected_status = ""
     request_filters = normalize_request_filters_from_args()
     extra_args: dict[str, Any] = request_filters_to_query_args(request_filters)
@@ -9239,7 +10432,7 @@ def admin_requests():
         apply_assignment_visibility=True,
     )
     status_tabs = []
-    for value, label in [("", "Todas"), ("pending", "Pendentes"), ("approved", "Aprovadas"), ("rejected", "Recusadas"), ("deleted", "Excluídas")]:
+    for value, label in [("", "Todas"), ("pending", "Pendentes"), ("awaiting_shipment", "Aguardando envio"), ("shipped", "Enviadas"), ("rejected", "Recusadas"), ("deleted", "Excluídas")]:
         tab_args = request_filters_to_query_args(request_filters)
         tab_args["limit"] = request_pagination["limit"]
         if value:
@@ -9259,8 +10452,8 @@ def admin_requests():
         request_filter_action="admin_requests",
         request_filter_show_type=True,
         request_filter_show_regional=True,
-        regional_assignment_options=request_admin_assignment_admin_options() if current.is_dev else [],
-        regional_assignments=list_request_regional_admin_assignment_details() if current.is_dev else {},
+        regional_assignment_options=regional_assignment_user_options() if current.is_dev else [],
+        regional_assignments=list_regional_assignment_details() if current.is_dev else {},
     )
 
 
@@ -9275,18 +10468,17 @@ def admin_request_regional_admins_update():
         with db_connect() as conn:
             for option in REQUEST_REGIONAL_OPTIONS:
                 regional = option["value"]
-                raw_admin_id = (request.form.get(f"admin_{regional}") or "").strip()
-                admin_id: int | None = None
-                if raw_admin_id:
-                    admin_id = int(raw_admin_id)
-                set_request_regional_admin_assignment(conn, regional, admin_id, current.id)
+                approval_ids = [int(value) for value in request.form.getlist(f"approval_{regional}") if str(value).isdigit()]
+                stock_ids = [int(value) for value in request.form.getlist(f"stock_{regional}") if str(value).isdigit()]
+                set_regional_user_assignments(conn, regional, REGIONAL_ASSIGNMENT_APPROVAL, approval_ids, current.id)
+                set_regional_user_assignments(conn, regional, REGIONAL_ASSIGNMENT_STOCK, stock_ids, current.id)
             conn.commit()
-        flash("Direcionamento de solicitações por regional atualizado.", "success")
+        flash("Responsáveis por aprovação e estoque atualizados por regional.", "success")
     except ValueError as exc:
         flash(str(exc), "warning")
     except Exception as exc:
-        app.logger.exception("Falha ao atualizar direcionamento de solicitações por regional")
-        flash(f"Não consegui atualizar o direcionamento. Erro: {type(exc).__name__}.", "danger")
+        app.logger.exception("Falha ao atualizar responsáveis por regional")
+        flash(f"Não consegui atualizar os responsáveis. Erro: {type(exc).__name__}.", "danger")
     return redirect_to_return("admin_requests")
 
 
@@ -9298,7 +10490,7 @@ def admin_requests_attended():
     request_filters = normalize_request_filters_from_args()
     extra_args = request_filters_to_query_args(request_filters)
     requests_list, request_pagination = list_supply_requests_page(
-        status="approved",
+        status="awaiting_shipment,shipped,rejected",
         endpoint="admin_requests_attended",
         filters=request_filters,
         extra_args=extra_args,
@@ -9308,7 +10500,7 @@ def admin_requests_attended():
     return render_template(
         "admin/requests_attended.html",
         requests_list=requests_list,
-        selected_status="approved",
+        selected_status="attended",
         request_pagination=request_pagination,
         request_filters=request_filters,
         request_product_options=list_products_for_request_filters(),
@@ -9328,6 +10520,14 @@ def admin_requests_attended():
 def admin_material_entries():
     if not user_has_action_access(current_user(), "stock_material_entries"):
         flash("Seu tipo de acesso não pode acessar entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
+    current = require_current_user()
+    stock_regional = normalize_user_regional(current.regional)
+    if not stock_regional:
+        flash("Seu usuário ainda não possui regional cadastrada.", "warning")
+        return redirect(url_for("admin_stock"))
+    if not can_upload_regional_stock(current, stock_regional):
+        flash("Seu usuário não foi designado para subir estoque desta regional.", "warning")
         return redirect(url_for("admin_stock"))
     if request.method == "POST":
         selected_product_id = parse_required_positive_int(request.form.get("product_id")) or None
@@ -9391,6 +10591,8 @@ def admin_material_entries():
                     created_by_id=require_current_user().id,
                     movement_type="material_entry",
                     selected_product_id=selected_product_id,
+                    regional=stock_regional,
+                    stock_owner_user_id=current.id,
                 )
                 conn.commit()
             flash("Entrada de material registrada e estoque atualizado.", "success")
@@ -9398,13 +10600,15 @@ def admin_material_entries():
             app.logger.exception("Falha ao registrar entrada de materiais")
             flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
         return redirect_to_return("admin_material_entries")
-    entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE)
-    material_product_options = list_products_for_material_entry_options()
+    entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE, regional=stock_regional, stock_owner_user_id=current.id)
+    material_product_options = list_products_for_material_entry_options(regional=stock_regional, stock_owner_user_id=current.id)
     return render_template(
         "admin/material_entries.html",
         entries=entries,
         material_product_options=material_product_options,
         material_product_options_json=material_entry_product_options_payload(material_product_options),
+        stock_regional=stock_regional,
+        stock_owner=current,
     )
 
 
@@ -9414,6 +10618,11 @@ def admin_material_entries():
 def admin_material_entries_template():
     if not user_has_action_access(current_user(), "stock_material_entries"):
         flash("Seu tipo de acesso não pode baixar modelo de entrada de materiais.", "warning")
+        return redirect(url_for("admin_stock"))
+    current = require_current_user()
+    stock_regional = normalize_user_regional(current.regional)
+    if not stock_regional or not can_upload_regional_stock(current, stock_regional):
+        flash("Seu usuário não foi designado para subir estoque de uma regional.", "warning")
         return redirect(url_for("admin_stock"))
     workbook = Workbook()
     worksheet = workbook.active
@@ -9451,6 +10660,11 @@ def admin_material_entries_import():
     if not user_has_action_access(current_user(), "stock_material_entries"):
         flash("Seu tipo de acesso não pode importar entrada de materiais.", "warning")
         return redirect(url_for("admin_stock"))
+    current = require_current_user()
+    stock_regional = normalize_user_regional(current.regional)
+    if not stock_regional or not can_upload_regional_stock(current, stock_regional):
+        flash("Seu usuário não foi designado para subir estoque de uma regional.", "warning")
+        return redirect(url_for("admin_stock"))
     uploaded = request.files.get("spreadsheet")
     if uploaded is None or not uploaded.filename:
         flash("Selecione uma planilha .xlsx de entrada de materiais.", "warning")
@@ -9468,7 +10682,7 @@ def admin_material_entries_import():
                 upload_bytes_to_r2(storage_key("imports", "entrada_materiais_" + sao_paulo_filename_timestamp() + "_" + safe_filename(uploaded.filename)), uploaded_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", {"type": "material_entries_import"})
             except Exception as exc:
                 print(f"[R2] Não foi possível salvar planilha de entrada: {exc}")
-        imported, skipped, errors = import_material_entries_from_workbook_bytes(uploaded_bytes, require_current_user().id)
+        imported, skipped, errors = import_material_entries_from_workbook_bytes(uploaded_bytes, current.id, stock_regional, current.id)
         if errors:
             flash("Algumas linhas foram ignoradas: " + "; ".join(errors[:4]), "warning")
         flash(f"Importação concluída: {imported} entrada(s) importada(s), {skipped} linha(s) ignorada(s).", "success" if imported else "warning")
@@ -9488,6 +10702,11 @@ def admin_material_entries_report():
     denied = require_action_permission("stock_reports", "Seu tipo de acesso não pode gerar relatórios de entrada.", "admin_material_entries")
     if denied:
         return denied
+    current = require_current_user()
+    stock_regional = normalize_user_regional(current.regional)
+    if not stock_regional:
+        flash("Seu usuário ainda não possui regional cadastrada.", "warning")
+        return redirect_to_return("admin_material_entries")
     start_raw = (request.args.get("start_date") or "").strip()
     end_raw = (request.args.get("end_date") or "").strip()
     if not start_raw or not end_raw:
@@ -9503,8 +10722,8 @@ def admin_material_entries_report():
     if end_base < start_local:
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect_to_return("admin_material_entries")
-    entries = list_material_entries(start_dt, end_dt)
-    buffer = build_material_entries_report_pdf(entries, start_local, end_base, require_current_user())
+    entries = list_material_entries(start_dt, end_dt, regional=stock_regional, stock_owner_user_id=current.id)
+    buffer = build_material_entries_report_pdf(entries, start_local, end_base, current)
     filename = f"relatorio_entrada_materiais_{start_local.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(storage_key("reports", "material_entries", filename), buffer, "application/pdf", {"type": "material_entries_report", "start_date": start_raw, "end_date": end_raw})
     buffer.seek(0)
@@ -9805,56 +11024,129 @@ def admin_asset_new_with_stock():
 app.view_functions["admin_asset_new"] = admin_required(page_access_required("admin_stock")(admin_asset_new_with_stock))
 
 
+@app.get("/admin/stock/confirmed-orders")
+@admin_required
+@page_access_required("admin_stock")
+def admin_stock_confirmed_orders():
+    current = require_current_user()
+    filters = confirmed_order_filters_from_args()
+    request_filters = {
+        "type": filters.get("requester_type", ""),
+        "regional": filters.get("regional", ""),
+        "product_id": filters.get("product_id"),
+        "sort": "newest",
+        "start_date": filters.get("start_date", ""),
+        "end_date": filters.get("end_date", ""),
+    }
+    selected_status = filters.get("order_status", "")
+    status_query = selected_status or "awaiting_shipment,shipped"
+    extra_args = {key: value for key, value in filters.items() if value not in (None, "")}
+    requests_list, request_pagination = list_supply_requests_page(
+        status=status_query,
+        endpoint="admin_stock_confirmed_orders",
+        filters=request_filters,
+        extra_args=extra_args,
+        viewer=current,
+        apply_assignment_visibility=True,
+    )
+    totals = list_confirmed_order_totals(filters, current, limit=1000)
+    return render_template(
+        "admin/confirmed_orders.html",
+        confirmed_filters=filters,
+        confirmed_totals=totals,
+        confirmed_quantity=sum(row["total_quantity"] for row in totals),
+        confirmed_product_count=len(totals),
+        requests_list=requests_list,
+        request_pagination=request_pagination,
+        product_options=list_products_for_request_filters(),
+        regional_options=REQUEST_REGIONAL_OPTIONS,
+        type_options=REQUEST_TYPE_OPTIONS,
+    )
+
+
 @app.route("/admin/stock")
 @admin_required
 @page_access_required("admin_stock")
 def admin_stock():
+    current = require_current_user()
+    selected_product_id = parse_required_positive_int(request.args.get("product_id"))
+    selected_requester_type = str(request.args.get("requester_type", "") or "").strip().lower()
+    if selected_requester_type not in {"base", "franchise"}:
+        selected_requester_type = ""
+    if current.is_dev:
+        all_owner_options = regional_assignment_user_options()
+        stock_assignment_map = list_regional_user_assignments(REGIONAL_ASSIGNMENT_STOCK)
+        assigned_owner_ids = set().union(*stock_assignment_map.values()) if stock_assignment_map else set()
+        stock_owner_options = [owner for owner in all_owner_options if not assigned_owner_ids or owner.id in assigned_owner_ids]
+    else:
+        stock_owner_options = [current]
+    selected_regional = normalize_user_regional(request.args.get("regional", "")) if current.is_dev else normalize_user_regional(current.regional)
+    selected_owner_id: int | None = None
+    if current.is_dev:
+        raw_owner_id = (request.args.get("owner_id") or "").strip()
+        if raw_owner_id.isdigit():
+            selected_owner_id = int(raw_owner_id)
+    else:
+        selected_owner_id = current.id
+
+    stock_params: list[Any] = []
+    stock_conditions = ["rsb.product_id = p.id"]
+    if selected_regional:
+        stock_conditions.append("rsb.regional = ?")
+        stock_params.append(selected_regional)
+    if selected_owner_id is not None:
+        stock_conditions.append("rsb.stock_owner_user_id = ?")
+        stock_params.append(selected_owner_id)
+    stock_expr = "COALESCE((SELECT SUM(rsb.quantity) FROM regional_stock_balances rsb WHERE " + " AND ".join(stock_conditions) + "), 0)"
+
+    movement_clauses = ["COALESCE(p.stock_tag, ?) = ?"]
+    movement_params: list[Any] = [SUPPLY_STOCK_TAG, SUPPLY_STOCK_TAG]
+    if selected_regional:
+        movement_clauses.append("sm.regional = ?")
+        movement_params.append(selected_regional)
+    if selected_owner_id is not None:
+        movement_clauses.append("sm.stock_owner_user_id = ?")
+        movement_params.append(selected_owner_id)
+
     with db_connect() as conn:
         product_rows = conn.execute(
-            """
-            SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
-                   unit_measure, is_kit, kit_quantity, description, stock_quantity, price_cents,
-                   limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
-                   active, visible_base, visible_franchise, internal, catalog_archived, created_at, updated_at
-             FROM products
-             WHERE catalog_archived = 0 AND stock_tag = ?
-             ORDER BY active DESC, category ASC, name ASC
+            f"""
+            SELECT p.id, p.name, p.category, p.category_emoji, p.image_name, p.image_key, p.image_content_type,
+                   p.unit_measure, p.is_kit, p.kit_quantity, p.description, {stock_expr} AS stock_quantity, p.price_cents,
+                   p.limit_base, p.limit_franchise, p.limit_block_days, p.min_order_quantity, p.min_stock, p.max_stock,
+                   p.active, p.visible_base, p.visible_franchise, p.internal, p.catalog_archived, p.stock_tag, p.created_at, p.updated_at
+              FROM products p
+             WHERE p.catalog_archived = 0 AND p.stock_tag = ?
+               AND (? IS NULL OR p.id = ?)
+             ORDER BY p.active DESC, p.category ASC, p.name ASC
              LIMIT ?
             """,
-            (SUPPLY_STOCK_TAG, bounded_int(os.getenv("D1_STOCK_PRODUCT_LIMIT"), 250 if low_row_read_mode() else 1000, 50, 1000),),
+            [*stock_params, SUPPLY_STOCK_TAG, selected_product_id, selected_product_id, bounded_int(os.getenv("D1_STOCK_PRODUCT_LIMIT"), 250 if low_row_read_mode() else 1000, 50, 1000)],
         ).fetchall()
         movement_rows = conn.execute(
-            """
+            f"""
             SELECT sm.*,
                    p.name AS product_name,
                    p.category AS product_category,
                    COALESCE(u.responsible_name, reviewer.responsible_name) AS created_by_name,
-                   COALESCE(u.username, reviewer.username) AS created_by_username
+                   COALESCE(u.username, reviewer.username) AS created_by_username,
+                   owner.responsible_name AS stock_owner_name,
+                   owner.username AS stock_owner_username
               FROM stock_movements sm
               LEFT JOIN products p ON p.id = sm.product_id
               LEFT JOIN users u ON u.id = sm.created_by_id
-             LEFT JOIN supply_requests sr ON sr.id = sm.request_id
-             LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
-             WHERE COALESCE(p.stock_tag, ?) = ?
+              LEFT JOIN users owner ON owner.id = sm.stock_owner_user_id
+              LEFT JOIN supply_requests sr ON sr.id = sm.request_id
+              LEFT JOIN users reviewer ON reviewer.id = sr.reviewed_by_id
+             WHERE {" AND ".join(movement_clauses)}
              ORDER BY sm.created_at DESC, sm.id DESC
              LIMIT ?
             """,
-            (SUPPLY_STOCK_TAG, SUPPLY_STOCK_TAG, DEFAULT_TABLE_PAGE_SIZE),
+            [*movement_params, DEFAULT_TABLE_PAGE_SIZE],
         ).fetchall()
-        if exact_counts_enabled():
-            totals = {
-                "products": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
-                "stock_total": conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
-                "critical": conn.execute("SELECT COUNT(*) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ? AND min_stock IS NOT NULL AND stock_quantity <= min_stock", (SUPPLY_STOCK_TAG,)).fetchone()["total"],
-                "movements": conn.execute("SELECT COUNT(*) AS total FROM stock_movements sm LEFT JOIN products p ON p.id = sm.product_id WHERE COALESCE(p.stock_tag, ?) = ?", (SUPPLY_STOCK_TAG, SUPPLY_STOCK_TAG)).fetchone()["total"],
-            }
-        else:
-            totals = {
-                "products": len(product_rows),
-                "stock_total": sum(int(row["stock_quantity"] or 0) for row in product_rows),
-                "critical": sum(1 for row in product_rows if row["min_stock"] is not None and int(row["stock_quantity"] or 0) <= int(row["min_stock"] or 0)),
-                "movements": len(movement_rows),
-            }
+        all_regional_total_row = conn.execute("SELECT COALESCE(SUM(quantity), 0) AS total FROM regional_stock_balances").fetchone()
+        global_total_row = conn.execute("SELECT COALESCE(SUM(stock_quantity), 0) AS total FROM products WHERE catalog_archived = 0 AND stock_tag = ?", (SUPPLY_STOCK_TAG,)).fetchone()
+        legacy_unassigned = max(0, int(global_total_row["total"] or 0) - int(all_regional_total_row["total"] or 0))
 
     formatted_movement_rows: list[dict[str, Any]] = []
     for row in movement_rows:
@@ -9864,6 +11156,12 @@ def admin_stock():
     movement_rows = formatted_movement_rows
 
     products = [product for row in product_rows if (product := row_to_product(row)) is not None]
+    totals = {
+        "products": len(products),
+        "stock_total": sum(int(product.stock_quantity or 0) for product in products),
+        "critical": sum(1 for product in products if product.min_stock is not None and int(product.stock_quantity or 0) <= int(product.min_stock or 0)),
+        "movements": len(movement_rows),
+    }
 
     stock_rows: list[dict[str, Any]] = []
     for product in products:
@@ -9883,10 +11181,7 @@ def admin_stock():
 
     totals["healthy"] = sum(1 for row in stock_rows if row["status"] == "good")
     totals["normal"] = sum(1 for row in stock_rows if row["status"] == "normal")
-
-    risk_rows = [row for row in stock_rows if row["status"] == "critical"]
-    if not risk_rows:
-        risk_rows = stock_rows[:6]
+    risk_rows = [row for row in stock_rows if row["status"] == "critical"] or stock_rows[:6]
 
     chart_products = []
     category_map: dict[str, dict[str, Any]] = {}
@@ -9894,25 +11189,10 @@ def admin_stock():
         product = row["product"]
         category = product.category or "Sem categoria"
         chart_products.append({
-            "id": product.id,
-            "name": product.name,
-            "category": category,
-            "stock": product.stock_quantity,
-            "min": product.min_stock or 0,
-            "max": product.max_stock or 0,
-            "status": row["status"],
-            "label": row["label"],
+            "id": product.id, "name": product.name, "category": category, "stock": product.stock_quantity,
+            "min": product.min_stock or 0, "max": product.max_stock or 0, "status": row["status"], "label": row["label"],
         })
-        bucket = category_map.setdefault(category, {
-            "category": category,
-            "stock": 0,
-            "min": 0,
-            "max": 0,
-            "products": 0,
-            "critical": 0,
-            "good": 0,
-            "normal": 0,
-        })
+        bucket = category_map.setdefault(category, {"category": category, "stock": 0, "min": 0, "max": 0, "products": 0, "critical": 0, "good": 0, "normal": 0})
         bucket["stock"] += product.stock_quantity
         bucket["min"] += product.min_stock or 0
         bucket["max"] += product.max_stock or 0
@@ -9920,19 +11200,28 @@ def admin_stock():
         bucket[row["status"]] += 1
 
     chart_categories = sorted(category_map.values(), key=lambda item: item["category"].lower())
-
+    selected_owner = get_user(selected_owner_id) if selected_owner_id else None
+    confirmed_filters = {
+        "requester_type": selected_requester_type,
+        "regional": selected_regional,
+        "product_id": selected_product_id,
+        "order_status": "",
+        "start_date": "",
+        "end_date": "",
+    }
+    confirmed_order_totals = list_confirmed_order_totals(confirmed_filters, current, limit=8)
+    stock_product_filter_options = list_products_for_request_filters()
     return render_template(
         "admin/stock.html",
-        products=products,
-        stock_rows=stock_rows,
-        risk_rows=risk_rows[:8],
-        movement_rows=movement_rows,
-        totals=totals,
-        chart_products=chart_products,
-        chart_categories=chart_categories,
-        movement_type_label=movement_type_label,
-        base_unit_options=BASE_UNIT_OPTIONS,
-        franchise_unit_options=FRANCHISE_UNIT_OPTIONS,
+        products=products, stock_rows=stock_rows, risk_rows=risk_rows[:8], movement_rows=movement_rows, totals=totals,
+        chart_products=chart_products, chart_categories=chart_categories, movement_type_label=movement_type_label,
+        base_unit_options=BASE_UNIT_OPTIONS, franchise_unit_options=FRANCHISE_UNIT_OPTIONS,
+        stock_regional_options=USER_REGIONAL_OPTIONS, selected_stock_regional=selected_regional,
+        stock_owner_options=stock_owner_options, selected_stock_owner_id=selected_owner_id, selected_stock_owner=selected_owner,
+        legacy_unassigned_stock=legacy_unassigned if current.is_dev else 0,
+        selected_product_id=selected_product_id, selected_requester_type=selected_requester_type,
+        stock_product_filter_options=stock_product_filter_options,
+        confirmed_order_totals=confirmed_order_totals,
     )
 
 
@@ -9968,8 +11257,12 @@ def admin_stock_requests_report():
         flash("A data final não pode ser menor que a data inicial.", "warning")
         return redirect(url_for("admin_stock"))
 
-    requests_list = list_supply_requests_between(start_dt, end_dt, selected_unit)
-    buffer = build_supply_requests_period_report_pdf(requests_list, start_local, end_base, require_current_user(), selected_unit, selected_kind)
+    current = require_current_user()
+    requests_list = [
+        item for item in list_supply_requests_between(start_dt, end_dt, selected_unit)
+        if current.is_dev or can_view_supply_request_by_assignment(item, current)
+    ]
+    buffer = build_supply_requests_period_report_pdf(requests_list, start_local, end_base, current, selected_unit, selected_kind)
     unit_slug = "todas_unidades" if selected_kind == "all" else (re.sub(r"[^A-Za-z0-9]+", "_", selected_unit).strip("_").lower() or "unidade")
     filename = f"relatorio_solicitacoes_insumos_{unit_slug}_{start_local.strftime('%Y%m%d')}_{end_base.strftime('%Y%m%d')}.pdf"
     store_generated_file(
@@ -10040,7 +11333,23 @@ def admin_request_detail(request_id: int):
         abort(403)
     default_back_endpoint = "admin_requests" if user_has_page_access(current, "admin_requests") else "admin_requests_attended"
     back_url = return_target(default_back_endpoint)
-    return render_template("admin/request_detail.html", supply_request=supply_request, back_url=back_url)
+    regional = supply_request_service_regional(supply_request, current)
+    request_origin_regional = supply_request_regional(supply_request)
+    personal_stock_by_product: dict[int, int] = {}
+    if regional:
+        with db_connect() as conn:
+            personal_stock_by_product = {
+                item.product_id: get_regional_stock_quantity(conn, item.product_id, current.id, regional)
+                for item in supply_request.items
+            }
+    return render_template(
+        "admin/request_detail.html",
+        supply_request=supply_request,
+        back_url=back_url,
+        request_regional=request_origin_regional,
+        service_regional=regional,
+        personal_stock_by_product=personal_stock_by_product,
+    )
 
 
 
@@ -10055,8 +11364,12 @@ def admin_request_update_items(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
-    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+    current = require_current_user()
+    if not can_view_supply_request_by_assignment(supply_request, current):
         abort(403)
+    if not can_approve_supply_request_by_assignment(supply_request, current):
+        flash("Seu usuário não foi designado para tratar solicitações desta regional.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ter quantidades editadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
@@ -10089,52 +11402,69 @@ def admin_request_approve(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
-    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+    current = require_current_user()
+    if not can_view_supply_request_by_assignment(supply_request, current):
         abort(403)
+    if not can_approve_supply_request_by_assignment(supply_request, current):
+        flash("Seu usuário não foi designado para aprovar solicitações desta regional.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser aprovadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
 
+    regional = supply_request_service_regional(supply_request, current)
+    if not regional:
+        flash("A solicitação não possui regional definida. Cadastre a regional do solicitante antes de aprovar.", "danger")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
+
     insufficient: list[str] = []
-    for item in supply_request.items:
-        product = get_product(item.product_id)
-        if product is None or not product.active:
-            insufficient.append(item.product_name_snapshot)
-        elif item.quantity > product.stock_quantity:
-            insufficient.append(f"{product.name} (solicitado {item.quantity}, estoque {product.stock_quantity})")
+    with db_connect() as check_conn:
+        for item in supply_request.items:
+            product_row = check_conn.execute("SELECT * FROM products WHERE id = ?", (item.product_id,)).fetchone()
+            product = row_to_product(product_row)
+            owner_stock = get_regional_stock_quantity(check_conn, item.product_id, current.id, regional)
+            if product is None or not product.active:
+                insufficient.append(item.product_name_snapshot)
+            elif item.quantity > owner_stock:
+                insufficient.append(f"{product.name} (solicitado {item.quantity}, seu estoque {owner_stock})")
 
     if insufficient:
-        flash("Estoque insuficiente para aprovar: " + "; ".join(insufficient), "danger")
+        flash("Estoque individual insuficiente para aprovar: " + "; ".join(insufficient), "danger")
         return redirect_to_return("admin_request_detail", request_id=request_id)
 
     admin_note = request.form.get("admin_note", "").strip()
-    current = require_current_user()
     with db_connect() as conn:
         for item in supply_request.items:
-            product = get_product(item.product_id)
-            stock_before = product.stock_quantity if product else 0
-            stock_after = stock_before - item.quantity
-            conn.execute("UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?", (stock_after, now_iso(), item.product_id))
+            product_row = conn.execute("SELECT * FROM products WHERE id = ?", (item.product_id,)).fetchone()
+            product = row_to_product(product_row)
+            if product is None:
+                raise ValueError(f"Produto #{item.product_id} não encontrado.")
+            owner_before, owner_after = apply_regional_stock_delta(conn, item.product_id, current.id, regional, -item.quantity)
+            global_before = int(product.stock_quantity or 0)
+            global_after = max(0, global_before - item.quantity)
+            conn.execute("UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?", (global_after, now_iso(), item.product_id))
             record_stock_movement(
                 conn,
                 product_id=item.product_id,
                 request_id=request_id,
                 created_by_id=current.id,
+                stock_owner_user_id=current.id,
+                regional=regional,
                 movement_type="request_approved",
                 quantity_delta=-item.quantity,
-                stock_before=stock_before,
-                stock_after=stock_after,
-                note=f"Solicitação #{request_id} aprovada.",
+                stock_before=owner_before,
+                stock_after=owner_after,
+                note=f"Solicitação #{request_id} aprovada para {supply_request.user.organization_name if supply_request.user else 'unidade'}.",
             )
         conn.execute(
             """
             UPDATE supply_requests
-            SET status = 'approved', reviewed_at = ?, reviewed_by_id = ?, admin_note = ?
+            SET status = 'awaiting_shipment', reviewed_at = ?, reviewed_by_id = ?, admin_note = ?
             WHERE id = ?
             """,
             (now_iso(), current.id, admin_note, request_id),
         )
-        record_request_action(conn, request_id, "approved", current.id, admin_note or "Solicitação aprovada e estoque descontado.")
+        record_request_action(conn, request_id, "approved", current.id, admin_note or f"Solicitação aprovada, aguardando envio e descontada do estoque individual {regional}.")
         conn.commit()
 
     try:
@@ -10144,7 +11474,58 @@ def admin_request_approve(request_id: int):
     except Exception:
         app.logger.exception("Falha ao preparar notificacao Feishu da aprovacao da solicitacao")
 
-    flash("Solicitação aprovada e estoque descontado.", "success")
+    flash(f"Solicitação aprovada. Status alterado para Aguardando envio e estoque {regional} atualizado.", "success")
+    return redirect_to_return("admin_request_detail", request_id=request_id)
+
+
+@app.post("/admin/requests/<int:request_id>/confirm-shipment")
+@admin_required
+@page_access_any_required(["admin_requests", "admin_requests_attended"])
+def admin_request_confirm_shipment(request_id: int):
+    denied = require_action_permission("requests_confirm_shipping", "Seu tipo de acesso não pode confirmar o envio de solicitações.", "admin_requests")
+    if denied:
+        return denied
+    supply_request = get_supply_request(request_id)
+    if supply_request is None:
+        abort(404)
+    current = require_current_user()
+    if not can_view_supply_request_by_assignment(supply_request, current):
+        abort(403)
+    if not can_approve_supply_request_by_assignment(supply_request, current):
+        flash("Seu usuário não foi designado para tratar esta solicitação.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
+    if supply_request.status not in {"approved", "awaiting_shipment"}:
+        flash("Apenas solicitações aguardando envio podem ser confirmadas.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
+
+    shipping_note = (request.form.get("shipping_note") or "").strip()
+    shipped_at = datetime.utcnow()
+    with db_connect() as conn:
+        conn.execute(
+            """
+            UPDATE supply_requests
+               SET status = 'shipped', shipped_at = ?, shipped_by_id = ?
+             WHERE id = ?
+            """,
+            (now_iso(), current.id, request_id),
+        )
+        record_request_action(conn, request_id, "shipped", current.id, shipping_note or "Envio dos insumos confirmado.")
+        requester = supply_request.user or get_user(supply_request.user_id)
+        if requester is not None and requester.role == "base":
+            cycle_until = add_calendar_months(shipped_at, DEFAULT_BASE_REQUEST_CYCLE_MONTHS)
+            upsert_base_request_cycle(
+                conn, requester.id, request_id, cycle_until,
+                "Ciclo de 3 meses contado a partir da confirmação do envio.", current.id,
+            )
+        conn.commit()
+
+    try:
+        updated_request = get_supply_request(request_id)
+        if updated_request is not None:
+            notify_feishu_supply_request_action(updated_request, "shipped", current, public_url_for("admin_request_detail", request_id=request_id), shipping_note)
+    except Exception:
+        app.logger.exception("Falha ao preparar notificacao Feishu da confirmacao de envio")
+    flash("Envio confirmado e responsável registrado.", "success")
     return redirect_to_return("admin_request_detail", request_id=request_id)
 
 
@@ -10158,14 +11539,17 @@ def admin_request_reject(request_id: int):
     supply_request = get_supply_request(request_id)
     if supply_request is None:
         abort(404)
-    if not can_view_supply_request_by_assignment(supply_request, require_current_user()):
+    current = require_current_user()
+    if not can_view_supply_request_by_assignment(supply_request, current):
         abort(403)
+    if not can_approve_supply_request_by_assignment(supply_request, current):
+        flash("Seu usuário não foi designado para aprovar ou recusar solicitações desta regional.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
     if supply_request.status != "pending":
         flash("Apenas solicitações pendentes podem ser recusadas.", "warning")
         return redirect_to_return("admin_request_detail", request_id=request_id)
 
     admin_note = request.form.get("admin_note", "").strip()
-    current = require_current_user()
     with db_connect() as conn:
         conn.execute(
             """

@@ -18,6 +18,73 @@
   </div>
 </section>
 
+<section class="card stock-scope-card">
+  <div class="stock-scope-copy">
+    <span class="eyebrow">Estoque separado</span>
+    {% if current_user.is_dev %}
+      <h2>Visualizar estoque por regional e responsável</h2>
+      <p>Use os filtros para conferir o saldo individual de cada pessoa designada. Sem responsável selecionado, o painel soma os estoques do filtro informado.</p>
+    {% else %}
+      <h2>Regional {{ user_regional_label(selected_stock_regional) }}</h2>
+      <p>Este painel mostra somente o estoque vinculado a <strong>{{ current_user.responsible_name }}</strong>. Aprovações feitas por você baixam exclusivamente deste saldo.</p>
+    {% endif %}
+  </div>
+  {% if current_user.is_dev %}
+  <form class="stock-scope-filter" method="get" action="{{ url_for('admin_stock') }}">
+    <label>
+      Regional
+      <select name="regional">
+        <option value="">Todas as regionais</option>
+        {% for option in stock_regional_options|default([]) %}
+          <option value="{{ option.value }}" {% if selected_stock_regional == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Responsável pelo estoque
+      <select name="owner_id">
+        <option value="">Todos os responsáveis</option>
+        {% for owner in stock_owner_options|default([]) %}
+          <option value="{{ owner.id }}" data-regional="{{ owner.regional }}" {% if selected_stock_owner_id == owner.id %}selected{% endif %}>{{ owner.responsible_name }}{% if owner.regional %} • {{ user_regional_label(owner.regional) }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Produto
+      <select name="product_id">
+        <option value="">Todos os produtos</option>
+        {% for product in stock_product_filter_options|default([]) %}
+          <option value="{{ product.id }}" {% if selected_product_id == product.id %}selected{% endif %}>{{ product.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Pedidos de
+      <select name="requester_type">
+        <option value="">Bases e franquias</option>
+        <option value="base" {% if selected_requester_type == 'base' %}selected{% endif %}>Bases</option>
+        <option value="franchise" {% if selected_requester_type == 'franchise' %}selected{% endif %}>Franquias</option>
+      </select>
+    </label>
+    <div class="field-actions">
+      <button class="btn primary" type="submit">Aplicar filtros</button>
+      <a class="btn ghost" href="{{ url_for('admin_stock') }}">Limpar</a>
+    </div>
+  </form>
+  {% else %}
+  <div class="stock-scope-badges">
+    <span>{{ user_regional_label(selected_stock_regional) }}</span>
+    <span>{{ current_user.responsible_name }}</span>
+  </div>
+  {% endif %}
+</section>
+
+{% if current_user.is_dev and legacy_unassigned_stock > 0 %}
+<div class="flash warning stock-legacy-warning">
+  Existem {{ legacy_unassigned_stock }} unidade(s) do estoque antigo ainda sem regional e responsável. Novas entradas já serão separadas corretamente.
+</div>
+{% endif %}
+
 {% if can_do('stock_reports') %}
 <section class="card monthly-report-card">
   <div class="section-head stock-panel-head">
@@ -98,32 +165,25 @@
     </div>
   </div>
 
-  <aside class="card stock-panel stock-risk-panel">
+  <aside class="card stock-panel stock-confirmed-panel">
     <div class="section-head stock-panel-head">
       <div>
-        <h2>Prioridade de reposição</h2>
-        <p class="hint">Produtos que exigem acompanhamento mais próximo.</p>
+        <span class="eyebrow">Reposição e separação</span>
+        <h2>Pedidos Confirmados</h2>
+        <p class="hint">Quantidade dos pedidos em Aguardando envio ou já enviados, filtrada por tipo, regional e produto.</p>
       </div>
+      <a class="btn tiny ghost" href="{{ url_for('admin_stock_confirmed_orders', requester_type=selected_requester_type, regional=selected_stock_regional, product_id=selected_product_id or '') }}" target="_blank" rel="noopener">Abrir em nova janela</a>
     </div>
-    <div class="stock-priority-list">
-      {% for row in risk_rows %}
-      <article class="stock-priority-item {{ row.status }}" data-stock-product="{{ row.product.name|e }}" data-stock-category="{{ (row.product.category or 'Sem categoria')|e }}">
-        <div class="stock-priority-main">
-          <div class="stock-priority-copy">
-            <strong>{{ row.product.name }}</strong>
-            <small>{{ row.label }} • Min {{ row.min if row.min is not none else '-' }} / Máx {{ row.max if row.max is not none else '-' }}</small>
-          </div>
-          <div class="stock-priority-value">
-            <b>{{ row.product.stock_quantity }}</b>
-            <span>{{ row.product.unit_measure or 'un' }}</span>
-          </div>
-        </div>
+    <div class="stock-confirmed-list">
+      {% for row in confirmed_order_totals %}
+      <article class="stock-confirmed-item">
+        <div><strong>{{ row.product_name }}</strong><small>{{ row.request_count }} pedido(s) • {{ row.base_request_count }} base(s) • {{ row.franchise_request_count }} franquia(s)</small></div>
+        <span><b>{{ row.total_quantity }}</b> {{ row.unit_measure }}</span>
       </article>
       {% else %}
-      <p class="muted">Nenhum produto cadastrado.</p>
+      <p class="muted">Nenhum pedido confirmado para os filtros selecionados.</p>
       {% endfor %}
     </div>
-    <p id="stockPriorityEmpty" class="stock-filter-empty hidden">Nenhum item encontrado para este produto.</p>
   </aside>
 </section>
 
@@ -170,13 +230,22 @@
   <table>
     <thead>
       <tr>
-        <th>Data</th><th>Produto</th><th>Tipo</th><th>Mov.</th><th>Antes</th><th>Depois</th><th>Solicitação</th><th>Movimentado por</th><th>Observação</th>
+        <th>Data</th><th>Regional</th><th>Estoque de</th><th>Produto</th><th>Tipo</th><th>Mov.</th><th>Antes</th><th>Depois</th><th>Solicitação</th><th>Movimentado por</th><th>Observação</th>
       </tr>
     </thead>
     <tbody>
       {% for mov in movement_rows %}
       <tr data-stock-product="{{ (mov.product_name or '')|e }}" data-stock-category="{{ (mov.product_category or 'Sem categoria')|e }}">
         <td data-label="Data">{{ mov.created_at }}</td>
+        <td data-label="Regional"><span class="regional-pill">{{ user_regional_label(mov.regional) }}</span></td>
+        <td data-label="Estoque de">
+          {% if mov.stock_owner_name %}
+            <strong>{{ mov.stock_owner_name }}</strong>
+            {% if mov.stock_owner_username %}<br><small>@{{ mov.stock_owner_username }}</small>{% endif %}
+          {% else %}
+            <span class="muted">Não vinculado</span>
+          {% endif %}
+        </td>
         <td data-label="Produto"><strong>{{ mov.product_name or '-' }}</strong></td>
         <td data-label="Tipo">{{ movement_type_label(mov.movement_type) }}</td>
         <td data-label="Mov."><span class="movement-delta {{ 'positive' if mov.quantity_delta > 0 else 'negative' }}">{{ '+' if mov.quantity_delta > 0 else '' }}{{ mov.quantity_delta }}</span></td>
@@ -204,7 +273,7 @@
         <td data-label="Observacao">{{ mov.note or '-' }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="muted center">Nenhuma movimentação registrada ainda.</td></tr>
+      <tr><td colspan="11" class="muted center">Nenhuma movimentação registrada ainda.</td></tr>
       {% endfor %}
     </tbody>
   </table>

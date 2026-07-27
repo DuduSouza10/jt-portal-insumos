@@ -34,6 +34,22 @@
       <input name="dev_password" id="devPasswordInput" type="hidden" value="">
       <input name="new_dev_password" id="newDevPasswordInput" type="hidden" value="">
     </label>
+    <label>
+      Regional
+      <select name="regional" {% if not current_is_dev() %}disabled{% endif %}>
+        <option value="" {% if not user or not user.regional %}selected{% endif %}>Sem regional</option>
+        {% for option in user_regional_options %}
+          <option value="{{ option.value }}" {% if user and user.regional == option.value %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+      {% if not current_is_dev() %}<input type="hidden" name="regional" value="{{ user.regional if user else '' }}">{% endif %}
+    </label>
+    {% if current_is_dev() %}
+    <label id="crossRegionalWrap" class="checkbox-line user-cross-regional-option">
+      <input type="checkbox" name="allow_cross_regional_service" {% if user and user.allow_cross_regional_service %}checked{% endif %}>
+      <span>Permitir que esta base seja atendida por administradores de MG e SPN</span>
+    </label>
+    {% endif %}
     <label id="baseNameWrap">
       {{ 'Setor' if current_is_dev() else 'Nome da base (unidade J&T)' }}
       {% if current_is_dev() %}
@@ -316,6 +332,7 @@
   const openButton = document.querySelector('[data-open-permission-modal]');
   const closeButtons = document.querySelectorAll('[data-close-permission-modal]');
   const baseWrap = document.getElementById('baseNameWrap');
+  const crossRegionalWrap = document.getElementById('crossRegionalWrap');
   const baseSelect = document.getElementById('organizationSelect');
   const franchiseNameWrap = document.getElementById('franchiseNameWrap');
   const franchiseNameInput = document.getElementById('franchiseNameInput');
@@ -397,6 +414,7 @@
     const showBaseField = isBase || showSetorField;
 
     baseWrap.classList.toggle('hidden', !showBaseField);
+    if (crossRegionalWrap) crossRegionalWrap.classList.toggle('hidden', !isBase);
     franchiseNameWrap.classList.toggle('hidden', !isFranchise);
     franchiseNumberWrap.classList.toggle('hidden', !isFranchise);
     cnpjWrap.classList.toggle('hidden', !isFranchise);

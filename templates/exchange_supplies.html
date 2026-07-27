@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Troca de Insumos • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Troca de Insumos - ciclo de 3 meses{% endblock %}
+{% block page_subtitle %}Acompanhe o prazo da sua base e veja quando uma nova solicitação poderá ser enviada.{% endblock %}
+{% block content %}
+<section class="exchange-cycle-grid">
+  <article class="card exchange-cycle-card {{ 'active' if cycle and cycle.is_active else 'available' }}">
+    <div class="exchange-cycle-head">
+      <div>
+        <span class="eyebrow">Situação da base</span>
+        <h2>{{ current_user.organization_name }}</h2>
+        <p>{{ current_user.responsible_name }}</p>
+      </div>
+      <span class="exchange-cycle-status {{ 'active' if cycle and cycle.is_active else 'available' }}">
+        {{ 'Ciclo ativo' if cycle and cycle.is_active else 'Nova troca disponível' }}
+      </span>
+    </div>
+    {% if cycle and cycle.is_active %}
+      <div class="exchange-cycle-date">
+        <span>Próxima solicitação disponível em</span>
+        <strong>{{ cycle.blocked_until_label }}</strong>
+      </div>
+      <p class="exchange-cycle-note">A base permanece bloqueada por três meses após o pedido. Se o pedido for recusado, o ciclo é liberado. Após a confirmação do envio, o prazo é contado novamente a partir da data do envio.</p>
+      <a class="btn ghost" href="{{ url_for('my_requests') }}">Acompanhar solicitações</a>
+    {% else %}
+      <div class="exchange-cycle-date">
+        <span>Status</span>
+        <strong>Você já pode realizar uma nova solicitação</strong>
+      </div>
+      <p class="exchange-cycle-note">Todos os insumos liberados para bases aparecem no catálogo, inclusive quando o estoque ainda estiver zerado.</p>
+      <a class="btn primary" href="{{ url_for('home') }}">Abrir catálogo de insumos</a>
+    {% endif %}
+  </article>
+
+  <article class="card exchange-rules-card">
+    <span class="eyebrow">Como funciona</span>
+    <h2>Fluxo da troca</h2>
+    <ol class="exchange-rule-list">
+      <li><b>Solicitação enviada:</b> o pedido fica pendente para análise.</li>
+      <li><b>Aguardando envio:</b> o administrador aprovou e reservou o estoque.</li>
+      <li><b>Enviado:</b> o responsável confirmou a saída e o novo ciclo de três meses foi iniciado.</li>
+      <li><b>Recusado:</b> não gera bloqueio; a base poderá solicitar novamente.</li>
+    </ol>
+  </article>
+</section>
+
+<section class="card table-card exchange-history-card">
+  <div class="section-head">
+    <div>
+      <h2>Últimas solicitações da base</h2>
+      <p class="hint">Histórico recente relacionado ao ciclo de troca.</p>
+    </div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>Status</th><th>Itens</th><th>Enviado em</th><th>Ação executada</th><th>Ação</th></tr></thead>
+    <tbody>
+      {% for req in latest_requests %}
+      <tr>
+        <td data-label="#">#{{ req.id }}</td>
+        <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
+        <td data-label="Itens">{{ req.items|length }}</td>
+        <td data-label="Enviado em">{{ format_sao_paulo_datetime(req.created_at) }}</td>
+        <td data-label="Ação executada">{{ request_action_summary(req) }}</td>
+        <td data-label="Ação"><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">PDF</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted center">Nenhuma solicitação registrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

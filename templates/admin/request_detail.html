@@ -3,8 +3,10 @@
 {% block page_title %}Solicitação #{{ supply_request.id }}{% endblock %}
 {% block page_subtitle %}{{ supply_request.user.organization_name }} • {{ supply_request.user.responsible_name }}{% endblock %}
 {% block content %}
-{% set can_edit_request_items = supply_request.status == 'pending' and can_do('requests_edit_items') %}
-{% set can_review_request = supply_request.status == 'pending' and can_do('requests_approve_reject') %}
+{% set is_regional_responsible = can_approve_regional_request(supply_request) %}
+{% set can_edit_request_items = supply_request.status == 'pending' and can_do('requests_edit_items') and is_regional_responsible %}
+{% set can_review_request = supply_request.status == 'pending' and can_do('requests_approve_reject') and is_regional_responsible %}
+{% set can_confirm_shipping = supply_request.status in ['approved', 'awaiting_shipment'] and can_do('requests_confirm_shipping') and is_regional_responsible %}
 {% set can_delete_request = supply_request.status != 'deleted' and can_do('requests_delete') %}
 <section class="admin-split detail-grid">
   <div class="card table-card">
@@ -16,7 +18,7 @@
     <form method="post" action="{{ url_for('admin_request_update_items', request_id=supply_request.id) }}">
     {% endif %}
     <table>
-      <thead><tr><th>Produto</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Subtotal</th><th>Estoque atual</th></tr></thead>
+      <thead><tr><th>Produto</th><th>Qtd.</th><th>Unidade</th><th>Valor unit.</th><th>Subtotal</th><th>Seu estoque</th></tr></thead>
       <tbody>
         {% for item in supply_request.items %}
         <tr>
@@ -31,7 +33,7 @@
           <td data-label="Unidade">{{ item.product.unit_measure if item.product else '-' }}</td>
           <td data-label="Valor unit.">{{ format_brl(item.price_cents_snapshot) }}</td>
           <td data-label="Subtotal">{{ format_brl(item.price_cents_snapshot * item.quantity) }}</td>
-          <td data-label="Estoque atual">{{ item.product.stock_quantity if item.product else '-' }}</td>
+          <td data-label="Seu estoque">{{ personal_stock_by_product.get(item.product_id, 0) }}{% if item.product %} {{ item.product.unit_measure or 'un' }}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -67,6 +69,14 @@
         <span>Tipo</span>
         <strong>{{ 'Base' if supply_request.user.role == 'base' else ('Franquia' if supply_request.user.role == 'franchise' else 'Admin') }}</strong>
       </div>
+      <div class="request-meta-item">
+        <span>Regional</span>
+        <strong>{{ request_regional_label(request_regional) }}</strong>
+      </div>
+      <div class="request-meta-item">
+        <span>Estoque usado no atendimento</span>
+        <strong>{{ current_user.responsible_name }} • {{ request_regional_label(service_regional) }}</strong>
+      </div>
       {% if supply_request.user.role == 'base' %}
       <div class="request-meta-item">
         <span>Pessoas na base</span>
@@ -78,9 +88,25 @@
         <strong>{{ supply_request.user.username }}</strong>
       </div>
       <div class="request-meta-item">
-        <span>Enviado em</span>
+        <span>Solicitado em</span>
         <strong>{{ format_sao_paulo_datetime(supply_request.created_at) }}</strong>
       </div>
+      {% if supply_request.reviewed_by %}
+      <div class="request-meta-item">
+        <span>Aprovado por</span>
+        <strong>{{ supply_request.reviewed_by.responsible_name }}</strong>
+      </div>
+      {% endif %}
+      {% if supply_request.shipped_by %}
+      <div class="request-meta-item">
+        <span>Envio confirmado por</span>
+        <strong>{{ supply_request.shipped_by.responsible_name }}</strong>
+      </div>
+      <div class="request-meta-item">
+        <span>Envio confirmado em</span>
+        <strong>{{ format_sao_paulo_datetime(supply_request.shipped_at) }}</strong>
+      </div>
+      {% endif %}
       <div class="request-meta-item wide">
         <span>Ação executada</span>
         <strong>{{ request_action_summary(supply_request) }}</strong>
@@ -109,14 +135,28 @@
     </div>
     {% endif %}
 
+    {% if supply_request.status == 'pending' and can_do('requests_approve_reject') and not is_regional_responsible %}
+      <div class="request-note-box warning-box">
+        <span>Aprovação restrita</span>
+        <p>Seu usuário pode visualizar esta solicitação, mas não foi marcado como responsável pela aprovação da regional {{ request_regional_label(request_regional) }}.</p>
+      </div>
+    {% endif %}
+
     {% if can_review_request %}
       <form method="post" action="{{ url_for('admin_request_approve', request_id=supply_request.id) }}" class="form-grid">
         <label>Observação ao aprovar<textarea name="admin_note" rows="3"></textarea></label>
-        <button class="btn success" type="submit">Aprovar e descontar estoque</button>
+        <button class="btn success" type="submit">Aprovar e colocar em Aguardando envio</button>
       </form>
       <form method="post" action="{{ url_for('admin_request_reject', request_id=supply_request.id) }}" class="form-grid">
         <label>Motivo da recusa<textarea name="admin_note" rows="3"></textarea></label>
         <button class="btn danger" type="submit">Recusar solicitação</button>
+      </form>
+    {% endif %}
+    {% if can_confirm_shipping %}
+      <form method="post" action="{{ url_for('admin_request_confirm_shipment', request_id=supply_request.id) }}" class="form-grid request-shipping-confirm-form">
+        <label>Observação do envio<textarea name="shipping_note" rows="3" placeholder="Ex.: enviado na rota, responsável pela entrega..."></textarea></label>
+        <button class="btn success" type="submit">Confirmar envio dos insumos</button>
+        <small class="hint">O nome do usuário que confirmar ficará registrado na solicitação.</small>
       </form>
     {% endif %}
     {% if can_delete_request %}

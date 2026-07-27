@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Troca de Insumos - Bases • Portal de Insumos J&T{% endblock %}
+{% block page_title %}Troca de Insumos - Bases{% endblock %}
+{% block page_subtitle %}Acompanhe e, como Dev, ajuste o ciclo automático de três meses de cada base.{% endblock %}
+{% block content %}
+<section class="card base-cycle-filter-card">
+  <form class="base-cycle-filter" method="get" action="{{ url_for('admin_base_cycles') }}">
+    <label>Pesquisar base
+      <input name="q" value="{{ search_query }}" placeholder="Base, responsável ou login">
+    </label>
+    <label>Regional
+      <select name="regional"><option value="">Todas</option>{% for option in regional_options %}<option value="{{ option.value }}" {{ 'selected' if selected_regional == option.value else '' }}>{{ option.label }}</option>{% endfor %}</select>
+    </label>
+    <label>Situação
+      <select name="status">
+        <option value="">Todas</option>
+        <option value="active" {{ 'selected' if selected_status == 'active' else '' }}>Ciclo ativo</option>
+        <option value="inactive" {{ 'selected' if selected_status == 'inactive' else '' }}>Ciclo inativo</option>
+        <option value="none" {{ 'selected' if selected_status == 'none' else '' }}>Sem ciclo</option>
+      </select>
+    </label>
+    <div class="field-actions"><button class="btn primary" type="submit">Filtrar</button><a class="btn ghost" href="{{ url_for('admin_base_cycles') }}">Limpar</a></div>
+  </form>
+</section>
+
+<section class="base-cycle-list">
+  {% for row in cycle_rows %}
+  <article class="card base-cycle-admin-card {{ row.state }}">
+    <div class="base-cycle-admin-head">
+      <div><span class="eyebrow">{{ user_regional_label(row.user.regional) }}</span><h2>{{ row.user.organization_name }}</h2><p>{{ row.user.responsible_name }} • {{ row.user.username }}</p></div>
+      <span class="exchange-cycle-status {{ row.state }}">{{ 'Ativo' if row.state == 'active' else ('Inativo' if row.state == 'inactive' else 'Sem ciclo') }}</span>
+    </div>
+    {% if row.cycle %}
+    <div class="base-cycle-admin-meta">
+      <div><span>Bloqueado até</span><strong>{{ row.cycle.blocked_until_label }}</strong></div>
+      <div><span>Pedido de origem</span><strong>{{ '#' ~ row.cycle.source_request_id if row.cycle.source_request_id else 'Manual' }}</strong></div>
+      <div><span>Status do pedido</span><strong>{{ status_label(row.cycle.source_request_status) if row.cycle.source_request_status else '-' }}</strong></div>
+    </div>
+    {% else %}
+    <p class="muted">Esta base ainda não iniciou um ciclo de troca.</p>
+    {% endif %}
+    {% if can_manage %}
+    <form class="base-cycle-admin-form" method="post" action="{{ url_for('admin_base_cycle_update', user_id=row.user.id, return_to=request.full_path) }}">
+      <label>Data final do ciclo
+        <input type="date" name="blocked_until" value="{{ row.cycle.blocked_until_date_input if row.cycle else '' }}">
+      </label>
+      <div class="field-actions">
+        <button class="btn primary" name="action" value="save" type="submit">Salvar prazo</button>
+        {% if row.cycle %}<button class="btn ghost" name="action" value="revoke" type="submit">Revogar ciclo</button>{% endif %}
+      </div>
+    </form>
+    {% endif %}
+  </article>
+  {% else %}<div class="card empty-state">Nenhuma base encontrada.</div>{% endfor %}
+</section>
+{% endblock %}
