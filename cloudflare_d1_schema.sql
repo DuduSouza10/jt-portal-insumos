@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'base',
-    status TEXT NOT NULL DEFAULT 'pending',
+    status TEXT NOT NULL DEFAULT 'rejected',
     regional TEXT NOT NULL DEFAULT '',
     allow_cross_regional_service INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
@@ -317,3 +317,8 @@ CREATE INDEX IF NOT EXISTS idx_users_regional ON users(regional);
 CREATE INDEX IF NOT EXISTS idx_supply_requests_regional ON supply_requests(regional, status);
 CREATE INDEX IF NOT EXISTS idx_stock_movements_owner_regional ON stock_movements(regional, stock_owner_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_material_entries_owner_regional ON material_entries(regional, stock_owner_user_id, created_at DESC);
+
+
+-- v217 - usuário possui somente status ativo ou inativo
+UPDATE users SET status = 'approved' WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('approved', 'active', 'ativo', 'ativa');
+UPDATE users SET status = 'rejected' WHERE LOWER(TRIM(COALESCE(status, ''))) <> 'approved';

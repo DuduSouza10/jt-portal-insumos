@@ -15,9 +15,9 @@
 {% if stats_count %}
 <section class="stats-grid dashboard-stats stats-count-{{ stats_count }}">
   {% if show_user_stats %}
-  <a class="stat-card card" href="{{ url_for('admin_users', status='pending') }}">
-    <span>Cadastros pendentes</span>
-    <strong>{{ counts.users_pending }}</strong>
+  <a class="stat-card card" href="{{ url_for('admin_users', status='inactive') }}">
+    <span>Usuários inativos</span>
+    <strong>{{ counts.users_inactive }}</strong>
   </a>
   {% endif %}
   {% if show_request_stats %}

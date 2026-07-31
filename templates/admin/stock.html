@@ -24,22 +24,26 @@
     {% if current_user.is_dev %}
       <h2>Visualizar estoque por regional e responsável</h2>
       <p>Use os filtros para conferir o saldo individual de cada pessoa designada. Sem responsável selecionado, o painel soma os estoques do filtro informado.</p>
+    {% elif can_switch_stock_regional %}
+      <h2>Seu estoque MG/SPN</h2>
+      <p>Escolha a regional para visualizar seu saldo individual. Cada regional continua com estoque e movimentações separados.</p>
     {% else %}
       <h2>Regional {{ user_regional_label(selected_stock_regional) }}</h2>
       <p>Este painel mostra somente o estoque vinculado a <strong>{{ current_user.responsible_name }}</strong>. Aprovações feitas por você baixam exclusivamente deste saldo.</p>
     {% endif %}
   </div>
-  {% if current_user.is_dev %}
+  {% if can_switch_stock_regional %}
   <form class="stock-scope-filter" method="get" action="{{ url_for('admin_stock') }}">
     <label>
       Regional
       <select name="regional">
-        <option value="">Todas as regionais</option>
+        {% if current_user.is_dev %}<option value="">Todas as regionais</option>{% endif %}
         {% for option in stock_regional_options|default([]) %}
           <option value="{{ option.value }}" {% if selected_stock_regional == option.value %}selected{% endif %}>{{ option.label }}</option>
         {% endfor %}
       </select>
     </label>
+    {% if current_user.is_dev %}
     <label>
       Responsável pelo estoque
       <select name="owner_id">
@@ -49,6 +53,7 @@
         {% endfor %}
       </select>
     </label>
+    {% endif %}
     <label>
       Produto
       <select name="product_id">

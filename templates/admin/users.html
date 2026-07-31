@@ -2,15 +2,14 @@
 {% block body_class %}users-admin-page{% endblock %}
 {% block title %}Usuários • Portal de Insumos J&T{% endblock %}
 {% block page_title %}Cadastro de usuários{% endblock %}
-{% block page_subtitle %}Adicione usuários, importe uma planilha, aprove cadastros e edite acessos.{% endblock %}
+{% block page_subtitle %}Adicione usuários, importe uma planilha, ative ou desative acessos e edite permissões.{% endblock %}
 {% block content %}
 <div class="card table-card users-table-card {{ 'has-import-card' if can_do('users_import_export') else 'no-import-card' }}">
   <div class="section-head user-tools-head">
     <div class="tabs user-status-tabs" data-user-status-tabs>
       <button class="tab {{ 'active' if selected_status == '' else '' }}" type="button" data-user-status-tab="">Todos</button>
-      <button class="tab {{ 'active' if selected_status == 'pending' else '' }}" type="button" data-user-status-tab="pending">Pendentes</button>
-      <button class="tab {{ 'active' if selected_status == 'approved' else '' }}" type="button" data-user-status-tab="approved">Aprovados</button>
-      <button class="tab {{ 'active' if selected_status == 'rejected' else '' }}" type="button" data-user-status-tab="rejected">Recusados</button>
+      <button class="tab {{ 'active' if selected_status == 'active' else '' }}" type="button" data-user-status-tab="active">Ativos</button>
+      <button class="tab {{ 'active' if selected_status == 'inactive' else '' }}" type="button" data-user-status-tab="inactive">Inativos</button>
     </div>
     <div class="user-tools">
       {% if current_is_dev() %}<a class="btn ghost" href="{{ url_for('admin_access_types') }}">Criar tipo de acesso</a>{% endif %}
@@ -31,9 +30,8 @@
         Filtrar status
         <select id="userStatusFilter" name="status">
           <option value="" {{ 'selected' if not user_filters.status else '' }}>Todos</option>
-          <option value="pending" {{ 'selected' if user_filters.status == 'pending' else '' }}>Pendentes</option>
-          <option value="approved" {{ 'selected' if user_filters.status == 'approved' else '' }}>Aprovados</option>
-          <option value="rejected" {{ 'selected' if user_filters.status == 'rejected' else '' }}>Recusados</option>
+          <option value="active" {{ 'selected' if user_filters.status == 'active' else '' }}>Ativos</option>
+          <option value="inactive" {{ 'selected' if user_filters.status == 'inactive' else '' }}>Inativos</option>
         </select>
       </label>
       <label>
@@ -86,9 +84,8 @@
     <div class="user-filter-summary">
       <span><strong id="userShownCount">{{ user_counts.shown }}</strong> <em data-no-i18n data-user-count-label="shown">exibidos</em></span>
       <span><strong id="userTotalCount">{{ user_counts.total }}</strong> <em data-no-i18n data-user-count-label="total">total</em></span>
-      <span><strong id="userPendingCount">{{ user_counts.pending }}</strong> <em data-no-i18n data-user-count-label="pending">pendentes</em></span>
-      <span><strong id="userApprovedCount">{{ user_counts.approved }}</strong> <em data-no-i18n data-user-count-label="approved">aprovados</em></span>
-      <span><strong id="userRejectedCount">{{ user_counts.rejected }}</strong> <em data-no-i18n data-user-count-label="rejected">recusados</em></span>
+      <span><strong id="userActiveCount">{{ user_counts.active }}</strong> <em data-no-i18n data-user-count-label="active">ativos</em></span>
+      <span><strong id="userInactiveCount">{{ user_counts.inactive }}</strong> <em data-no-i18n data-user-count-label="inactive">inativos</em></span>
       <span><strong id="userDevCount">{{ user_counts.dev }}</strong> <em data-no-i18n data-user-count-label="dev">devs</em></span>
       <span><strong id="userAdminCount">{{ user_counts.admin }}</strong> <em data-no-i18n data-user-count-label="admin">admins</em></span>
       <span><strong id="userBaseCount">{{ user_counts.base }}</strong> <em data-no-i18n data-user-count-label="base">bases</em></span>
@@ -123,7 +120,7 @@
           <input type="radio" name="import_mode" value="replace">
           <span>
             <strong>Substituir cadastros</strong>
-            <small>Recusa quem não estiver na planilha, exceto você.</small>
+            <small>Desativa quem não estiver na planilha, exceto você.</small>
           </span>
         </label>
       </fieldset>
@@ -147,7 +144,7 @@
   <form id="bulkRegionalForm" class="user-bulk-regional-card" method="post" action="{{ url_for('admin_users_bulk_regional', return_to=request.full_path) }}">
     <div>
       <strong>Definir regional em massa</strong>
-      <span>Marque os usuários da tabela e aplique MG ou SPN de uma só vez.</span>
+      <span>Marque os usuários da tabela e aplique MG, SPN ou MG/SPN de uma só vez.</span>
     </div>
     <label>
       Regional
@@ -199,7 +196,7 @@
       <tr
         data-user-row
         data-user-id="{{ user.id }}"
-        data-status="{{ user.status }}"
+        data-status="{{ user_status_key(user.status) }}"
         data-role="{{ user.role }}"
         data-regional="{{ user.regional }}"
         data-created="{{ user.created_at.isoformat() if user.created_at else '' }}"
@@ -222,67 +219,31 @@
         </td>
         <td data-label="Telefone">{{ user.formatted_phone if user.role == 'franchise' else '-' }}</td>
         <td data-label="CNPJ">{{ user.formatted_cnpj or '-' }}</td>
-        <td data-label="Status"><span class="status {{ user.status }}">{{ status_label(user.status) }}</span></td>
+        <td data-label="Status"><span class="status {{ user_status_key(user.status) }}">{{ user_status_label(user.status) }}</span></td>
         <td class="actions-cell" data-label="Ações">
-          {% if user.status == 'pending' and not user.is_admin %}
-            {% if can_manage_user_status and row_can_edit %}
-            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
-              <input type="hidden" name="action" value="approved">
-              <button class="btn tiny success" type="submit">Aprovar</button>
-            </form>
-            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
-              <input type="hidden" name="action" value="rejected">
-              <button class="btn tiny danger icon-action-btn" type="submit" title="Recusar" aria-label="Recusar cadastro">
-                <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
-              </button>
-            </form>
-            {% endif %}
-            {% if can_edit_users and row_can_edit %}
-            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
-              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
-            </a>
-            {% endif %}
-            {% if can_manage_user_status and row_can_edit %}
-            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-              <button class="btn tiny ghost icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
-                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
-              </button>
-            </form>
-            {% endif %}
-            {% if not (can_manage_user_status and row_can_edit) and not (can_edit_users and row_can_edit) %}<span class="muted">Sem ações</span>{% endif %}
-          {% elif user.status == 'rejected' and not user.is_admin %}
-            {% if can_edit_users and row_can_edit %}
-            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
-              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
-            </a>
-            {% endif %}
-            {% if can_manage_user_status and row_can_edit %}
-            <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
-              <input type="hidden" name="action" value="approved">
-              <button class="btn tiny success" type="submit">Aprovar</button>
-            </form>
-            <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-              <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
-                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
-              </button>
-            </form>
-            {% endif %}
-            {% if not (can_manage_user_status and row_can_edit) and not (can_edit_users and row_can_edit) %}<span class="muted">Sem ações</span>{% endif %}
-          {% else %}
-            {% if can_edit_users and row_can_edit %}
-            <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
-              <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
-            </a>
-            {% endif %}
-            {% if can_manage_user_status and row_can_edit and current_user and user.id != current_user.id %}
-              <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
-                <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
-                <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
-              </button>
-              </form>
-            {% endif %}
-            {% if not (can_edit_users and row_can_edit) and not (can_manage_user_status and row_can_edit and current_user and user.id != current_user.id) %}<span class="muted">Sem ações</span>{% endif %}
+          {% if can_edit_users and row_can_edit %}
+          <a class="btn tiny ghost icon-action-btn" href="{{ url_for('admin_user_edit', user_id=user.id) }}" data-tooltip="Editar" aria-label="Editar acesso">
+            <img src="{{ url_for('static', filename='img/action-pencil.svg') }}" alt="">
+          </a>
           {% endif %}
+          {% if can_manage_user_status and row_can_edit and current_user and user.id != current_user.id %}
+          <form method="post" action="{{ url_for('admin_user_status', user_id=user.id) }}">
+            <input type="hidden" name="action" value="{{ 'rejected' if user.status == 'approved' else 'approved' }}">
+            {% if user.status == 'approved' %}
+            <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Desativar" aria-label="Desativar usuário">
+              <img src="{{ url_for('static', filename='img/action-inactive.svg') }}" alt="">
+            </button>
+            {% else %}
+            <button class="btn tiny success" type="submit">Ativar</button>
+            {% endif %}
+          </form>
+          <form method="post" action="{{ url_for('admin_user_delete', user_id=user.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Excluir definitivamente este usuário do banco de dados?') : 'Excluir definitivamente este usuário do banco de dados?')">
+            <button class="btn tiny danger icon-action-btn" type="submit" data-tooltip="Excluir" aria-label="Excluir usuário">
+              <img src="{{ url_for('static', filename='img/action-trash.svg') }}" alt="">
+            </button>
+          </form>
+          {% endif %}
+          {% if not (can_edit_users and row_can_edit) and not (can_manage_user_status and row_can_edit and current_user and user.id != current_user.id) %}<span class="muted">Sem ações</span>{% endif %}
         </td>
       </tr>
       {% else %}
@@ -364,9 +325,8 @@
   const counters = {
     shown: document.getElementById('userShownCount'),
     total: document.getElementById('userTotalCount'),
-    pending: document.getElementById('userPendingCount'),
-    approved: document.getElementById('userApprovedCount'),
-    rejected: document.getElementById('userRejectedCount'),
+    active: document.getElementById('userActiveCount'),
+    inactive: document.getElementById('userInactiveCount'),
     dev: document.getElementById('userDevCount'),
     admin: document.getElementById('userAdminCount'),
     base: document.getElementById('userBaseCount'),
@@ -384,7 +344,7 @@
     const zh = currentUserLang() === 'zh-CN';
     if (zh) {
       const zhLabels = {
-        shown: '已显示', total: '总数', pending: '待处理', approved: '已批准', rejected: '已拒绝', dev: '名Dev', admin: '名管理员', base: '个基地', franchise: '个加盟店'
+        shown: '已显示', total: '总数', active: '启用', inactive: '停用', dev: '名Dev', admin: '名管理员', base: '个基地', franchise: '个加盟店'
       };
       return zhLabels[kind] || '';
     }
@@ -392,9 +352,8 @@
     const ptLabels = {
       shown: singular ? 'exibido' : 'exibidos',
       total: 'total',
-      pending: singular ? 'pendente' : 'pendentes',
-      approved: singular ? 'aprovado' : 'aprovados',
-      rejected: singular ? 'recusado' : 'recusados',
+      active: singular ? 'ativo' : 'ativos',
+      inactive: singular ? 'inativo' : 'inativos',
       dev: 'devs',
       admin: singular ? 'admin' : 'admins',
       base: singular ? 'base' : 'bases',
@@ -569,7 +528,7 @@
     const role = roleFilter ? roleFilter.value : '';
     const regional = regionalFilter ? regionalFilter.value : '';
     const terms = normalize(search ? search.value : '').split(' ').filter(Boolean);
-    const counts = { shown: 0, pending: 0, approved: 0, rejected: 0, dev: 0, admin: 0, base: 0, franchise: 0 };
+    const counts = { shown: 0, active: 0, inactive: 0, dev: 0, admin: 0, base: 0, franchise: 0 };
     const ordered = sortedRows();
 
     ordered.forEach(function (row) {
@@ -600,9 +559,8 @@
 
     setCounter('shown', counts.shown);
     setCounter('total', rows.length);
-    setCounter('pending', counts.pending);
-    setCounter('approved', counts.approved);
-    setCounter('rejected', counts.rejected);
+    setCounter('active', counts.active);
+    setCounter('inactive', counts.inactive);
     setCounter('dev', counts.dev);
     setCounter('admin', counts.admin);
     setCounter('base', counts.base);
@@ -610,9 +568,8 @@
     updateCounterLabels({
       shown: counts.shown,
       total: rows.length,
-      pending: counts.pending,
-      approved: counts.approved,
-      rejected: counts.rejected,
+      active: counts.active,
+      inactive: counts.inactive,
       dev: counts.dev,
       admin: counts.admin,
       base: counts.base,

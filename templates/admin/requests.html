@@ -29,7 +29,7 @@
             <span>Os pedidos desta regional aparecem para as pessoas marcadas.</span>
           </div>
           <div class="regional-check-list">
-            {% for admin in regional_assignment_options|default([]) if admin.regional == option.value %}
+            {% for admin in regional_assignment_options|default([]) if user_can_access_regional(admin, option.value) %}
             <label class="regional-check-option">
               <input type="checkbox" name="approval_{{ option.value }}" value="{{ admin.id }}" {% if admin.id in approval_ids %}checked{% endif %}>
               <span>
@@ -49,7 +49,7 @@
             <span>Cada pessoa marcada terá um estoque separado vinculado ao próprio usuário.</span>
           </div>
           <div class="regional-check-list">
-            {% for admin in regional_assignment_options|default([]) if admin.regional == option.value %}
+            {% for admin in regional_assignment_options|default([]) if user_can_access_regional(admin, option.value) %}
             <label class="regional-check-option">
               <input type="checkbox" name="stock_{{ option.value }}" value="{{ admin.id }}" {% if admin.id in stock_ids %}checked{% endif %}>
               <span>

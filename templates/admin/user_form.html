@@ -42,6 +42,7 @@
           <option value="{{ option.value }}" {% if user and user.regional == option.value %}selected{% endif %}>{{ option.label }}</option>
         {% endfor %}
       </select>
+      {% if current_is_dev() %}<small class="hint">MG/SPN libera acesso às duas regionais. Somente o Dev pode conceder essa opção.</small>{% endif %}
       {% if not current_is_dev() %}<input type="hidden" name="regional" value="{{ user.regional if user else '' }}">{% endif %}
     </label>
     {% if current_is_dev() %}
@@ -89,9 +90,8 @@
     <label>
       Status do cadastro (aprovação)
       <select name="status" required {% if not can_edit_status_field %}disabled{% endif %}>
-        <option value="pending" {% if user and user.status == 'pending' %}selected{% endif %}>Pendente</option>
-        <option value="approved" {% if not user or user.status == 'approved' %}selected{% endif %}>Aprovado</option>
-        <option value="rejected" {% if user and user.status == 'rejected' %}selected{% endif %}>Recusado</option>
+        <option value="approved" {% if not user or user.status == 'approved' %}selected{% endif %}>Ativo</option>
+        <option value="rejected" {% if user and user.status != 'approved' %}selected{% endif %}>Inativo</option>
       </select>
     </label>
 

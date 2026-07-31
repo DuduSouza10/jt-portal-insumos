@@ -332,3 +332,19 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - Página Troca de Insumos com ciclo automático de três meses para bases.
 - Dashboard Geral de Pedidos e página Pedidos Confirmados com totais por produto para planejamento de compra.
 - Catálogo de bases exibe todos os insumos liberados, inclusive sem estoque.
+
+## Atualização v216 — acesso regional MG/SPN
+
+- Adicionada a opção de regional **MG/SPN** no cadastro e na edição de usuários.
+- Somente o usuário Dev pode conceder o acesso combinado, individualmente, em massa ou por importação.
+- Usuários MG/SPN podem ser selecionados como responsáveis de aprovação e estoque nas duas regionais.
+- Gestão de estoque e entrada de materiais permitem alternar entre MG e SPN, mantendo saldos e movimentações separados.
+- Solicitações continuam vinculadas a uma regional operacional única, evitando misturar estoques.
+
+## Atualização v217 — estabilidade da página inicial, envio e status de usuários
+
+- Reparo automático do schema operacional ao iniciar e ao acessar catálogo/pedidos em bancos antigos.
+- Página inicial deixa de cair no erro interno quando tabelas de ciclos, bloqueios ou permissões estão desatualizadas.
+- API de envio de solicitações sempre responde em JSON e apresenta a mensagem real ao usuário.
+- Compatibilidade reforçada com navegadores/dispositivos que mantinham JavaScript antigo em cache.
+- Usuários agora possuem somente os estados **Ativo** e **Inativo**. “Aguardando envio” permanece exclusivo dos pedidos.

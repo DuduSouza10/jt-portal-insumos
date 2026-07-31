@@ -13,10 +13,24 @@
       <span>Estoque de {{ stock_owner.responsible_name }}</span>
     </div>
   </div>
+  {% if can_switch_stock_regional %}
+  <form class="material-regional-switch" method="get" action="{{ url_for('admin_material_entries') }}">
+    <label>
+      Regional do estoque
+      <select name="regional">
+        {% for regional_option in available_stock_regionals %}
+          <option value="{{ regional_option }}" {% if stock_regional == regional_option %}selected{% endif %}>{{ regional_option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Trocar regional</button>
+  </form>
+  {% endif %}
 </section>
 
 <section class="material-entry-grid">
   <form class="card material-entry-form" method="post" action="{{ url_for('admin_material_entries') }}" enctype="multipart/form-data">
+    <input type="hidden" name="regional" value="{{ stock_regional }}">
     <div class="section-head compact-section-head">
       <div>
         <span class="eyebrow">Nova entrada</span>
@@ -28,13 +42,11 @@
       <input id="materialProductId" name="product_id" type="hidden" value="">
       <label>
         Nome do item
-        <input id="materialItemNameInput" name="item_name" list="materialProductOptions" required placeholder="Digite para buscar ou cadastrar um material" autocomplete="off">
-        <datalist id="materialProductOptions">
-          {% for product in material_product_options|default([]) %}
-            <option value="{{ product.name }}">{{ product.category or 'Produto cadastrado' }}</option>
-          {% endfor %}
-        </datalist>
-        <small class="hint">Produtos já cadastrados aparecem na pesquisa. Se digitar um novo nome, o sistema cria um novo produto.</small>
+        <span class="material-product-autocomplete">
+          <input id="materialItemNameInput" name="item_name" required placeholder="Digite para buscar ou cadastrar um material" autocomplete="off" aria-autocomplete="list" aria-controls="materialProductSuggestions" aria-expanded="false">
+          <span id="materialProductSuggestions" class="material-product-suggestions hidden" role="listbox" aria-label="Produtos cadastrados"></span>
+        </span>
+        <small class="hint">Os nomes dos produtos cadastrados aparecem na lista conforme você digita. Se informar um nome novo, o sistema cria um novo produto.</small>
       </label>
       <label>
         Estoque atual
@@ -101,8 +113,9 @@
       </div>
     </div>
     <div class="material-import-actions">
-      <a class="btn ghost" href="{{ url_for('admin_material_entries_template') }}">Baixar planilha modelo</a>
+      <a class="btn ghost" href="{{ url_for('admin_material_entries_template', regional=stock_regional) }}">Baixar planilha modelo</a>
       <form method="post" action="{{ url_for('admin_material_entries_import') }}" enctype="multipart/form-data" class="material-import-form">
+        <input type="hidden" name="regional" value="{{ stock_regional }}">
         <input name="spreadsheet" type="file" accept=".xlsx" required>
         <button class="btn primary" type="submit">Importar entradas</button>
       </form>
@@ -126,6 +139,7 @@
     </div>
 
     <form class="material-report-form-v66" method="get" action="{{ url_for('admin_material_entries_report') }}" target="_blank">
+      <input type="hidden" name="regional" value="{{ stock_regional }}">
       <label class="material-date-field">
         <span>Data inicial</span>
         <input type="date" name="start_date" required>
@@ -203,11 +217,14 @@
   const productOptions = {{ material_product_options_json|default([])|tojson }};
   const productIdInput = document.getElementById('materialProductId');
   const itemNameInput = document.getElementById('materialItemNameInput');
+  const productSuggestions = document.getElementById('materialProductSuggestions');
   const currentStockInput = document.getElementById('materialCurrentStockInput');
   const stockAfterInput = document.getElementById('materialStockAfterInput');
   const quantityInput = document.getElementById('materialQuantityInput');
   const unitPriceInput = document.getElementById('materialUnitPriceInput');
   const unitMeasureInput = document.getElementById('materialUnitMeasureInput');
+  let activeSuggestionIndex = -1;
+  let selectedProductId = '';
 
   function normalizeName(value) {
     return String(value || '')
@@ -217,15 +234,29 @@
       .toLowerCase();
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
   const productsByName = new Map();
+  const productsById = new Map();
   productOptions.forEach(function (product) {
     const key = normalizeName(product.name);
     if (key && !productsByName.has(key)) productsByName.set(key, product);
+    productsById.set(String(product.id || ''), product);
   });
 
   function selectedProduct() {
     if (!itemNameInput) return null;
-    return productsByName.get(normalizeName(itemNameInput.value)) || null;
+    const exactByName = productsByName.get(normalizeName(itemNameInput.value));
+    if (exactByName) return exactByName;
+    if (selectedProductId) return productsById.get(String(selectedProductId)) || null;
+    return null;
   }
 
   function updateStockPreview(product) {
@@ -240,22 +271,148 @@
     }
   }
 
-  function syncProductFields() {
-    const product = selectedProduct();
-    if (product) {
-      if (productIdInput) productIdInput.value = product.id || '';
-      if (unitMeasureInput) unitMeasureInput.value = product.unit_measure || 'un';
-      if (unitPriceInput) unitPriceInput.value = product.unit_price_input || '';
-    } else if (productIdInput) {
-      productIdInput.value = '';
+  function closeProductSuggestions() {
+    if (!productSuggestions || !itemNameInput) return;
+    productSuggestions.classList.add('hidden');
+    productSuggestions.innerHTML = '';
+    itemNameInput.setAttribute('aria-expanded', 'false');
+    activeSuggestionIndex = -1;
+  }
+
+  function suggestionButtons() {
+    return productSuggestions ? Array.from(productSuggestions.querySelectorAll('[data-material-product-id]')) : [];
+  }
+
+  function setActiveSuggestion(index) {
+    const buttons = suggestionButtons();
+    if (!buttons.length) {
+      activeSuggestionIndex = -1;
+      return;
     }
+    activeSuggestionIndex = Math.max(0, Math.min(index, buttons.length - 1));
+    buttons.forEach(function (button, buttonIndex) {
+      const active = buttonIndex === activeSuggestionIndex;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) button.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  function filteredProducts() {
+    const query = normalizeName(itemNameInput ? itemNameInput.value : '');
+    return productOptions
+      .filter(function (product) {
+        return !query || normalizeName(product.name).includes(query);
+      })
+      .sort(function (a, b) {
+        const aName = normalizeName(a.name);
+        const bName = normalizeName(b.name);
+        const aStarts = query && aName.startsWith(query) ? 0 : 1;
+        const bStarts = query && bName.startsWith(query) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+      })
+      .slice(0, 30);
+  }
+
+  function renderProductSuggestions() {
+    if (!productSuggestions || !itemNameInput) return;
+    const products = filteredProducts();
+    activeSuggestionIndex = -1;
+    if (!products.length) {
+      productSuggestions.innerHTML = '<span class="material-product-suggestion-empty">Nenhum produto cadastrado encontrado. Você pode cadastrar este nome.</span>';
+    } else {
+      productSuggestions.innerHTML = products.map(function (product) {
+        const productId = escapeHtml(product.id || '');
+        const productName = escapeHtml(product.name || '');
+        const unitMeasure = escapeHtml(product.unit_measure || 'un');
+        const stockQuantity = parseInt(product.stock_quantity || 0, 10) || 0;
+        return '<button type="button" class="material-product-suggestion" role="option" aria-selected="false" data-material-product-id="' + productId + '">' +
+          '<strong>' + productName + '</strong>' +
+          '<span>Estoque atual: ' + stockQuantity + ' ' + unitMeasure + '</span>' +
+        '</button>';
+      }).join('');
+    }
+    productSuggestions.classList.remove('hidden');
+    itemNameInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function applyProduct(product, keepFocus) {
+    if (!product || !itemNameInput) return;
+    selectedProductId = String(product.id || '');
+    itemNameInput.value = product.name || '';
+    if (productIdInput) productIdInput.value = selectedProductId;
+    if (unitMeasureInput) unitMeasureInput.value = product.unit_measure || 'un';
+    if (unitPriceInput) unitPriceInput.value = product.unit_price_input || '';
     updateStockPreview(product);
+    closeProductSuggestions();
+    if (keepFocus !== false) itemNameInput.focus();
+  }
+
+  function syncProductFields(options) {
+    const settings = options || {};
+    const exactProduct = itemNameInput ? productsByName.get(normalizeName(itemNameInput.value)) || null : null;
+    if (exactProduct) {
+      selectedProductId = String(exactProduct.id || '');
+      if (productIdInput) productIdInput.value = selectedProductId;
+      if (unitMeasureInput) unitMeasureInput.value = exactProduct.unit_measure || 'un';
+      if (unitPriceInput) unitPriceInput.value = exactProduct.unit_price_input || '';
+    } else {
+      if (selectedProductId) {
+        selectedProductId = '';
+        if (unitPriceInput) unitPriceInput.value = '';
+        if (unitMeasureInput) unitMeasureInput.value = 'un';
+      }
+      if (productIdInput) productIdInput.value = '';
+    }
+    updateStockPreview(exactProduct);
+    if (settings.showSuggestions) renderProductSuggestions();
   }
 
   if (itemNameInput) {
-    itemNameInput.addEventListener('input', syncProductFields);
-    itemNameInput.addEventListener('change', syncProductFields);
+    itemNameInput.addEventListener('focus', renderProductSuggestions);
+    itemNameInput.addEventListener('input', function () {
+      syncProductFields({ showSuggestions: true });
+    });
+    itemNameInput.addEventListener('change', function () {
+      syncProductFields();
+    });
+    itemNameInput.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (productSuggestions && productSuggestions.classList.contains('hidden')) renderProductSuggestions();
+        setActiveSuggestion(activeSuggestionIndex + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (productSuggestions && productSuggestions.classList.contains('hidden')) renderProductSuggestions();
+        setActiveSuggestion(activeSuggestionIndex <= 0 ? suggestionButtons().length - 1 : activeSuggestionIndex - 1);
+      } else if (event.key === 'Enter' && activeSuggestionIndex >= 0) {
+        const button = suggestionButtons()[activeSuggestionIndex];
+        if (button) {
+          event.preventDefault();
+          applyProduct(productsById.get(String(button.dataset.materialProductId || '')) || null);
+        }
+      } else if (event.key === 'Escape') {
+        closeProductSuggestions();
+      }
+    });
   }
+
+  if (productSuggestions) {
+    productSuggestions.addEventListener('mousedown', function (event) {
+      const button = event.target.closest('[data-material-product-id]');
+      if (!button) return;
+      event.preventDefault();
+      applyProduct(productsById.get(String(button.dataset.materialProductId || '')) || null);
+    });
+  }
+
+  document.addEventListener('mousedown', function (event) {
+    if (!productSuggestions || !itemNameInput) return;
+    if (productSuggestions.contains(event.target) || itemNameInput.contains(event.target)) return;
+    closeProductSuggestions();
+  });
+
   if (quantityInput) quantityInput.addEventListener('input', function () { updateStockPreview(selectedProduct()); });
   if (unitMeasureInput) unitMeasureInput.addEventListener('input', function () { updateStockPreview(selectedProduct()); });
   syncProductFields();

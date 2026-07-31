@@ -91,13 +91,27 @@ async function loadProducts() {
   emptyState.classList.add('hidden');
   const params = new URLSearchParams({ q, category, sort });
   try {
-    const response = await fetch(`/api/products?${params.toString()}`);
-    products = await response.json();
+    const response = await fetch(`/api/products?${params.toString()}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' }
+    });
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch (parseError) { data = null; }
+    if (response.redirected && response.url.includes('/login')) {
+      window.location.href = response.url;
+      return;
+    }
+    if (!response.ok || !Array.isArray(data)) {
+      throw new Error((data && data.message) || `HTTP ${response.status}`);
+    }
+    products = data;
     renderProducts();
   } catch (error) {
     products = [];
     renderProducts();
-    setMessage(jtText('Não foi possível carregar os insumos.'), 'err');
+    setMessage(jtText('Não foi possível carregar os insumos. Atualize a página e tente novamente.'), 'err');
   }
 }
 
@@ -407,16 +421,31 @@ async function sendRequest() {
   try {
     const response = await fetch('/api/requests', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
       body: JSON.stringify({
-        items: values.map(item => ({ product_id: item.product.id, quantity: item.quantity })),
+        items: values.map(item => ({ product_id: Number(item.product.id), quantity: Number(item.quantity) })),
         people_count: peopleCount,
-        user_note: requestNote.value.trim()
+        user_note: requestNote ? requestNote.value.trim() : ''
       })
     });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      setMessage(jtText(data.message || 'Não foi possível enviar a solicitação.'), 'err');
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch (parseError) { data = null; }
+    if (response.redirected && response.url.includes('/login')) {
+      window.location.href = response.url;
+      return;
+    }
+    if (!response.ok || !data || !data.ok) {
+      const serverMessage = data && data.message
+        ? data.message
+        : `Não foi possível enviar a solicitação (HTTP ${response.status}). Atualize a página e tente novamente.`;
+      setMessage(jtText(serverMessage), 'err');
       return;
     }
     cart.clear();
@@ -426,7 +455,7 @@ async function sendRequest() {
     setMessage(jtText(`Solicitação #${data.request_id} enviada para aprovação. PDF disponível para download.`), 'ok');
     showLastPdfButton(data.request_id);
   } catch (error) {
-    setMessage(jtText('Erro de conexão ao enviar solicitação.'), 'err');
+    setMessage(jtText('Não foi possível conectar ao servidor. Verifique a conexão, atualize a página e tente novamente.'), 'err');
   } finally {
     submitRequest.disabled = false;
   }
