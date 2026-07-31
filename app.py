@@ -5372,7 +5372,15 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         if normalize_stock_tag_slug(product.stock_tag) != SUPPLY_STOCK_TAG:
             return [], f"{product.name} pertence a outro estoque e não está disponível para solicitação de insumos."
         user_regional = request_regional_for_user(user)
-        regional_available = regional_stock_total_for_product(product.id, user_regional) if user_regional else 0
+        if user_regional:
+            with db_connect() as stock_conn:
+                regional_available = regional_stock_total_for_product(
+                    stock_conn,
+                    product.id,
+                    user_regional,
+                )
+        else:
+            regional_available = 0
         if not user.is_admin and not user_regional:
             return [], "Seu usuário ainda não possui regional cadastrada."
         if not user.is_admin and user.role != "base" and regional_available <= 0:
