@@ -16,6 +16,7 @@
         {% if current_user.role == 'franchise' or current_user.is_admin %}<th>Total</th>{% endif %}
         <th>Observação admin</th>
         <th>Ação executada por</th>
+        <th>Rastreio</th>
         <th>PDF</th>
       </tr>
     </thead>
@@ -34,14 +35,106 @@
         {% if current_user.role == 'franchise' or current_user.is_admin %}<td data-label="Total">{{ format_brl(req.total_cents) }}</td>{% endif %}
         <td data-label="Observacao admin">{{ req.admin_note or '-' }}</td>
         <td data-label="Ação executada por">{{ request_action_summary(req) }}</td>
+        <td class="actions-cell" data-label="Rastreio">
+          {% if req.tracking_number %}
+          <button
+            class="btn tiny primary"
+            type="button"
+            data-open-tracking-modal
+            data-tracking-number="{{ req.tracking_number|e }}"
+            data-request-number="#{{ req.id }}"
+          >Consultar nº de rastreio</button>
+          {% else %}
+          <span class="muted">-</span>
+          {% endif %}
+        </td>
         <td class="actions-cell" data-label="PDF"><a class="btn tiny ghost" href="{{ url_for('request_pdf', request_id=req.id) }}">Baixar PDF</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="muted center">Nenhuma solicitação enviada.</td></tr>
+      <tr><td colspan="10" class="muted center">Nenhuma solicitação enviada.</td></tr>
       {% endfor %}
     </tbody>
   </table>
   {% set request_pagination_item_label = 'solicitações' %}
   {% include '_request_pagination.html' %}
 </div>
+
+<div id="trackingNumberModal" class="permission-modal tracking-number-modal" aria-hidden="true">
+  <div class="permission-backdrop" data-close-tracking-modal></div>
+  <section class="permission-card card tracking-number-card" role="dialog" aria-modal="true" aria-labelledby="trackingNumberTitle">
+    <div class="permission-card-head">
+      <div>
+        <span class="eyebrow">Rastreio do pacote</span>
+        <h2 id="trackingNumberTitle">Número de rastreio</h2>
+        <p id="trackingRequestLabel">Consulte o código registrado no envio.</p>
+      </div>
+      <button class="permission-close" type="button" data-close-tracking-modal aria-label="Fechar">×</button>
+    </div>
+    <div class="tracking-number-content">
+      <label>
+        Nº de rastreio
+        <input id="trackingNumberValue" type="text" value="" readonly>
+      </label>
+    </div>
+    <div class="permission-actions tracking-number-actions">
+      <button class="btn ghost" type="button" data-close-tracking-modal>Fechar</button>
+      <button class="btn primary" type="button" data-copy-tracking-number>Copiar número</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function () {
+  const modal = document.getElementById('trackingNumberModal');
+  const valueInput = document.getElementById('trackingNumberValue');
+  const requestLabel = document.getElementById('trackingRequestLabel');
+  const openButtons = document.querySelectorAll('[data-open-tracking-modal]');
+  const closeButtons = document.querySelectorAll('[data-close-tracking-modal]');
+  const copyButton = document.querySelector('[data-copy-tracking-number]');
+  if (!modal || !openButtons.length) return;
+  if (modal.parentElement !== document.body) document.body.appendChild(modal);
+
+  function openModal(button) {
+    const trackingNumber = button.dataset.trackingNumber || '';
+    const requestNumber = button.dataset.requestNumber || '';
+    if (valueInput) valueInput.value = trackingNumber;
+    if (requestLabel) requestLabel.textContent = requestNumber ? ('Solicitação ' + requestNumber) : 'Consulte o código registrado no envio.';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('permission-modal-open');
+    window.setTimeout(function () { if (valueInput) valueInput.select(); }, 40);
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('permission-modal-open');
+  }
+
+  openButtons.forEach(function (button) {
+    button.addEventListener('click', function () { openModal(button); });
+  });
+  closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  if (copyButton) {
+    copyButton.addEventListener('click', async function () {
+      const value = valueInput ? valueInput.value : '';
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch (error) {
+        if (valueInput) { valueInput.focus(); valueInput.select(); document.execCommand('copy'); }
+      }
+      const original = copyButton.textContent;
+      copyButton.textContent = 'Número copiado';
+      window.setTimeout(function () { copyButton.textContent = original; }, 1600);
+    });
+  }
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+})();
+</script>
 {% endblock %}

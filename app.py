@@ -613,6 +613,7 @@ class SupplyRequest:
     reviewed_by_id: int | None = None
     shipped_at: datetime | None = None
     shipped_by_id: int | None = None
+    tracking_number: str = ""
     user: User | None = None
     reviewed_by: User | None = None
     shipped_by: User | None = None
@@ -1298,6 +1299,7 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
         reviewed_by_id=int(reviewed_by_id) if reviewed_by_id is not None else None,
         shipped_at=parse_dt(row["shipped_at"]) if "shipped_at" in row_keys else None,
         shipped_by_id=int(row["shipped_by_id"]) if "shipped_by_id" in row_keys and row["shipped_by_id"] is not None else None,
+        tracking_number=((row["tracking_number"] if "tracking_number" in row_keys else "") or "").strip(),
     )
     if include_user:
         req.user = get_user(req.user_id)
@@ -1595,6 +1597,7 @@ def init_db() -> None:
                 reviewed_by_id INTEGER,
                 shipped_at TEXT,
                 shipped_by_id INTEGER,
+                tracking_number TEXT NOT NULL DEFAULT '',
                 FOREIGN KEY(user_id) REFERENCES users(id),
                 FOREIGN KEY(reviewed_by_id) REFERENCES users(id),
                 FOREIGN KEY(shipped_by_id) REFERENCES users(id)
@@ -1862,6 +1865,8 @@ def init_db() -> None:
             conn.execute("ALTER TABLE supply_requests ADD COLUMN shipped_at TEXT")
         if "shipped_by_id" not in supply_request_columns:
             conn.execute("ALTER TABLE supply_requests ADD COLUMN shipped_by_id INTEGER")
+        if "tracking_number" not in supply_request_columns:
+            conn.execute("ALTER TABLE supply_requests ADD COLUMN tracking_number TEXT NOT NULL DEFAULT ''")
 
         material_entry_columns = {row["name"] for row in conn.execute("PRAGMA table_info(material_entries)").fetchall()}
         if "regional" not in material_entry_columns:
@@ -2330,6 +2335,7 @@ def ensure_request_runtime_schema(conn: Any | None = None) -> None:
             "reviewed_by_id": "INTEGER",
             "shipped_at": "TEXT",
             "shipped_by_id": "INTEGER",
+            "tracking_number": "TEXT NOT NULL DEFAULT ''",
         })
         add_missing_columns("product_request_blocks", {
             "reason": "TEXT NOT NULL DEFAULT ''",
@@ -3326,7 +3332,7 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
     where_sql, params, order_sql = request_list_query_parts(status, user_id, filters, viewer, apply_assignment_visibility)
     sql = f"""
         SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
-               sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id
+               sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id, sr.tracking_number
           FROM supply_requests sr
           JOIN users u ON u.id = sr.user_id
           {where_sql}
@@ -3404,7 +3410,7 @@ def list_supply_requests_page(status: str = "", user_id: int | None = None, page
         rows = conn.execute(
             f"""
             SELECT sr.id, sr.user_id, sr.status, sr.user_note, sr.admin_note, sr.people_count,
-                   sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id
+                   sr.regional, sr.created_at, sr.reviewed_at, sr.reviewed_by_id, sr.shipped_at, sr.shipped_by_id, sr.tracking_number
               FROM supply_requests sr
               JOIN users u ON u.id = sr.user_id
               {where_sql}
@@ -11887,17 +11893,29 @@ def admin_request_confirm_shipment(request_id: int):
         return redirect_to_return("admin_request_detail", request_id=request_id)
 
     shipping_note = (request.form.get("shipping_note") or "").strip()
+    tracking_number = (request.form.get("tracking_number") or "").strip()
+    tracking_number = re.sub(r"\s+", "", tracking_number)
+    if not tracking_number:
+        flash("Informe o número de rastreio para confirmar o envio.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
+    if len(tracking_number) > 120:
+        flash("O número de rastreio informado é muito longo.", "warning")
+        return redirect_to_return("admin_request_detail", request_id=request_id)
+
     shipped_at = datetime.utcnow()
     with db_connect() as conn:
         conn.execute(
             """
             UPDATE supply_requests
-               SET status = 'shipped', shipped_at = ?, shipped_by_id = ?
+               SET status = 'shipped', shipped_at = ?, shipped_by_id = ?, tracking_number = ?
              WHERE id = ?
             """,
-            (now_iso(), current.id, request_id),
+            (now_iso(), current.id, tracking_number, request_id),
         )
-        record_request_action(conn, request_id, "shipped", current.id, shipping_note or "Envio dos insumos confirmado.")
+        action_note = f"Envio dos insumos confirmado. Nº de rastreio: {tracking_number}."
+        if shipping_note:
+            action_note += f" {shipping_note}"
+        record_request_action(conn, request_id, "shipped", current.id, action_note)
         requester = supply_request.user or get_user(supply_request.user_id)
         if requester is not None and requester.role == "base":
             cycle_until = add_calendar_months(shipped_at, DEFAULT_BASE_REQUEST_CYCLE_MONTHS)
@@ -11913,7 +11931,7 @@ def admin_request_confirm_shipment(request_id: int):
             notify_feishu_supply_request_action(updated_request, "shipped", current, public_url_for("admin_request_detail", request_id=request_id), shipping_note)
     except Exception:
         app.logger.exception("Falha ao preparar notificacao Feishu da confirmacao de envio")
-    flash("Envio confirmado e responsável registrado.", "success")
+    flash(f"Envio confirmado. Nº de rastreio {tracking_number} registrado.", "success")
     return redirect_to_return("admin_request_detail", request_id=request_id)
 
 

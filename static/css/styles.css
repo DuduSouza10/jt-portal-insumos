@@ -17187,3 +17187,56 @@ html[data-theme="light"] .material-product-suggestions {
 }
 html[data-theme="light"] .status.active { color: #087348; }
 html[data-theme="light"] .status.inactive { color: #b71931; }
+
+/* v219 - confirmação de envio com rastreio e consulta pelo solicitante. */
+.shipping-tracking-card {
+  width: min(620px, 100%);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.shipping-tracking-form {
+  overflow: auto;
+  padding-right: 4px;
+  align-content: start;
+}
+
+.shipping-tracking-actions,
+.tracking-number-actions {
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.tracking-number-card {
+  width: min(560px, 100%);
+}
+
+.tracking-number-content {
+  display: grid;
+  gap: 12px;
+  overflow: auto;
+}
+
+.tracking-number-content input[readonly] {
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: .035em;
+  color: var(--text-strong);
+  background: rgba(255,255,255,.045);
+}
+
+.tracking-number-text {
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .shipping-tracking-actions,
+  .tracking-number-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .shipping-tracking-actions .btn,
+  .tracking-number-actions .btn {
+    width: 100%;
+  }
+}

@@ -108,6 +108,12 @@
         <strong>{{ format_sao_paulo_datetime(supply_request.shipped_at) }}</strong>
       </div>
       {% endif %}
+      {% if supply_request.tracking_number %}
+      <div class="request-meta-item wide">
+        <span>Nº de rastreio</span>
+        <strong class="tracking-number-text">{{ supply_request.tracking_number }}</strong>
+      </div>
+      {% endif %}
       <div class="request-meta-item wide">
         <span>Ação executada</span>
         <strong>{{ request_action_summary(supply_request) }}</strong>
@@ -154,11 +160,10 @@
       </form>
     {% endif %}
     {% if can_confirm_shipping %}
-      <form method="post" action="{{ url_for('admin_request_confirm_shipment', request_id=supply_request.id) }}" class="form-grid request-shipping-confirm-form">
-        <label>Observação do envio<textarea name="shipping_note" rows="3" placeholder="Ex.: enviado na rota, responsável pela entrega..."></textarea></label>
-        <button class="btn success" type="submit">Confirmar envio dos insumos</button>
-        <small class="hint">O nome do usuário que confirmar ficará registrado na solicitação.</small>
-      </form>
+      <div class="form-grid request-shipping-confirm-form">
+        <button class="btn success" type="button" data-open-shipping-modal>Confirmar envio dos insumos</button>
+        <small class="hint">Ao confirmar, será necessário informar o número de rastreio do pacote.</small>
+      </div>
     {% endif %}
     {% if can_delete_request %}
     <form method="post" action="{{ url_for('admin_request_delete', request_id=supply_request.id) }}" onsubmit="return confirm(window.jtText ? window.jtText('Marcar esta solicitação como excluída?') : 'Marcar esta solicitação como excluída?')">
@@ -174,4 +179,69 @@
     {% endif %}
   </aside>
 </section>
+
+{% if can_confirm_shipping %}
+<div id="shippingTrackingModal" class="permission-modal shipping-tracking-modal" aria-hidden="true">
+  <div class="permission-backdrop" data-close-shipping-modal></div>
+  <section class="permission-card card shipping-tracking-card" role="dialog" aria-modal="true" aria-labelledby="shippingTrackingTitle">
+    <div class="permission-card-head">
+      <div>
+        <span class="eyebrow">Confirmação de envio</span>
+        <h2 id="shippingTrackingTitle">Informar número de rastreio</h2>
+        <p>O código ficará disponível para o solicitante em Minhas solicitações.</p>
+      </div>
+      <button class="permission-close" type="button" data-close-shipping-modal aria-label="Fechar">×</button>
+    </div>
+    <form id="shippingTrackingForm" method="post" action="{{ url_for('admin_request_confirm_shipment', request_id=supply_request.id) }}" class="form-grid shipping-tracking-form">
+      <label>
+        Número de rastreio
+        <input id="shippingTrackingInput" name="tracking_number" type="text" maxlength="120" placeholder="Digite o número de rastreio" autocomplete="off" required>
+      </label>
+      <label>
+        Observação do envio <small class="muted">(opcional)</small>
+        <textarea name="shipping_note" rows="3" placeholder="Ex.: enviado na rota, responsável pela entrega..."></textarea>
+      </label>
+      <div class="permission-actions shipping-tracking-actions">
+        <button class="btn ghost" type="button" data-close-shipping-modal>Cancelar</button>
+        <button class="btn success" type="submit">Confirmar envio</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if can_confirm_shipping %}
+<script>
+(function () {
+  const modal = document.getElementById('shippingTrackingModal');
+  const input = document.getElementById('shippingTrackingInput');
+  const openButton = document.querySelector('[data-open-shipping-modal]');
+  const closeButtons = document.querySelectorAll('[data-close-shipping-modal]');
+  if (!modal || !openButton) return;
+  if (modal.parentElement !== document.body) document.body.appendChild(modal);
+
+  function openModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('permission-modal-open');
+    window.setTimeout(function () { if (input) input.focus(); }, 40);
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('permission-modal-open');
+  }
+
+  openButton.addEventListener('click', openModal);
+  closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

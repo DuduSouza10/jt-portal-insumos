@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS supply_requests (
     reviewed_by_id INTEGER,
     shipped_at TEXT,
     shipped_by_id INTEGER,
+    tracking_number TEXT NOT NULL DEFAULT '',
     FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(reviewed_by_id) REFERENCES users(id),
     FOREIGN KEY(shipped_by_id) REFERENCES users(id)

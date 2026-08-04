@@ -1,4 +1,10 @@
+# Portal de Insumos J&T — v219
 
+## Rastreio de solicitações
+
+- Ao confirmar o envio, o administrador deve informar o número de rastreio.
+- O código fica registrado na solicitação e no histórico de ações.
+- O solicitante consulta o código pelo botão **Consultar nº de rastreio** em **Minhas solicitações**.
 
 ## Rodar local no Windows
 
