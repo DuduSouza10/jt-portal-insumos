@@ -12,10 +12,8 @@
 <section class="admin-split detail-grid">
   <div class="card table-card request-items-card">
     <div class="section-head request-items-head">
-      <div class="request-items-heading">
-        <h2>Itens solicitados</h2>
-        <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
-      </div>
+      <h2>Itens solicitados</h2>
+      <span class="status request-items-status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
     </div>
     {% if can_edit_request_items %}
     <form method="post" action="{{ url_for('admin_request_update_items', request_id=supply_request.id) }}">

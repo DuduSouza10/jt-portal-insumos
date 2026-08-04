@@ -17824,4 +17824,96 @@ html[data-theme="light"] .stock-admin-page .stock-scope-filter {
     justify-self: start;
   }
 }
-\n\n/* v224 - cabeçalho e total do card de itens da solicitação. */\n.request-detail-page .request-items-card .request-items-head {\n  display: flex !important;\n  align-items: center !important;\n  justify-content: flex-start !important;\n  gap: 12px !important;\n  margin: 0 0 16px !important;\n  min-height: 34px;\n}\n\n.request-detail-page .request-items-card .request-items-heading {\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-start;\n  gap: 12px;\n  min-width: 0;\n}\n\n.request-detail-page .request-items-card .request-items-heading h2 {\n  margin: 0 !important;\n  line-height: 1.2;\n}\n\n.request-detail-page .request-items-card .request-items-heading .status {\n  flex: 0 0 auto;\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-height: 28px;\n  padding: 6px 10px;\n  margin: 0 !important;\n  line-height: 1;\n  white-space: nowrap;\n}\n\n.request-detail-page .request-items-card tfoot td {\n  border-top: 1px solid var(--line);\n  padding-top: 14px !important;\n  padding-bottom: 0 !important;\n}\n\n.request-detail-page .request-items-card .request-total-cell {\n  text-align: right !important;\n}\n\n.request-detail-page .request-items-card .request-total-summary {\n  display: inline-flex;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 14px;\n  min-width: 270px;\n  padding: 11px 14px;\n  border: 1px solid var(--line);\n  border-radius: 14px;\n  background: rgba(255,255,255,.025);\n}\n\n.request-detail-page .request-items-card .request-total-summary span {\n  color: var(--muted);\n  font-size: 12px;\n  font-weight: 900;\n  letter-spacing: .02em;\n}\n\n.request-detail-page .request-items-card .request-total-summary strong {\n  margin: 0 !important;\n  color: var(--text-strong);\n  font-size: 16px;\n  white-space: nowrap;\n}\n\nhtml[data-theme="light"] .request-detail-page .request-items-card .request-total-summary {\n  background: rgba(0,0,0,.025);\n}\n\n@media (max-width: 760px) {\n  .request-detail-page .request-items-card .request-items-heading {\n    width: 100%;\n    flex-wrap: wrap;\n  }\n\n  .request-detail-page .request-items-card .request-total-cell[colspan] {\n    display: block !important;\n    text-align: right !important;\n  }\n\n  .request-detail-page .request-items-card .request-total-cell::before {\n    display: none !important;\n  }\n\n  .request-detail-page .request-items-card .request-total-summary {\n    min-width: 0;\n    width: 100%;\n    justify-content: space-between;\n  }\n}\n
+
+
+/* v225 - status no canto superior direito e total alinhado à direita. */
+.request-detail-page .request-items-card {
+  position: relative;
+}
+
+.request-detail-page .request-items-card .request-items-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  width: 100% !important;
+  min-height: 34px;
+  margin: 0 0 16px !important;
+}
+
+.request-detail-page .request-items-card .request-items-head h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 !important;
+  line-height: 1.2;
+}
+
+.request-detail-page .request-items-card .request-items-status {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 30px;
+  margin: 0 0 0 auto !important;
+  padding: 7px 12px !important;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+.request-detail-page .request-items-card tfoot td.request-total-cell {
+  padding: 14px 0 0 !important;
+  border-top: 1px solid var(--line) !important;
+  text-align: right !important;
+  vertical-align: middle !important;
+}
+
+.request-detail-page .request-items-card .request-total-summary {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px;
+  width: auto !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.request-detail-page .request-items-card .request-total-summary span {
+  color: var(--muted-2);
+  font-size: 13px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.request-detail-page .request-items-card .request-total-summary strong {
+  margin: 0 !important;
+  color: var(--text-strong);
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .request-detail-page .request-items-card .request-items-head {
+    gap: 10px !important;
+  }
+
+  .request-detail-page .request-items-card .request-items-status {
+    max-width: 48%;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .request-detail-page .request-items-card .request-total-cell[colspan] {
+    display: block !important;
+    text-align: right !important;
+  }
+
+  .request-detail-page .request-items-card .request-total-cell::before {
+    display: none !important;
+  }
+}
