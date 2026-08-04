@@ -1,3 +1,18 @@
+# Update v222
+
+## Ajuste v222 — modal de rastreio
+
+- A confirmação de envio não usa mais janela nativa do navegador.
+- O número de rastreio é informado em um modal visual do próprio portal, com fundo desfocado.
+- O modal pode ser fechado pelo botão, pelo fundo ou pela tecla Esc.
+- O botão de confirmação é bloqueado durante o envio para evitar registros duplicados.
+
+
+- Página de detalhes da solicitação reorganizada em blocos de resumo e fluxo.
+- Informações, observações, histórico e ações com melhor distribuição e responsividade.
+- Confirmação de envio usa janela nativa do navegador para garantir abertura em diferentes dispositivos.
+- Campo obrigatório para número de rastreio permanece integrado ao fluxo de envio.
+
 # Portal de Insumos J&T — v219
 
 ## Rastreio de solicitações

@@ -59,9 +59,18 @@
       </div>
       <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
     </div>
-    <a class="btn primary full-btn" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
+    <a class="btn primary full-btn request-detail-pdf" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
 
-    <div class="request-meta-list">
+    <div class="request-detail-body">
+      <section class="request-detail-overview">
+        <div class="request-detail-section-head">
+          <div>
+            <span class="eyebrow">Informações do pedido</span>
+            <h3>Resumo da solicitação</h3>
+          </div>
+        </div>
+
+        <div class="request-meta-list">
       <div class="request-meta-item">
         <span>Unidade</span>
         <strong>{{ supply_request.user.organization_name }}</strong>
@@ -120,14 +129,26 @@
       </div>
     </div>
 
-    <div class="request-note-box">
-      <span>Observação do solicitante</span>
-      <p>{{ supply_request.user_note or '-' }}</p>
-    </div>
-    <div class="request-note-box">
-      <span>Observação admin</span>
-      <p>{{ supply_request.admin_note or '-' }}</p>
-    </div>
+        <div class="request-note-grid">
+          <div class="request-note-box">
+            <span>Observação do solicitante</span>
+            <p>{{ supply_request.user_note or '-' }}</p>
+          </div>
+          <div class="request-note-box">
+            <span>Observação admin</span>
+            <p>{{ supply_request.admin_note or '-' }}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="request-detail-workflow">
+        <div class="request-detail-section-head">
+          <div>
+            <span class="eyebrow">Fluxo da solicitação</span>
+            <h3>Ações e histórico</h3>
+          </div>
+          <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+        </div>
 
     {% if supply_request.action_logs %}
     <div class="request-action-history">
@@ -177,12 +198,14 @@
     {% elif can_access('admin_requests_attended') %}
     <a class="btn ghost" href="{{ url_for('admin_requests_attended') }}">Voltar</a>
     {% endif %}
+      </section>
+    </div>
   </aside>
 </section>
 
 {% if can_confirm_shipping %}
-<div id="shippingTrackingModal" class="permission-modal shipping-tracking-modal" aria-hidden="true">
-  <div class="permission-backdrop" data-close-shipping-modal></div>
+<div id="shippingTrackingModal" class="permission-modal shipping-tracking-modal" aria-hidden="true" aria-labelledby="shippingTrackingTitle">
+  <button class="permission-backdrop" type="button" data-close-shipping-modal aria-label="Fechar janela"></button>
   <section class="permission-card card shipping-tracking-card" role="dialog" aria-modal="true" aria-labelledby="shippingTrackingTitle">
     <div class="permission-card-head">
       <div>
@@ -218,16 +241,25 @@
 (function () {
   const modal = document.getElementById('shippingTrackingModal');
   const input = document.getElementById('shippingTrackingInput');
-  const openButton = document.querySelector('[data-open-shipping-modal]');
+  const form = document.getElementById('shippingTrackingForm');
+  const openButtons = document.querySelectorAll('[data-open-shipping-modal]');
   const closeButtons = document.querySelectorAll('[data-close-shipping-modal]');
-  if (!modal || !openButton) return;
-  if (modal.parentElement !== document.body) document.body.appendChild(modal);
+  if (!modal) return;
+
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
 
   function openModal() {
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('permission-modal-open');
-    window.setTimeout(function () { if (input) input.focus(); }, 40);
+    window.setTimeout(function () {
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 60);
   }
 
   function closeModal() {
@@ -236,11 +268,33 @@
     document.body.classList.remove('permission-modal-open');
   }
 
-  openButton.addEventListener('click', openModal);
-  closeButtons.forEach(function (button) { button.addEventListener('click', closeModal); });
+  openButtons.forEach(function (button) {
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      openModal();
+    });
+  });
+
+  closeButtons.forEach(function (button) {
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      closeModal();
+    });
+  });
+
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
   });
+
+  if (form) {
+    form.addEventListener('submit', function () {
+      const submitButton = form.querySelector('button[type="submit"]');
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Confirmando envio...';
+      }
+    });
+  }
 })();
 </script>
 {% endif %}

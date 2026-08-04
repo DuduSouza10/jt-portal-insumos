@@ -17359,3 +17359,360 @@ html[data-theme="light"] .stock-admin-page .stock-scope-filter {
     width: 100%;
   }
 }
+
+/* v221 - página de solicitação reorganizada e modal de rastreio funcional. */
+.request-detail-page .detail-grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 20px !important;
+  align-items: start !important;
+}
+
+.request-detail-page .request-items-card {
+  width: 100%;
+  padding: 22px !important;
+  border-radius: 24px;
+  overflow-x: auto !important;
+}
+
+.request-detail-page .request-items-card .section-head {
+  margin-bottom: 14px;
+}
+
+.request-detail-page .request-items-card table {
+  min-width: 760px;
+}
+
+.request-detail-page .request-detail-card {
+  width: 100%;
+  padding: 22px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px 18px !important;
+  border-radius: 24px;
+  overflow: visible !important;
+}
+
+.request-detail-page .request-detail-card > .request-side-head {
+  grid-column: 1;
+  margin: 0;
+  align-items: center;
+}
+
+.request-detail-page .request-detail-card > .request-detail-pdf {
+  grid-column: 2;
+  width: auto !important;
+  min-width: 240px;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.request-detail-page .request-detail-body {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr);
+  gap: 18px;
+  align-items: start;
+  min-width: 0;
+}
+
+.request-detail-page .request-detail-overview,
+.request-detail-page .request-detail-workflow {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 18px;
+  background: rgba(255,255,255,.022);
+  display: grid;
+  gap: 16px;
+}
+
+.request-detail-page .request-detail-workflow {
+  align-content: start;
+}
+
+.request-detail-page .request-detail-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.request-detail-page .request-detail-section-head h3 {
+  margin: 4px 0 0;
+  color: var(--text-strong);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.request-detail-page .request-meta-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.request-detail-page .request-meta-item {
+  min-height: 78px;
+  padding: 14px 15px;
+  align-content: start;
+}
+
+.request-detail-page .request-meta-item.wide {
+  grid-column: span 2;
+}
+
+.request-detail-page .request-note-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.request-detail-page .request-note-grid .request-note-box {
+  min-height: 92px;
+  margin: 0;
+}
+
+.request-detail-page .request-action-history {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 3px;
+  margin: 0;
+}
+
+.request-detail-page .request-action-history h2 {
+  margin: 0 0 2px !important;
+  font-size: 15px;
+}
+
+.request-detail-page .request-action-item {
+  padding: 13px 14px;
+  border-radius: 15px;
+}
+
+.request-detail-page .request-detail-workflow > form,
+.request-detail-page .request-detail-workflow > .request-shipping-confirm-form,
+.request-detail-page .request-detail-workflow > .warning-box {
+  width: 100%;
+  margin: 0;
+}
+
+.request-detail-page .request-detail-workflow > form {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.request-detail-page .request-shipping-confirm-form {
+  padding: 15px;
+  border: 1px solid rgba(29,207,122,.24);
+  border-radius: 17px;
+  background: linear-gradient(135deg, rgba(29,207,122,.08), rgba(255,255,255,.018));
+  gap: 9px;
+}
+
+.request-detail-page .request-shipping-confirm-form .btn {
+  min-height: 52px;
+  width: 100%;
+}
+
+.request-detail-page .request-shipping-confirm-form .hint {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.request-detail-page .request-detail-workflow > a.btn,
+.request-detail-page .request-detail-workflow > form > .btn {
+  width: 100%;
+}
+
+.shipping-tracking-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-width: 640px;
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  color: var(--text);
+  overflow: visible;
+}
+
+.shipping-tracking-dialog::backdrop {
+  background: rgba(0,0,0,.78);
+  backdrop-filter: blur(8px);
+}
+
+.shipping-tracking-dialog:not([open]) {
+  display: none;
+}
+
+.shipping-tracking-dialog[open] {
+  display: block;
+}
+
+.shipping-tracking-dialog .shipping-tracking-card {
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  padding: 22px;
+  display: grid;
+  gap: 18px;
+  overflow: auto;
+  border-color: rgba(230,0,18,.45);
+  box-shadow: 0 32px 90px rgba(0,0,0,.58), 0 0 0 1px rgba(230,0,18,.08);
+}
+
+.shipping-tracking-dialog .permission-card-head {
+  margin: 0;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shipping-tracking-dialog .permission-card-head h2 {
+  margin: 5px 0 4px;
+}
+
+.shipping-tracking-dialog .permission-card-head p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.shipping-tracking-dialog .shipping-tracking-form {
+  padding: 0;
+  overflow: visible;
+  gap: 16px;
+}
+
+.shipping-tracking-dialog .shipping-tracking-form input,
+.shipping-tracking-dialog .shipping-tracking-form textarea {
+  background: rgba(255,255,255,.035);
+}
+
+.shipping-tracking-dialog .shipping-tracking-actions {
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 1050px) {
+  .request-detail-page .request-detail-body {
+    grid-template-columns: 1fr;
+  }
+  .request-detail-page .request-action-history {
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .request-detail-page .request-detail-card {
+    grid-template-columns: 1fr;
+    padding: 16px !important;
+  }
+  .request-detail-page .request-detail-card > .request-side-head,
+  .request-detail-page .request-detail-card > .request-detail-pdf,
+  .request-detail-page .request-detail-body {
+    grid-column: 1;
+  }
+  .request-detail-page .request-detail-card > .request-detail-pdf {
+    width: 100% !important;
+    min-width: 0;
+  }
+  .request-detail-page .request-meta-list,
+  .request-detail-page .request-note-grid {
+    grid-template-columns: 1fr;
+  }
+  .request-detail-page .request-meta-item.wide {
+    grid-column: auto;
+  }
+  .shipping-tracking-dialog .shipping-tracking-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .shipping-tracking-dialog .shipping-tracking-actions .btn {
+    width: 100%;
+  }
+}
+
+
+/* v222 - modal visual próprio para informar rastreio, sem janela nativa do navegador. */
+.shipping-tracking-modal {
+  padding: 18px !important;
+}
+
+.shipping-tracking-modal .permission-backdrop {
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.shipping-tracking-modal .shipping-tracking-card {
+  width: min(640px, calc(100vw - 32px)) !important;
+  max-width: 640px !important;
+  max-height: min(86vh, 720px) !important;
+  padding: 24px !important;
+  display: grid !important;
+  gap: 18px !important;
+  overflow: auto !important;
+  border-color: rgba(230, 0, 18, .45) !important;
+  border-radius: 24px !important;
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface)) !important;
+  box-shadow: 0 34px 100px rgba(0,0,0,.58), 0 0 0 1px rgba(230,0,18,.10) !important;
+}
+
+.shipping-tracking-modal .permission-card-head {
+  margin: 0 !important;
+  padding: 0 0 16px !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.shipping-tracking-modal .permission-card-head h2 {
+  margin: 5px 0 4px !important;
+}
+
+.shipping-tracking-modal .permission-card-head p {
+  margin: 0 !important;
+  line-height: 1.45 !important;
+}
+
+.shipping-tracking-modal .shipping-tracking-form {
+  padding: 0 !important;
+  gap: 16px !important;
+  overflow: visible !important;
+}
+
+.shipping-tracking-modal .shipping-tracking-form input,
+.shipping-tracking-modal .shipping-tracking-form textarea {
+  background: rgba(255,255,255,.035) !important;
+}
+
+.shipping-tracking-modal .shipping-tracking-actions {
+  padding-top: 16px !important;
+  border-top: 1px solid var(--line) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+}
+
+@media (max-width: 620px) {
+  .shipping-tracking-modal {
+    padding: 12px !important;
+  }
+  .shipping-tracking-modal .shipping-tracking-card {
+    width: calc(100vw - 24px) !important;
+    padding: 18px !important;
+    border-radius: 20px !important;
+  }
+  .shipping-tracking-modal .shipping-tracking-actions {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+  }
+  .shipping-tracking-modal .shipping-tracking-actions .btn {
+    width: 100% !important;
+  }
+}
