@@ -11,9 +11,11 @@
 {% set can_delete_request = supply_request.status != 'deleted' and can_do('requests_delete') %}
 <section class="admin-split detail-grid">
   <div class="card table-card request-items-card">
-    <div class="section-head">
-      <h2>Itens solicitados</h2>
-      <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+    <div class="section-head request-items-head">
+      <div class="request-items-heading">
+        <h2>Itens solicitados</h2>
+        <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+      </div>
     </div>
     {% if can_edit_request_items %}
     <form method="post" action="{{ url_for('admin_request_update_items', request_id=supply_request.id) }}">
@@ -39,7 +41,14 @@
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr><td class="request-total-cell" colspan="6" data-label="Total"><strong>Total</strong><span>{{ format_brl(supply_request.total_cents) }}</span></td></tr>
+        <tr class="request-total-row">
+          <td class="request-total-cell" colspan="6" data-label="Total">
+            <div class="request-total-summary">
+              <span>Total da solicitação</span>
+              <strong>{{ format_brl(supply_request.total_cents) }}</strong>
+            </div>
+          </td>
+        </tr>
       </tfoot>
     </table>
     {% if can_edit_request_items %}
