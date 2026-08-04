@@ -52,14 +52,18 @@
   </div>
 
   <aside class="card request-side request-detail-card">
-    <div class="request-side-head">
-      <div>
-        <span class="eyebrow">Solicitação</span>
-        <h2>Dados</h2>
+    <div class="request-detail-card-head">
+      <div class="request-side-head">
+        <div>
+          <span class="eyebrow">Solicitação</span>
+          <h2>Dados</h2>
+        </div>
       </div>
-      <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+      <div class="request-detail-card-head-actions">
+        <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
+        <a class="btn primary request-detail-pdf" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
+      </div>
     </div>
-    <a class="btn primary full-btn request-detail-pdf" href="{{ url_for('request_pdf', request_id=supply_request.id) }}">Baixar PDF da solicitação</a>
 
     <div class="request-detail-body">
       <section class="request-detail-overview">
@@ -147,7 +151,6 @@
             <span class="eyebrow">Fluxo da solicitação</span>
             <h3>Ações e histórico</h3>
           </div>
-          <span class="status {{ supply_request.status }}">{{ status_label(supply_request.status) }}</span>
         </div>
 
     {% if supply_request.action_logs %}
@@ -235,15 +238,11 @@
 {% endblock %}
 
 {% block scripts %}
-{{ super() }}
-{% if can_confirm_shipping %}
 <script>
 (function () {
   const modal = document.getElementById('shippingTrackingModal');
   const input = document.getElementById('shippingTrackingInput');
   const form = document.getElementById('shippingTrackingForm');
-  const openButtons = document.querySelectorAll('[data-open-shipping-modal]');
-  const closeButtons = document.querySelectorAll('[data-close-shipping-modal]');
   if (!modal) return;
 
   if (modal.parentElement !== document.body) {
@@ -259,7 +258,7 @@
         input.focus();
         input.select();
       }
-    }, 60);
+    }, 80);
   }
 
   function closeModal() {
@@ -268,18 +267,20 @@
     document.body.classList.remove('permission-modal-open');
   }
 
-  openButtons.forEach(function (button) {
-    button.addEventListener('click', function (event) {
+  document.addEventListener('click', function (event) {
+    const openButton = event.target.closest && event.target.closest('[data-open-shipping-modal]');
+    if (openButton) {
       event.preventDefault();
+      event.stopPropagation();
       openModal();
-    });
-  });
+      return;
+    }
 
-  closeButtons.forEach(function (button) {
-    button.addEventListener('click', function (event) {
+    const closeButton = event.target.closest && event.target.closest('[data-close-shipping-modal]');
+    if (closeButton && modal.classList.contains('open')) {
       event.preventDefault();
       closeModal();
-    });
+    }
   });
 
   document.addEventListener('keydown', function (event) {
@@ -297,5 +298,4 @@
   }
 })();
 </script>
-{% endif %}
 {% endblock %}

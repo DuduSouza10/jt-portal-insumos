@@ -1,3 +1,15 @@
+# Update v223
+
+## Correções v223 — confirmação de envio e alinhamento de status
+
+- Corrigido o botão **Confirmar envio dos insumos**: o JavaScript do modal agora é carregado independentemente do escopo do bloco Jinja e usa listener delegado.
+- Mantido o modal visual do portal, com fundo desfocado, número de rastreio obrigatório e observação opcional.
+- Removido o status duplicado no bloco de fluxo.
+- Reorganizado o cabeçalho de dados para alinhar status, título e botão de PDF.
+- Atualizado o cache do CSS para `v223`.
+
+---
+
 # Update v222
 
 ## Ajuste v222 — modal de rastreio
