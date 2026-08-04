@@ -17240,3 +17240,122 @@ html[data-theme="light"] .status.inactive { color: #b71931; }
     width: 100%;
   }
 }
+
+/* v220 - reorganização do card de filtros do estoque. */
+.stock-admin-page .stock-scope-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+  padding: 24px;
+  overflow: visible;
+}
+
+.stock-admin-page .stock-scope-copy {
+  max-width: 920px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.stock-admin-page .stock-scope-copy .eyebrow {
+  margin-bottom: 1px;
+}
+
+.stock-admin-page .stock-scope-copy h2 {
+  margin: 0;
+  font-size: clamp(19px, 1.45vw, 24px);
+  line-height: 1.2;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.stock-admin-page .stock-scope-copy p {
+  max-width: 860px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.stock-admin-page .stock-scope-filter {
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, .022);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+  gap: 14px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.stock-admin-page .stock-scope-filter > label {
+  display: grid;
+  grid-template-rows: auto 52px;
+  align-content: end;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.stock-admin-page .stock-scope-filter > label select {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  height: 52px;
+  margin: 0;
+}
+
+.stock-admin-page .stock-scope-filter .field-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding-top: 2px;
+  margin: 0;
+}
+
+.stock-admin-page .stock-scope-filter .field-actions .btn {
+  min-height: 46px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.stock-admin-page .stock-scope-badges {
+  margin-top: 0;
+  padding-top: 2px;
+}
+
+html[data-theme="light"] .stock-admin-page .stock-scope-filter {
+  background: rgba(255, 255, 255, .62);
+}
+
+@media (max-width: 760px) {
+  .stock-admin-page .stock-scope-card {
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .stock-admin-page .stock-scope-filter {
+    grid-template-columns: 1fr;
+    padding: 15px;
+  }
+
+  .stock-admin-page .stock-scope-filter .field-actions {
+    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    min-height: 0;
+    padding-top: 0;
+  }
+
+  .stock-admin-page .stock-scope-filter .field-actions .btn {
+    width: 100%;
+  }
+}
