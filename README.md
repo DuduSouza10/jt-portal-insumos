@@ -381,3 +381,11 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - API de envio de solicitações sempre responde em JSON e apresenta a mensagem real ao usuário.
 - Compatibilidade reforçada com navegadores/dispositivos que mantinham JavaScript antigo em cache.
 - Usuários agora possuem somente os estados **Ativo** e **Inativo**. “Aguardando envio” permanece exclusivo dos pedidos.
+
+## v226 - Importação de ativos e traduções
+
+- A página Gestão de Ativos permite baixar um modelo XLSX e importar vários ativos de uma vez.
+- Cada linha representa um item; linhas com o mesmo Código do ativo são agrupadas.
+- A importação valida unidade, regional, produtos e estoque antes de gravar qualquer dado.
+- O estoque de ativos é baixado automaticamente quando a importação é concluída.
+- Textos estáticos, campos, modais, mensagens e novas funcionalidades receberam traduções complementares para chinês simplificado.

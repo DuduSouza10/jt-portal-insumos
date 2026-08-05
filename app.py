@@ -3830,10 +3830,10 @@ STATIC_ROLE_LABELS = {"dev": "Dev", "admin": "Administrador", "base": "Base", "f
 STATIC_ROLE_KEYS = set(STATIC_ROLE_LABELS.keys())
 STATIC_ROLE_ORDER = ["dev", "admin", "base", "franchise"]
 STATIC_ROLE_DESCRIPTIONS = {
-    "base": "Tipo padrÃ£o para bases. PermissÃµes administrativas nÃ£o liberadas.",
-    "franchise": "Tipo padrÃ£o para franquias. PermissÃµes administrativas nÃ£o liberadas.",
-    "admin": "Tipo padrÃ£o administrativo com acesso completo Ã s Ã¡reas administrativas.",
-    "dev": "Tipo Dev com controle total do portal, tipos de acesso e permissÃµes.",
+    "base": "Tipo padrão para bases. Permissões administrativas não liberadas.",
+    "franchise": "Tipo padrão para franquias. Permissões administrativas não liberadas.",
+    "admin": "Tipo padrão administrativo com acesso completo às áreas administrativas.",
+    "dev": "Tipo Dev com controle total do portal, tipos de acesso e permissões.",
 }
 
 
@@ -3889,7 +3889,7 @@ def default_static_access_role(role: str) -> AccessRoleType | None:
     return AccessRoleType(
         role_key=key,
         name=STATIC_ROLE_LABELS.get(key, key),
-        description=STATIC_ROLE_DESCRIPTIONS.get(key, "Tipo padrÃ£o do sistema."),
+        description=STATIC_ROLE_DESCRIPTIONS.get(key, "Tipo padrão do sistema."),
         permissions=default_static_page_permissions(key),
         action_permissions=default_static_action_permissions(key),
         editable_roles=default_static_user_edit_roles(key),
@@ -7973,6 +7973,424 @@ def import_material_entries_from_workbook_bytes(
     return imported, skipped, errors
 
 
+
+
+ASSET_IMPORT_HEADER_ALIASES = {
+    "group_code": ["Código do ativo", "Codigo do ativo", "Código", "Codigo", "Grupo do ativo", "Asset code", "资产代码"],
+    "name": ["Nome do ativo", "Nome", "Ativo", "Asset name", "资产名称"],
+    "unit_type": ["Tipo de unidade", "Tipo", "Base ou franquia", "Unit type", "单位类型"],
+    "unit": ["Unidade", "Base/Franquia", "Base ou franquia", "Base", "Franquia", "Unit", "单位"],
+    "regional": ["Regional/SC", "Regional", "Região", "Regiao", "Region", "区域"],
+    "sector": ["Setor", "Departamento", "Sector", "部门"],
+    "manager": ["Gestor", "Responsável", "Responsavel", "Manager", "负责人"],
+    "product": ["Produto", "Item", "Nome do produto", "Product", "产品"],
+    "quantity": ["Quantidade", "Qtd", "Qty", "数量"],
+    "serial_number": ["Patrimônio/Número de série", "Patrimonio/Numero de serie", "Patrimônio", "Patrimonio", "Número de série", "Numero de serie", "Serial", "资产编号/序列号"],
+}
+
+
+def asset_import_header_map_score(header_map: dict[str, int]) -> int:
+    score = 0
+    for key in ["group_code", "name", "unit_type", "unit", "regional", "sector", "manager", "product", "quantity", "serial_number"]:
+        if header_map_contains_alias(header_map, ASSET_IMPORT_HEADER_ALIASES[key]):
+            score += 3 if key in {"group_code", "name", "regional", "product", "quantity"} else 1
+    return score
+
+
+def detect_asset_import_header_row(worksheet: Any, max_scan_rows: int = 30) -> tuple[int, dict[str, int]]:
+    best_row_number = 1
+    best_map: dict[str, int] = {}
+    best_score = -1
+    max_row = min(int(getattr(worksheet, "max_row", 1) or 1), max_scan_rows)
+    for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=1, max_row=max_row, values_only=True), start=1):
+        row_values = worksheet_values(row_values_tuple)
+        header_map = {normalize_header(value): index for index, value in enumerate(row_values) if value is not None and str(value).strip()}
+        score = asset_import_header_map_score(header_map)
+        if score > best_score:
+            best_row_number = row_number
+            best_map = header_map
+            best_score = score
+        if score >= 15:
+            return row_number, header_map
+    return best_row_number, best_map
+
+
+def get_asset_import_value(row_values: list[Any], header_map: dict[str, int], field_key: str) -> Any:
+    return get_header_value(row_values, header_map, ASSET_IMPORT_HEADER_ALIASES.get(field_key, []))
+
+
+def normalize_asset_import_unit_type(value: Any) -> str:
+    normalized = normalize_header(value)
+    if normalized in {"base", "bases", "基地"}:
+        return "base"
+    if normalized in {"franquia", "franquias", "franchise", "加盟店"}:
+        return "franchise"
+    if normalized in {"regional especial", "especial", "matriz sc", "special regional", "特殊区域"}:
+        return "special"
+    return ""
+
+
+def import_assets_from_workbook_bytes(uploaded_bytes: bytes, created_by_id: int) -> tuple[int, int, list[str]]:
+    """Importa ativos e baixa o estoque de ativos em uma única transação.
+
+    Cada linha representa um item. Linhas com o mesmo Código do ativo são
+    agrupadas em um único cadastro de ativo.
+    """
+    try:
+        workbook = load_workbook(BytesIO(uploaded_bytes), data_only=True, read_only=True)
+    except Exception as exc:
+        return 0, 0, [f"não foi possível abrir a planilha: {type(exc).__name__}"]
+
+    try:
+        worksheet = workbook.active
+        if not worksheet or int(getattr(worksheet, "max_row", 0) or 0) < 1:
+            return 0, 0, ["planilha vazia"]
+        header_row_number, header_map = detect_asset_import_header_row(worksheet)
+        required_headers = ["group_code", "name", "regional", "sector", "manager", "product", "quantity"]
+        missing_headers = [key for key in required_headers if not header_map_contains_alias(header_map, ASSET_IMPORT_HEADER_ALIASES[key])]
+        if missing_headers:
+            labels = {
+                "group_code": "Código do ativo",
+                "name": "Nome do ativo",
+                "regional": "Regional/SC",
+                "sector": "Setor",
+                "manager": "Gestor",
+                "product": "Produto",
+                "quantity": "Quantidade",
+            }
+            return 0, 0, ["colunas obrigatórias ausentes: " + ", ".join(labels[key] for key in missing_headers)]
+
+        raw_groups: dict[str, dict[str, Any]] = {}
+        group_order: list[str] = []
+        parse_errors: list[str] = []
+
+        for row_number, row_values_tuple in enumerate(worksheet.iter_rows(min_row=header_row_number + 1, values_only=True), start=header_row_number + 1):
+            row_values = worksheet_values(row_values_tuple)
+            if excel_row_is_empty(row_values):
+                continue
+            group_code = clean_import_text(get_asset_import_value(row_values, header_map, "group_code"))
+            name = clean_import_text(get_asset_import_value(row_values, header_map, "name"))
+            unit_type = normalize_asset_import_unit_type(get_asset_import_value(row_values, header_map, "unit_type"))
+            unit_raw = clean_import_text(get_asset_import_value(row_values, header_map, "unit"))
+            regional = normalize_asset_regional(clean_import_text(get_asset_import_value(row_values, header_map, "regional")))
+            sector = clean_import_text(get_asset_import_value(row_values, header_map, "sector"))
+            manager = clean_import_text(get_asset_import_value(row_values, header_map, "manager"))
+            product_name = clean_import_text(get_asset_import_value(row_values, header_map, "product"))
+            quantity = parse_optional_int(get_asset_import_value(row_values, header_map, "quantity")) or 0
+            serial_number = clean_import_text(get_asset_import_value(row_values, header_map, "serial_number"))
+
+            row_issues: list[str] = []
+            if not group_code:
+                row_issues.append("Código do ativo vazio")
+            if not name:
+                row_issues.append("Nome do ativo vazio")
+            if not regional:
+                row_issues.append("Regional/SC inválida")
+            if not sector:
+                row_issues.append("Setor vazio")
+            if not manager:
+                row_issues.append("Gestor vazio")
+            if not product_name:
+                row_issues.append("Produto vazio")
+            if quantity <= 0:
+                row_issues.append("Quantidade deve ser maior que zero")
+
+            is_special = is_special_asset_regional(regional)
+            canonical_unit = ""
+            canonical_kind = unit_type
+            if is_special:
+                canonical_unit = regional
+                canonical_kind = "special"
+            else:
+                if not unit_type:
+                    base_candidate = canonical_unit_option(unit_raw, BASE_UNIT_OPTIONS, BASE_UNIT_OPTION_LOOKUP)
+                    franchise_candidate = canonical_unit_option(unit_raw, FRANCHISE_UNIT_OPTIONS, FRANCHISE_UNIT_OPTION_LOOKUP)
+                    if base_candidate and not franchise_candidate:
+                        canonical_kind = "base"
+                        canonical_unit = base_candidate
+                    elif franchise_candidate and not base_candidate:
+                        canonical_kind = "franchise"
+                        canonical_unit = franchise_candidate
+                elif unit_type == "base":
+                    canonical_unit = canonical_unit_option(unit_raw, BASE_UNIT_OPTIONS, BASE_UNIT_OPTION_LOOKUP)
+                elif unit_type == "franchise":
+                    canonical_unit = canonical_unit_option(unit_raw, FRANCHISE_UNIT_OPTIONS, FRANCHISE_UNIT_OPTION_LOOKUP)
+                elif unit_type == "special":
+                    row_issues.append("Tipo Regional especial só pode ser usado com Matriz ou SC")
+
+                if canonical_kind not in {"base", "franchise"}:
+                    row_issues.append("Tipo de unidade inválido")
+                if not canonical_unit:
+                    row_issues.append("Unidade não encontrada no cadastro")
+                elif asset_regional_for_base(canonical_unit) != regional:
+                    row_issues.append("Unidade não pertence à regional informada")
+
+            if row_issues:
+                parse_errors.append(f"linha {row_number}: " + "; ".join(row_issues))
+                continue
+
+            group_key = normalize_product_lookup_key(group_code)
+            if not group_key:
+                parse_errors.append(f"linha {row_number}: Código do ativo inválido")
+                continue
+            metadata = {
+                "code": group_code[:100],
+                "name": name[:180],
+                "unit": canonical_unit[:180],
+                "unit_kind": canonical_kind,
+                "regional": regional,
+                "sector": sector[:120],
+                "manager": manager[:120],
+            }
+            existing = raw_groups.get(group_key)
+            if existing is None:
+                existing = {**metadata, "items": []}
+                raw_groups[group_key] = existing
+                group_order.append(group_key)
+            else:
+                for field in ["name", "unit", "unit_kind", "regional", "sector", "manager"]:
+                    if existing[field] != metadata[field]:
+                        parse_errors.append(f"linha {row_number}: dados do grupo {group_code} não coincidem com as linhas anteriores ({field})")
+                        break
+                else:
+                    pass
+                if parse_errors and parse_errors[-1].startswith(f"linha {row_number}:"):
+                    continue
+            existing["items"].append({
+                "row": row_number,
+                "product_name": product_name[:180],
+                "quantity": int(quantity),
+                "serial_number": serial_number[:120],
+            })
+
+        if parse_errors:
+            return 0, 0, parse_errors[:20]
+        if not raw_groups:
+            return 0, 0, ["nenhuma linha válida encontrada"]
+
+        with db_connect() as conn:
+            product_rows = conn.execute(
+                "SELECT * FROM products WHERE active = 1 AND catalog_archived = 0 AND stock_tag = ? ORDER BY id ASC",
+                (ASSET_STOCK_TAG,),
+            ).fetchall()
+            product_map: dict[str, Product] = {}
+            duplicate_product_keys: set[str] = set()
+            for row in product_rows:
+                product = row_to_product(row)
+                if product is None:
+                    continue
+                key = normalize_product_lookup_key(product.name)
+                if not key:
+                    continue
+                if key in product_map:
+                    duplicate_product_keys.add(key)
+                else:
+                    product_map[key] = product
+
+            validation_errors: list[str] = []
+            requested_totals: dict[int, int] = {}
+            for group_key in group_order:
+                group = raw_groups[group_key]
+                for item in group["items"]:
+                    product_key = normalize_product_lookup_key(item["product_name"])
+                    product = product_map.get(product_key)
+                    if product is None:
+                        validation_errors.append(f"linha {item['row']}: produto '{item['product_name']}' não encontrado no estoque de ativos")
+                        continue
+                    if product_key in duplicate_product_keys:
+                        validation_errors.append(f"linha {item['row']}: produto '{item['product_name']}' está duplicado no cadastro; corrija antes de importar")
+                        continue
+                    item["product"] = product
+                    requested_totals[product.id] = requested_totals.get(product.id, 0) + int(item["quantity"])
+
+            for product_id, requested_quantity in requested_totals.items():
+                product = next((item for item in product_map.values() if item.id == product_id), None)
+                if product is not None and int(product.stock_quantity or 0) < requested_quantity:
+                    validation_errors.append(
+                        f"estoque insuficiente para {product.name}: solicitado {requested_quantity}, disponível {int(product.stock_quantity or 0)}"
+                    )
+            if validation_errors:
+                return 0, 0, validation_errors[:20]
+
+            created_assets = 0
+            imported_items = 0
+            created_asset_ids: list[int] = []
+            current_stocks = {product.id: int(product.stock_quantity or 0) for product in product_map.values()}
+            now_value = now_iso()
+            try:
+                for group_key in group_order:
+                    group = raw_groups[group_key]
+                    cursor = conn.execute(
+                        """
+                        INSERT INTO assets (name, base, regional, sector, manager, created_by_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (group["name"], group["unit"], group["regional"], group["sector"], group["manager"], int(created_by_id), now_value),
+                    )
+                    asset_id = get_cursor_lastrowid(cursor)
+                    if asset_id is None:
+                        raise RuntimeError(f"não foi possível identificar o ativo {group['code']}")
+                    created_asset_ids.append(int(asset_id))
+                    created_assets += 1
+                    for item in group["items"]:
+                        product: Product = item["product"]
+                        quantity = int(item["quantity"])
+                        stock_before = current_stocks[product.id]
+                        stock_after = stock_before - quantity
+                        conn.execute(
+                            "UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?",
+                            (stock_after, now_value, product.id),
+                        )
+                        conn.execute(
+                            """
+                            INSERT INTO asset_items (asset_id, product_id, item_name, quantity, serial_number, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (int(asset_id), product.id, product.name, quantity, item["serial_number"], now_value),
+                        )
+                        record_stock_movement(
+                            conn,
+                            product.id,
+                            -quantity,
+                            stock_before,
+                            stock_after,
+                            "asset_allocation",
+                            f"Saída por importação de ativos #{asset_id} - {group['name']} ({group['code']}).",
+                            created_by_id=int(created_by_id),
+                        )
+                        current_stocks[product.id] = stock_after
+                        imported_items += 1
+                conn.commit()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                raise
+        return created_assets, imported_items, []
+    finally:
+        try:
+            workbook.close()
+        except Exception:
+            pass
+
+
+def build_assets_import_template() -> BytesIO:
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Importação de Ativos"
+    instructions = workbook.create_sheet("Instruções")
+    lists = workbook.create_sheet("Listas")
+
+    headers = [
+        "Código do ativo",
+        "Nome do ativo",
+        "Tipo de unidade",
+        "Unidade",
+        "Regional/SC",
+        "Setor",
+        "Gestor",
+        "Produto",
+        "Quantidade",
+        "Patrimônio/Número de série",
+    ]
+    worksheet.append(headers)
+    worksheet.append(["ATIVO-001", "Kit operacional", "Base", BASE_UNIT_OPTIONS[0] if BASE_UNIT_OPTIONS else "", asset_regional_for_base(BASE_UNIT_OPTIONS[0]) if BASE_UNIT_OPTIONS else "MG", "Operações", "Nome do gestor", "Exemplo de produto do estoque de ativos", 1, "JT-00123"])
+    worksheet.append(["ATIVO-001", "Kit operacional", "Base", BASE_UNIT_OPTIONS[0] if BASE_UNIT_OPTIONS else "", asset_regional_for_base(BASE_UNIT_OPTIONS[0]) if BASE_UNIT_OPTIONS else "MG", "Operações", "Nome do gestor", "Outro produto do mesmo ativo", 2, ""])
+
+    instructions_rows = [
+        ["Como preencher a importação de ativos"],
+        ["Cada linha representa um item. Repita o mesmo Código do ativo para agrupar vários itens no mesmo cadastro."],
+        ["Tipo de unidade aceita: Base, Franquia ou Regional especial."],
+        ["Para Base/Franquia, informe exatamente uma unidade cadastrada no portal e a regional correspondente MG ou SPN."],
+        ["Para Regional especial, use Matriz, SC CGE ou SC RAO em Regional/SC; o campo Unidade pode ficar vazio."],
+        ["O Produto deve existir no estoque de ativos e ter quantidade suficiente. A importação descontará o estoque."],
+        ["Quantidade deve ser um número inteiro maior que zero."],
+        ["Patrimônio/Número de série é opcional."],
+        ["Não altere os títulos das colunas."],
+    ]
+    for row in instructions_rows:
+        instructions.append(row)
+
+    with db_connect() as conn:
+        product_rows = conn.execute(
+            "SELECT name FROM products WHERE active = 1 AND catalog_archived = 0 AND stock_tag = ? ORDER BY name COLLATE NOCASE ASC",
+            (ASSET_STOCK_TAG,),
+        ).fetchall()
+    product_names = [str(row["name"] or "").strip() for row in product_rows if str(row["name"] or "").strip()]
+    if product_names:
+        worksheet["H2"] = product_names[0]
+        worksheet["H3"] = product_names[min(1, len(product_names) - 1)]
+
+    lists.append(["Produtos", "Unidades", "Regionais", "Tipos de unidade"])
+    max_len = max(len(product_names), len(BASE_FRANCHISE_OPTIONS), len(ASSET_REGIONAL_OPTIONS), 3)
+    unit_types = ["Base", "Franquia", "Regional especial"]
+    for index in range(max_len):
+        lists.append([
+            product_names[index] if index < len(product_names) else "",
+            BASE_FRANCHISE_OPTIONS[index] if index < len(BASE_FRANCHISE_OPTIONS) else "",
+            ASSET_REGIONAL_OPTIONS[index] if index < len(ASSET_REGIONAL_OPTIONS) else "",
+            unit_types[index] if index < len(unit_types) else "",
+        ])
+
+    header_fill = PatternFill("solid", fgColor="E60012")
+    header_font = Font(color="FFFFFF", bold=True)
+    input_fill = PatternFill("solid", fgColor="EAF2F8")
+    sample_fill = PatternFill("solid", fgColor="FFF3CD")
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(bottom=thin)
+    for cell in worksheet[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+    worksheet.row_dimensions[1].height = 34
+    for row in worksheet.iter_rows(min_row=2, max_row=200, min_col=1, max_col=len(headers)):
+        for cell in row:
+            cell.fill = sample_fill if cell.row <= 3 else input_fill
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+            cell.border = border
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = f"A1:J200"
+    widths = [18, 30, 20, 24, 16, 22, 26, 36, 14, 30]
+    for idx, width in enumerate(widths, start=1):
+        worksheet.column_dimensions[get_column_letter(idx)].width = width
+
+    if product_names:
+        product_validation = DataValidation(type="list", formula1=f"'Listas'!$A$2:$A${len(product_names)+1}", allow_blank=False)
+        worksheet.add_data_validation(product_validation)
+        product_validation.add("H2:H200")
+    if BASE_FRANCHISE_OPTIONS:
+        unit_validation = DataValidation(type="list", formula1=f"'Listas'!$B$2:$B${len(BASE_FRANCHISE_OPTIONS)+1}", allow_blank=True)
+        worksheet.add_data_validation(unit_validation)
+        unit_validation.add("D2:D200")
+    regional_validation = DataValidation(type="list", formula1=f"'Listas'!$C$2:$C${len(ASSET_REGIONAL_OPTIONS)+1}", allow_blank=False)
+    type_validation = DataValidation(type="list", formula1="'Listas'!$D$2:$D$4", allow_blank=False)
+    quantity_validation = DataValidation(type="whole", operator="greaterThan", formula1="0", allow_blank=False)
+    worksheet.add_data_validation(regional_validation)
+    worksheet.add_data_validation(type_validation)
+    worksheet.add_data_validation(quantity_validation)
+    regional_validation.add("E2:E200")
+    type_validation.add("C2:C200")
+    quantity_validation.add("I2:I200")
+
+    instructions.column_dimensions["A"].width = 120
+    instructions["A1"].fill = header_fill
+    instructions["A1"].font = Font(color="FFFFFF", bold=True, size=14)
+    instructions["A1"].alignment = Alignment(vertical="center")
+    instructions.row_dimensions[1].height = 30
+    for row in instructions.iter_rows(min_row=2):
+        row[0].alignment = Alignment(wrap_text=True, vertical="top")
+        row[0].font = Font(color="666666")
+        instructions.row_dimensions[row[0].row].height = 32
+    instructions.sheet_view.showGridLines = False
+    lists.sheet_state = "hidden"
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: datetime, end_dt: datetime, viewer: User) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=15*mm, bottomMargin=12*mm)
@@ -10637,7 +11055,7 @@ def admin_product_edit(product_id: int):
     if product is None:
         abort(404)
     if not user_has_any_action_access(current_user(), PRODUCT_EDIT_ACTION_KEYS):
-        flash("Seu tipo de acesso nÃ£o pode editar produtos.", "warning")
+        flash("Seu tipo de acesso não pode editar produtos.", "warning")
         return redirect_to_return("admin_products")
     if request.method == "POST":
         old_product = Product(**product.__dict__)
@@ -11174,6 +11592,90 @@ def admin_assets():
         filtered_base_options=base_options_for_asset_regional(selected_regional),
         asset_product_options=asset_product_options,
     )
+
+
+@app.get("/admin/assets/model")
+@admin_required
+@page_access_required("admin_stock")
+def admin_assets_template():
+    denied = require_action_permission("stock_assets_create", "Seu tipo de acesso não pode baixar o modelo de importação de ativos.", "admin_assets")
+    if denied:
+        return denied
+    buffer = build_assets_import_template()
+    filename = "modelo_importacao_ativos.xlsx"
+    try:
+        store_generated_file(
+            storage_key("templates", filename),
+            buffer,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            {"type": "assets_import_template"},
+        )
+    except Exception:
+        app.logger.exception("Falha ao armazenar modelo de importação de ativos")
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@app.post("/admin/assets/import")
+@admin_required
+@page_access_required("admin_stock")
+def admin_assets_import():
+    denied = require_action_permission("stock_assets_create", "Seu tipo de acesso não pode importar ativos.", "admin_assets")
+    if denied:
+        return denied
+    uploaded = request.files.get("spreadsheet")
+    if uploaded is None or not uploaded.filename:
+        flash("Selecione uma planilha .xlsx para importar os ativos.", "warning")
+        return redirect_to_return("admin_assets")
+    if not uploaded.filename.lower().endswith(".xlsx"):
+        flash("Importe apenas arquivos .xlsx.", "warning")
+        return redirect_to_return("admin_assets")
+    try:
+        uploaded_bytes = uploaded.read()
+    except Exception:
+        app.logger.exception("Falha ao ler planilha de ativos")
+        flash("Não foi possível ler a planilha enviada.", "danger")
+        return redirect_to_return("admin_assets")
+    if not uploaded_bytes:
+        flash("A planilha enviada está vazia.", "warning")
+        return redirect_to_return("admin_assets")
+    max_bytes = int(os.getenv("ASSET_IMPORT_MAX_BYTES", "10485760"))
+    if len(uploaded_bytes) > max_bytes:
+        flash("A planilha de ativos excede o limite de tamanho permitido.", "warning")
+        return redirect_to_return("admin_assets")
+    try:
+        if len(uploaded_bytes) <= int(os.getenv("IMPORT_BACKUP_MAX_BYTES", "5242880")):
+            upload_bytes_to_r2(
+                storage_key("imports", "ativos_" + sao_paulo_filename_timestamp() + "_" + safe_filename(uploaded.filename)),
+                uploaded_bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                {"type": "assets_import"},
+            )
+    except Exception as exc:
+        print(f"[R2] Não foi possível salvar a planilha de ativos: {exc}")
+    try:
+        created_assets, imported_items, errors = import_assets_from_workbook_bytes(uploaded_bytes, require_current_user().id)
+    except Exception as exc:
+        app.logger.exception("Falha inesperada ao importar ativos")
+        flash(f"Não foi possível importar os ativos. Erro: {type(exc).__name__}.", "danger")
+        return redirect_to_return("admin_assets")
+    if errors:
+        preview = " | ".join(errors[:6])
+        remaining = max(0, len(errors) - 6)
+        if remaining:
+            preview += f" | e mais {remaining} erro(s)"
+        flash("Importação cancelada. Corrija a planilha: " + preview, "danger")
+        return redirect_to_return("admin_assets")
+    flash(
+        f"Importação concluída: {created_assets} ativo(s) criado(s) e {imported_items} item(ns) registrado(s).",
+        "success",
+    )
+    return redirect_to_return("admin_assets")
 
 
 @app.post("/admin/assets/new")

@@ -17917,3 +17917,101 @@ html[data-theme="light"] .stock-admin-page .stock-scope-filter {
     display: none !important;
   }
 }
+
+/* v226 - importacao de tabela na Gestao de Ativos. */
+.asset-import-card {
+  padding: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .82fr);
+  gap: 24px;
+  align-items: center;
+  overflow: visible;
+}
+
+.asset-import-copy {
+  min-width: 0;
+}
+
+.asset-import-copy h2 {
+  margin: 6px 0 7px;
+  color: var(--text-strong);
+  font-size: 20px;
+}
+
+.asset-import-copy p {
+  margin: 0;
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.asset-import-rules {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asset-import-rules span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.asset-import-controls {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.asset-import-controls > .btn {
+  width: 100%;
+}
+
+.asset-import-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.asset-import-form .enhanced-file-input + .file-picker-shell,
+.asset-import-form .file-picker-shell {
+  min-width: 0;
+  width: 100%;
+}
+
+.asset-import-form .btn {
+  min-height: 52px;
+  white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+  .asset-import-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .asset-import-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .asset-import-form {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-import-form .btn,
+  .asset-import-controls > .btn {
+    width: 100%;
+  }
+}

@@ -16,6 +16,29 @@
   {% endif %}
 </section>
 
+{% if can_do('stock_assets_create') %}
+<section class="asset-import-card card">
+  <div class="asset-import-copy">
+    <span class="eyebrow">Importação XLSX</span>
+    <h2>Importar tabela de ativos</h2>
+    <p>Baixe o modelo, preencha uma linha por item e repita o mesmo código para agrupar vários itens no mesmo ativo.</p>
+    <div class="asset-import-rules">
+      <span>Produtos já cadastrados</span>
+      <span>Baixa automática do estoque</span>
+      <span>Validação de base, franquia e regional</span>
+    </div>
+  </div>
+  <div class="asset-import-controls">
+    <a class="btn ghost" href="{{ url_for('admin_assets_template') }}">Baixar tabela modelo</a>
+    <form method="post" action="{{ url_for('admin_assets_import') }}" enctype="multipart/form-data" class="asset-import-form">
+      <input type="hidden" name="return_to" value="{{ request.full_path }}">
+      <input name="spreadsheet" type="file" accept=".xlsx" required>
+      <button class="btn primary" type="submit">Importar ativos</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
 <section class="asset-stats stats-grid">
   <article class="stat-card card">
     <span>Ativos filtrados</span>
