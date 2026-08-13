@@ -3128,8 +3128,11 @@ def list_base_request_cycles(status_filter: str = "", regional: str = "", q: str
 def request_assignment_visibility_condition(viewer: User | None) -> tuple[str, list[Any]]:
     if viewer is None or viewer.is_dev:
         return "", []
+    franchise_management = user_is_franchise_management(viewer)
+    franchise_clause = "u.role = 'franchise' OR" if franchise_management else ""
     return f"""
       AND (
+            {franchise_clause}
             (
               u.role = 'base'
               AND EXISTS (SELECT 1 FROM admin_base_assignments aba_any WHERE aba_any.base_user_id = u.id)
@@ -3200,6 +3203,12 @@ def can_view_supply_request_by_assignment(supply_request: SupplyRequest | None, 
     if viewer is None or viewer.is_dev:
         return True
     requester = supply_request.user or get_user(supply_request.user_id)
+    # Gestão de Franquias enxerga todas as solicitações originadas pelo acesso
+    # padrão Franquia, independentemente do direcionamento regional. Isso altera
+    # apenas a visualização; ações continuam respeitando as permissões e a
+    # função can_approve_supply_request_by_assignment.
+    if requester is not None and requester.role == "franchise" and user_is_franchise_management(viewer):
+        return True
     if requester is not None and requester.role == "base":
         assigned_admin_ids = base_assignment_admin_ids(requester.id)
         if assigned_admin_ids:
@@ -4111,6 +4120,47 @@ def role_is_admin_like(role: str | None) -> bool:
         return True
     role_definition = get_access_role_definition(key)
     return bool(role_definition and role_definition.is_admin_like)
+
+
+def role_is_franchise_management(role: str | None) -> bool:
+    """Identifica o acesso customizado de Gestão de Franquias.
+
+    O cargo é criado pelo Dev e pode ter chaves diferentes no banco
+    (ex.: gestao_franquias, gestao_de_franquias). A identificação também
+    considera o nome exibido do tipo de acesso para manter compatibilidade
+    com cargos já criados em produção.
+    """
+    key = canonical_role_key(role, "")
+    if not key or key in STATIC_ROLE_KEYS:
+        return False
+    role_definition = get_access_role_definition(key)
+    candidates = [key]
+    if role_definition is not None:
+        candidates.extend([role_definition.role_key, role_definition.name])
+    for value in candidates:
+        normalized = normalize_header(str(value or "")).replace("_", " ").replace("-", " ")
+        tokens = set(normalized.split())
+        franchise_match = (
+            "franquia" in tokens
+            or "franquias" in tokens
+            or "franchise" in tokens
+            or "franchises" in tokens
+            or "franqu" in normalized
+        )
+        management_match = (
+            "gestao" in tokens
+            or "gestor" in tokens
+            or "gestora" in tokens
+            or "management" in tokens
+            or "manager" in tokens
+        )
+        if franchise_match and management_match:
+            return True
+    return False
+
+
+def user_is_franchise_management(user: User | None) -> bool:
+    return bool(user is not None and role_is_franchise_management(user.role))
 
 
 def default_page_keys_for_role(role: str) -> set[str]:

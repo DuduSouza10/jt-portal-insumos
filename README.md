@@ -389,3 +389,8 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - A importação valida unidade, regional, produtos e estoque antes de gravar qualquer dado.
 - O estoque de ativos é baixado automaticamente quando a importação é concluída.
 - Textos estáticos, campos, modais, mensagens e novas funcionalidades receberam traduções complementares para chinês simplificado.
+
+## v227 - Escopo da Gestão de Franquias
+- O tipo de acesso customizado "Gestão de Franquias" passa a visualizar todas as solicitações originadas por usuários do acesso padrão "Franquia".
+- A regra vale para listas de solicitações, dashboard geral, pedidos confirmados, PDFs e relatórios que reutilizam o controle de visibilidade das solicitações.
+- A ampliação é somente de visualização. Aprovar, recusar, confirmar envio ou executar outras ações continua dependendo das permissões de ação e do direcionamento configurado.
