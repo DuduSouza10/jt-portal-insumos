@@ -1128,6 +1128,40 @@ def row_to_user(row: Any | None) -> User | None:
     )
 
 
+def row_to_user_request_list(row: Any | None) -> User | None:
+    """Converte usuário para listagens sem consultar tipos de acesso no banco.
+
+    As páginas de solicitações só precisam de dados básicos do usuário. Evitar
+    normalize_user_role() aqui é importante no D1 porque cargos personalizados
+    podem disparar consultas adicionais durante a hidratação em lote.
+    """
+    if row is None:
+        return None
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    raw_role = str((row["role"] if "role" in keys else "") or "base").strip()
+    normalized_alias = normalize_header(raw_role).replace("_", " ").strip()
+    role = ROLE_KEY_ALIASES.get(normalized_alias) or raw_role.lower() or "base"
+    return User(
+        id=int(row["id"]),
+        responsible_name=(row["responsible_name"] if "responsible_name" in keys else "") or "",
+        organization_name=(row["organization_name"] if "organization_name" in keys else "") or "",
+        franchise_name=(row["franchise_name"] if "franchise_name" in keys else "") or "",
+        franchise_number=(row["franchise_number"] if "franchise_number" in keys else "") or "",
+        cnpj=(row["cnpj"] if "cnpj" in keys else "") or "",
+        username=(row["username"] if "username" in keys else "") or "",
+        email=(row["email"] if "email" in keys else "") or "",
+        password_hash=(row["password_hash"] if "password_hash" in keys else "") or "",
+        role=role,
+        status="approved" if str((row["status"] if "status" in keys else "") or "").strip().lower() == "approved" else "rejected",
+        regional=normalize_user_regional((row["regional"] if "regional" in keys else "") or ""),
+        allow_cross_regional_service=bool(row["allow_cross_regional_service"]) if "allow_cross_regional_service" in keys else False,
+        created_at=parse_dt(row["created_at"] if "created_at" in keys else None) or datetime.utcnow(),
+        updated_at=parse_dt(row["updated_at"] if "updated_at" in keys else None),
+        page_permissions_configured=bool(row["page_permissions_configured"]) if "page_permissions_configured" in keys else False,
+        action_permissions_configured=bool(row["action_permissions_configured"]) if "action_permissions_configured" in keys else False,
+    )
+
+
 def default_category_emoji(category: str) -> str:
     normalized = "".join(
         char
@@ -1281,7 +1315,7 @@ def row_to_item(row: Any | None, load_product: bool = True) -> RequestItem | Non
     return item
 
 
-def row_to_supply_request(row: Any | None, include_user: bool = True, include_items: bool = True, include_actions: bool = False) -> SupplyRequest | None:
+def row_to_supply_request(row: Any | None, include_user: bool = True, include_items: bool = True, include_actions: bool = False, include_related_users: bool = True) -> SupplyRequest | None:
     if row is None:
         return None
     row_keys = set(row.keys()) if hasattr(row, "keys") else set()
@@ -1303,9 +1337,9 @@ def row_to_supply_request(row: Any | None, include_user: bool = True, include_it
     )
     if include_user:
         req.user = get_user(req.user_id)
-    if req.reviewed_by_id is not None:
+    if include_related_users and req.reviewed_by_id is not None:
         req.reviewed_by = get_user(req.reviewed_by_id)
-    if req.shipped_by_id is not None:
+    if include_related_users and req.shipped_by_id is not None:
         req.shipped_by = get_user(req.shipped_by_id)
     if include_items:
         req.items = get_request_items(req.id)
@@ -2579,7 +2613,7 @@ def permanently_delete_supply_request(conn: Any, request_id: int) -> bool:
 def permanently_delete_empty_supply_requests(conn: Any, request_ids: list[int]) -> int:
     """Remove solicitações que ficaram sem itens depois da exclusão de produto."""
     empty_ids: list[int] = []
-    for chunk in chunked_ids(request_ids):
+    for chunk in chunked_ids(request_ids, chunk_size=25):
         placeholders = ",".join("?" for _ in chunk)
         rows = conn.execute(
             f"""
@@ -3352,7 +3386,20 @@ def list_supply_requests(status: str = "", user_id: int | None = None, limit: in
         params.append(limit)
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return [req for row in rows if (req := row_to_supply_request(row)) is not None]
+        requests_list = [
+            req
+            for row in rows
+            if (
+                req := row_to_supply_request(
+                    row,
+                    include_user=False,
+                    include_items=False,
+                    include_related_users=False,
+                )
+            ) is not None
+        ]
+        hydrate_supply_requests_page_batch(conn, requests_list)
+    return requests_list
 
 
 def build_pagination(endpoint: str, page: int, per_page: int, total: int, shown_count: int, extra_args: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -3404,6 +3451,72 @@ def build_pagination(endpoint: str, page: int, per_page: int, total: int, shown_
     }
 
 
+def hydrate_supply_requests_page_batch(conn: Any, requests_list: list[SupplyRequest]) -> None:
+    """Carrega usuários e itens de uma página de solicitações em lote.
+
+    Evita o padrão N+1 que, no Cloudflare D1, transformava uma página com 25
+    solicitações em dezenas/centenas de chamadas HTTP separadas. Os itens usam
+    apenas o snapshot salvo na solicitação, então não é necessário carregar cada
+    produto individualmente para as listagens.
+    """
+    if not requests_list:
+        return
+
+    request_ids = [req.id for req in requests_list]
+    related_user_ids: list[int] = []
+    for req in requests_list:
+        related_user_ids.append(req.user_id)
+        if req.reviewed_by_id is not None:
+            related_user_ids.append(req.reviewed_by_id)
+        if req.shipped_by_id is not None:
+            related_user_ids.append(req.shipped_by_id)
+
+    users_by_id: dict[int, User] = {}
+    for chunk in chunked_ids(related_user_ids, chunk_size=25):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"SELECT * FROM users WHERE id IN ({placeholders})",
+            chunk,
+        ).fetchall()
+        for row in rows:
+            user = row_to_user_request_list(row)
+            if user is not None:
+                users_by_id[user.id] = user
+
+    items_by_request_id: dict[int, list[RequestItem]] = {request_id: [] for request_id in request_ids}
+    for chunk in chunked_ids(request_ids):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT id, request_id, product_id, product_name_snapshot, quantity, price_cents_snapshot
+              FROM request_items
+             WHERE request_id IN ({placeholders})
+             ORDER BY request_id, id
+            """,
+            chunk,
+        ).fetchall()
+        for row in rows:
+            item = row_to_item(row, load_product=False)
+            if item is not None:
+                items_by_request_id.setdefault(item.request_id, []).append(item)
+
+    for req in requests_list:
+        req.user = users_by_id.get(req.user_id)
+        if req.user is None:
+            # Evita que um pedido histórico sem usuário correspondente derrube
+            # toda a página administrativa.
+            req.user = User(
+                id=req.user_id,
+                responsible_name="Usuário não encontrado",
+                organization_name="Cadastro removido",
+                franchise_name="", franchise_number="", cnpj="",
+                username="", email="", password_hash="", role="base", status="rejected",
+            )
+        req.reviewed_by = users_by_id.get(req.reviewed_by_id) if req.reviewed_by_id is not None else None
+        req.shipped_by = users_by_id.get(req.shipped_by_id) if req.shipped_by_id is not None else None
+        req.items = items_by_request_id.get(req.id, [])
+
+
 def list_supply_requests_page(status: str = "", user_id: int | None = None, page: int | None = None, limit: int | None = None, endpoint: str = "my_requests", extra_args: dict[str, Any] | None = None, filters: dict[str, Any] | None = None, viewer: User | None = None, apply_assignment_visibility: bool = False) -> tuple[list[SupplyRequest], dict[str, Any]]:
     per_page = limit if limit is not None else list_page_limit(default=DEFAULT_TABLE_PAGE_SIZE, maximum=500)
     current_page = bounded_int(page if page is not None else request.args.get("page"), 1, 1, 100000)
@@ -3429,7 +3542,20 @@ def list_supply_requests_page(status: str = "", user_id: int | None = None, page
             [*params, per_page, offset],
         ).fetchall()
 
-    requests_list = [req for row in rows if (req := row_to_supply_request(row)) is not None]
+        requests_list = [
+            req
+            for row in rows
+            if (
+                req := row_to_supply_request(
+                    row,
+                    include_user=False,
+                    include_items=False,
+                    include_related_users=False,
+                )
+            ) is not None
+        ]
+        hydrate_supply_requests_page_batch(conn, requests_list)
+
     pagination = build_pagination(
         endpoint=endpoint,
         page=current_page,

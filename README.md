@@ -1,3 +1,16 @@
+# Update v228
+
+## Performance — Solicitações e Pedidos Processados
+
+- Eliminado o carregamento N+1 nas listagens de solicitações.
+- Usuários relacionados (solicitante, aprovador e responsável pelo envio) agora são buscados em lote.
+- Itens das solicitações agora são buscados em lote e usam os snapshots já gravados, sem consultar cada produto individualmente.
+- Uma página de 25 solicitações deixa de gerar dezenas/centenas de consultas ao Cloudflare D1 e passa a usar poucas consultas em lote.
+- O adaptador do Cloudflare D1 agora reutiliza a mesma sessão HTTP durante a operação, evitando novos handshakes TLS entre consultas da mesma página.
+- A otimização também beneficia Minhas solicitações, Dashboard Geral e outras listagens que usam o mesmo carregador paginado.
+
+---
+
 # Update v223
 
 ## Correções v223 — confirmação de envio e alinhamento de status

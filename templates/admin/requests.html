@@ -90,9 +90,9 @@
       {% for req in requests_list %}
       <tr>
         <td data-label="#">#{{ req.id }}</td>
-        <td data-label="Unidade">{{ req.user.organization_name }}<br><small>{{ req.user.responsible_name }}</small></td>
+        <td data-label="Unidade">{{ req.user.organization_name if req.user else "Cadastro removido" }}<br><small>{{ req.user.responsible_name if req.user else "Usuário não encontrado" }}</small></td>
         <td data-label="Regional"><span class="regional-pill">{{ request_regional_label(supply_request_regional(req)) }}</span></td>
-        <td data-label="Tipo">{{ 'Base' if req.user.role == 'base' else ('Franquia' if req.user.role == 'franchise' else 'Admin') }}</td>
+        <td data-label="Tipo">{{ 'Base' if req.user and req.user.role == 'base' else ('Franquia' if req.user and req.user.role == 'franchise' else 'Admin') }}</td>
         <td data-label="Status"><span class="status {{ req.status }}">{{ status_label(req.status) }}</span></td>
         <td data-label="Itens">{{ req.items|length }}</td>
         <td data-label="Total">{{ format_brl(req.total_cents) }}</td>
