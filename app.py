@@ -5396,6 +5396,43 @@ def get_active_product_request_block(user_id: int, product_id: int, conn: Any | 
     return row_to_product_request_block(row)
 
 
+def active_product_request_blocks_for_user(
+    conn: Any,
+    user_id: int,
+    product_ids: list[int] | set[int] | tuple[int, ...],
+) -> dict[int, ProductRequestBlock]:
+    """Carrega bloqueios ativos do catálogo em lote.
+
+    O catálogo pode listar dezenas/centenas de produtos. Consultar um bloqueio
+    por produto no D1 gera N+1 chamadas HTTP e pode estourar o timeout da rota,
+    fazendo o catálogo inteiro desaparecer para alguns usuários.
+    """
+    ids = sorted({int(value) for value in product_ids if int(value) > 0})
+    if not ids:
+        return {}
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"""
+        SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
+          FROM product_request_blocks prb
+          LEFT JOIN products p ON p.id = prb.product_id
+          LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
+         WHERE prb.user_id = ?
+           AND prb.product_id IN ({placeholders})
+           AND prb.revoked_at IS NULL
+           AND prb.blocked_until > ?
+           AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped'))
+        """,
+        [int(user_id), *ids, now_iso()],
+    ).fetchall()
+    result: dict[int, ProductRequestBlock] = {}
+    for row in rows:
+        block = row_to_product_request_block(row)
+        if block is not None:
+            result[int(block.product_id)] = block
+    return result
+
+
 def list_product_request_blocks_for_user(user_id: int, conn: Any | None = None) -> list[ProductRequestBlock]:
     sql = """
         SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
@@ -5797,11 +5834,18 @@ def list_product_categories(user: User | None = None, stock_tag: str = "") -> li
     return sorted(categories.values(), key=lambda item: item["name"].casefold())
 
 
-def product_to_api(product: Product, user: User) -> dict[str, Any]:
+def product_to_api(
+    product: Product,
+    user: User,
+    *,
+    active_block: ProductRequestBlock | None = None,
+    block_already_resolved: bool = False,
+) -> dict[str, Any]:
     show_stock = user.is_admin
     show_price = user.is_admin or user.role == "franchise"
     limit = product_limit_for(product, user)
-    active_block = None if user.is_admin else get_active_product_request_block(user.id, product.id)
+    if not block_already_resolved and not user.is_admin:
+        active_block = get_active_product_request_block(user.id, product.id)
     return {
         "id": product.id,
         "name": product.name,
@@ -8893,20 +8937,40 @@ def api_products():
     # elimina divergencias entre dispositivos/usuarios de cadastros antigos.
     sql = "SELECT * FROM products WHERE " + " AND ".join(clauses) + " ORDER BY name COLLATE NOCASE ASC LIMIT ?"
     params.append(max(limit, 250 if sort == "stock_desc" else limit))
+    regional_totals: dict[int, int] | None = None
+    active_blocks: dict[int, ProductRequestBlock] = {}
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
         products = [product for row in rows if (product := row_to_product(row)) is not None]
+        product_ids = [product.id for product in products]
         regionals = catalog_regionals_for_user(user)
-        regional_totals = regional_stock_totals_for_products(conn, [product.id for product in products], regionals)
+
+        try:
+            regional_totals = regional_stock_totals_for_products(conn, product_ids, regionals)
+        except Exception as exc:
+            # Falha de leitura do saldo nunca deve apagar o catálogo inteiro.
+            # O envio continua validando o estoque no backend antes de gravar.
+            print(f"[CATALOGO] Falha ao carregar estoque regional para usuario {user.id}: {type(exc).__name__}: {exc}")
+            regional_totals = None
+
+        if not user.is_admin:
+            try:
+                active_blocks = active_product_request_blocks_for_user(conn, user.id, product_ids)
+            except Exception as exc:
+                # Evita N+1/timeout ou schema legado derrubar todos os produtos.
+                # A validação da solicitação continua sendo feita novamente no POST.
+                print(f"[CATALOGO] Falha ao carregar bloqueios em lote para usuario {user.id}: {type(exc).__name__}: {exc}")
+                active_blocks = {}
 
     for product in products:
         # Para o catalogo, o saldo apresentado/considerado e o saldo da(s)
         # regional(is) do usuario. Base continua vendo todos os itens, mesmo sem
-        # saldo, conforme a regra do portal.
-        if regionals:
+        # saldo, conforme a regra do portal. Só substitui o saldo quando a leitura
+        # regional foi concluída com sucesso.
+        if regionals and regional_totals is not None:
             product.stock_quantity = regional_totals.get(product.id, 0)
 
-    if not user.is_admin and user.role != "base":
+    if not user.is_admin and user.role != "base" and regional_totals is not None:
         products = [product for product in products if int(product.stock_quantity or 0) > 0]
 
     if sort == "stock_desc":
@@ -8919,7 +8983,15 @@ def api_products():
         products.sort(key=lambda product: (product.name or "").casefold())
     products = products[:limit]
 
-    response = jsonify([product_to_api(product, user) for product in products])
+    response = jsonify([
+        product_to_api(
+            product,
+            user,
+            active_block=active_blocks.get(product.id),
+            block_already_resolved=True,
+        )
+        for product in products
+    ])
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     return response
