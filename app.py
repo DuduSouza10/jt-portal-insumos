@@ -2869,27 +2869,68 @@ def regional_stock_totals_for_products(
     product_ids: list[int] | set[int] | tuple[int, ...],
     regionals: list[str] | set[str] | tuple[str, ...],
 ) -> dict[int, int]:
-    ids = sorted({int(value) for value in product_ids if int(value) > 0})
-    normalized_regionals = [
-        option["value"]
-        for option in REQUEST_REGIONAL_OPTIONS
-        if option["value"] in {normalize_request_regional(value) for value in regionals}
-    ]
+    """Retorna o saldo regional agregado dos produtos sem N+1.
+
+    No Cloudflare D1, montar um ``IN`` com todos os IDs do catalogo pode
+    ultrapassar limites de parametros/payload e derrubar /api/products.
+    A consulta principal agora filtra somente pelas regionais (no maximo MG e
+    SPN) e agrega por produto. Os IDs desejados sao filtrados em Python.
+
+    Bancos antigos podem ainda conter SP ou SN; esses aliases sao aceitos como
+    SPN. Se o GROUP BY falhar por alguma particularidade do D1, fazemos uma
+    segunda leitura simples da tabela e agregamos em Python.
+    """
+    ids = {int(value) for value in product_ids if int(value) > 0}
+    normalized_regionals = {
+        normalize_request_regional(value)
+        for value in regionals
+        if normalize_request_regional(value)
+    }
     if not ids or not normalized_regionals:
         return {}
-    id_placeholders = ",".join("?" for _ in ids)
-    regional_placeholders = ",".join("?" for _ in normalized_regionals)
+
+    regional_aliases: set[str] = set()
+    if "MG" in normalized_regionals:
+        regional_aliases.add("MG")
+    if "SPN" in normalized_regionals:
+        regional_aliases.update({"SPN", "SP", "SN"})
+
+    aliases = sorted(regional_aliases)
+    placeholders = ",".join("?" for _ in aliases)
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT product_id, COALESCE(SUM(quantity), 0) AS total
+              FROM regional_stock_balances
+             WHERE UPPER(TRIM(COALESCE(regional, ''))) IN ({placeholders})
+               AND quantity > 0
+             GROUP BY product_id
+            """,
+            aliases,
+        ).fetchall()
+        return {
+            int(row["product_id"]): int(row["total"] or 0)
+            for row in rows
+            if int(row["product_id"] or 0) in ids and int(row["total"] or 0) > 0
+        }
+    except Exception as primary_exc:
+        print(f"[ESTOQUE REGIONAL] Falha na consulta agregada: {type(primary_exc).__name__}: {primary_exc}")
+
+    # Fallback deliberadamente simples para D1: sem IN de IDs, sem GROUP BY e
+    # sem funcoes SQL. Isso prioriza disponibilidade do catalogo.
     rows = conn.execute(
-        f"""
-        SELECT product_id, COALESCE(SUM(quantity), 0) AS total
-          FROM regional_stock_balances
-         WHERE product_id IN ({id_placeholders})
-           AND {normalized_stock_regional_sql('regional')} IN ({regional_placeholders})
-         GROUP BY product_id
-        """,
-        [*ids, *normalized_regionals],
+        "SELECT product_id, regional, quantity FROM regional_stock_balances WHERE quantity > 0"
     ).fetchall()
-    return {int(row["product_id"]): int(row["total"] or 0) for row in rows}
+    totals: dict[int, int] = {}
+    for row in rows:
+        product_id = int(row["product_id"] or 0)
+        if product_id not in ids:
+            continue
+        row_regional = normalize_request_regional(row["regional"] if "regional" in row.keys() else "")
+        if row_regional not in normalized_regionals:
+            continue
+        totals[product_id] = totals.get(product_id, 0) + int(row["quantity"] or 0)
+    return {product_id: total for product_id, total in totals.items() if total > 0}
 
 
 def selected_operational_regional_for_user(user: User | None, requested: Any = "", *, default_first: bool = True) -> str:
@@ -5401,35 +5442,33 @@ def active_product_request_blocks_for_user(
     user_id: int,
     product_ids: list[int] | set[int] | tuple[int, ...],
 ) -> dict[int, ProductRequestBlock]:
-    """Carrega bloqueios ativos do catálogo em lote.
-
-    O catálogo pode listar dezenas/centenas de produtos. Consultar um bloqueio
-    por produto no D1 gera N+1 chamadas HTTP e pode estourar o timeout da rota,
-    fazendo o catálogo inteiro desaparecer para alguns usuários.
-    """
+    """Carrega bloqueios ativos do catalogo em lotes pequenos para D1."""
     ids = sorted({int(value) for value in product_ids if int(value) > 0})
     if not ids:
         return {}
-    placeholders = ",".join("?" for _ in ids)
-    rows = conn.execute(
-        f"""
-        SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
-          FROM product_request_blocks prb
-          LEFT JOIN products p ON p.id = prb.product_id
-          LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
-         WHERE prb.user_id = ?
-           AND prb.product_id IN ({placeholders})
-           AND prb.revoked_at IS NULL
-           AND prb.blocked_until > ?
-           AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped'))
-        """,
-        [int(user_id), *ids, now_iso()],
-    ).fetchall()
     result: dict[int, ProductRequestBlock] = {}
-    for row in rows:
-        block = row_to_product_request_block(row)
-        if block is not None:
-            result[int(block.product_id)] = block
+    chunk_size = 40 if using_cloudflare_d1() else 300
+    for offset in range(0, len(ids), chunk_size):
+        chunk = ids[offset:offset + chunk_size]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"""
+            SELECT prb.*, COALESCE(p.name, '') AS product_name, COALESCE(sr.status, '') AS source_request_status
+              FROM product_request_blocks prb
+              LEFT JOIN products p ON p.id = prb.product_id
+              LEFT JOIN supply_requests sr ON sr.id = prb.created_by_request_id
+             WHERE prb.user_id = ?
+               AND prb.product_id IN ({placeholders})
+               AND prb.revoked_at IS NULL
+               AND prb.blocked_until > ?
+               AND (prb.created_by_request_id IS NULL OR sr.status IN ('pending', 'approved', 'awaiting_shipment', 'shipped'))
+            """,
+            [int(user_id), *chunk, now_iso()],
+        ).fetchall()
+        for row in rows:
+            block = row_to_product_request_block(row)
+            if block is not None:
+                result[int(block.product_id)] = block
     return result
 
 
