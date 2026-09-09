@@ -5695,7 +5695,7 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
             regional_available = 0
         if not user.is_admin and not user_regional:
             return [], "Seu usuário ainda não possui regional cadastrada."
-        if not user.is_admin and user.role != "base" and regional_available <= 0:
+        if not user.is_admin and regional_available <= 0:
             return [], f"{product.name} está sem estoque na regional {user_regional}."
         if not user.is_admin and product.internal:
             return [], f"{product.name} é um produto interno e não está disponível para solicitação."
@@ -5815,10 +5815,16 @@ def list_product_categories(user: User | None = None, stock_tag: str = "") -> li
             "SELECT id, category, category_emoji FROM products WHERE " + where_sql + " ORDER BY category COLLATE NOCASE ASC",
             params,
         ).fetchall()
-        if user is not None and not user.is_admin and user.role != "base":
+        if user is not None:
+            # O catálogo só deve oferecer categorias que tenham pelo menos um
+            # produto com saldo positivo na(s) regional(is) do usuário.
+            # Não existe exceção para Base: produto sem estoque não aparece.
             regionals = catalog_regionals_for_user(user)
-            totals = regional_stock_totals_for_products(conn, [int(row["id"]) for row in rows], regionals)
-            rows = [row for row in rows if totals.get(int(row["id"]), 0) > 0]
+            if not regionals:
+                rows = []
+            else:
+                totals = regional_stock_totals_for_products(conn, [int(row["id"]) for row in rows], regionals)
+                rows = [row for row in rows if totals.get(int(row["id"]), 0) > 0]
 
     categories: dict[str, dict[str, str]] = {}
     for row in rows:
@@ -8948,10 +8954,14 @@ def api_products():
         try:
             regional_totals = regional_stock_totals_for_products(conn, product_ids, regionals)
         except Exception as exc:
-            # Falha de leitura do saldo nunca deve apagar o catálogo inteiro.
-            # O envio continua validando o estoque no backend antes de gravar.
+            # Falha fechada: nunca use o estoque global como fallback no catálogo,
+            # pois isso faria produtos sem saldo regional aparecerem para o usuário.
             print(f"[CATALOGO] Falha ao carregar estoque regional para usuario {user.id}: {type(exc).__name__}: {exc}")
-            regional_totals = None
+            response = jsonify({"message": "Não foi possível consultar o estoque da sua regional agora."})
+            response.status_code = 503
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            return response
 
         if not user.is_admin:
             try:
@@ -8962,15 +8972,14 @@ def api_products():
                 print(f"[CATALOGO] Falha ao carregar bloqueios em lote para usuario {user.id}: {type(exc).__name__}: {exc}")
                 active_blocks = {}
 
-    for product in products:
-        # Para o catalogo, o saldo apresentado/considerado e o saldo da(s)
-        # regional(is) do usuario. Base continua vendo todos os itens, mesmo sem
-        # saldo, conforme a regra do portal. Só substitui o saldo quando a leitura
-        # regional foi concluída com sucesso.
-        if regionals and regional_totals is not None:
+    # O catálogo usa exclusivamente o saldo regional. Produto com saldo zero
+    # não aparece para nenhum usuário, inclusive Base. Isso evita exibir itens
+    # que existem no cadastro global, mas não estão disponíveis naquela regional.
+    if not regionals:
+        products = []
+    else:
+        for product in products:
             product.stock_quantity = regional_totals.get(product.id, 0)
-
-    if not user.is_admin and user.role != "base" and regional_totals is not None:
         products = [product for product in products if int(product.stock_quantity or 0) > 0]
 
     if sort == "stock_desc":
