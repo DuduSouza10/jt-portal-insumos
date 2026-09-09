@@ -1484,9 +1484,13 @@ def is_special_asset_regional(regional: str) -> bool:
 
 def asset_regional_for_base(base: str) -> str:
     normalized = re.sub(r"\s+", " ", (base or "").strip().upper())
-    if "-MG" in normalized or normalized.endswith(" MG"):
+    if not normalized:
+        return ""
+    # Os cadastros antigos usam sufixos diferentes para Sao Paulo Norte
+    # (SP, SPN e SN). Trate todos como SPN para nao esconder catalogo/estoque.
+    if re.search(r"(?:^|[\s_\-/])MG(?:$|[\s_\-/])", normalized):
         return "MG"
-    if "-SP" in normalized or normalized.endswith(" SP"):
+    if re.search(r"(?:^|[\s_\-/])(?:SPN|SP|SN)(?:$|[\s_\-/])", normalized):
         return "SPN"
     return ""
 
@@ -2408,6 +2412,31 @@ def ensure_request_runtime_schema(conn: Any | None = None) -> None:
             "WHERE LOWER(TRIM(COALESCE(status, ''))) <> 'approved'"
         )
 
+        # Normaliza saldos antigos que usavam SP/SN em vez de SPN. Se ja existir
+        # uma linha SPN para o mesmo responsavel/produto, soma os saldos antes de
+        # remover a linha legada para preservar todo o estoque.
+        legacy_rows = active_conn.execute(
+            "SELECT id, regional, stock_owner_user_id, product_id, quantity FROM regional_stock_balances "
+            "WHERE UPPER(TRIM(COALESCE(regional, ''))) IN ('SP', 'SN')"
+        ).fetchall()
+        for legacy_row in legacy_rows:
+            existing = active_conn.execute(
+                "SELECT id, quantity FROM regional_stock_balances "
+                "WHERE regional = 'SPN' AND stock_owner_user_id = ? AND product_id = ? AND id <> ? LIMIT 1",
+                (int(legacy_row["stock_owner_user_id"]), int(legacy_row["product_id"]), int(legacy_row["id"])),
+            ).fetchone()
+            if existing is not None:
+                active_conn.execute(
+                    "UPDATE regional_stock_balances SET quantity = ?, updated_at = ? WHERE id = ?",
+                    (int(existing["quantity"] or 0) + int(legacy_row["quantity"] or 0), now_iso(), int(existing["id"])),
+                )
+                active_conn.execute("DELETE FROM regional_stock_balances WHERE id = ?", (int(legacy_row["id"]),))
+            else:
+                active_conn.execute(
+                    "UPDATE regional_stock_balances SET regional = 'SPN', updated_at = ? WHERE id = ?",
+                    (now_iso(), int(legacy_row["id"])),
+                )
+
         active_conn.execute("CREATE INDEX IF NOT EXISTS idx_request_action_logs_request ON request_action_logs(request_id, created_at DESC)")
         active_conn.execute("CREATE INDEX IF NOT EXISTS idx_product_request_blocks_user_product ON product_request_blocks(user_id, product_id)")
         active_conn.execute("CREATE INDEX IF NOT EXISTS idx_base_request_cycles_user ON base_request_cycles(user_id)")
@@ -2797,6 +2826,70 @@ def selectable_regionals_for_user(user: User | None) -> list[str]:
     if user is None:
         return []
     return [option["value"] for option in REQUEST_REGIONAL_OPTIONS if option["value"] in user_regional_access_values(user.regional)]
+
+
+def catalog_regionals_for_user(user: User | None) -> list[str]:
+    """Regionais que podem abastecer a visualizacao do catalogo do usuario.
+
+    Para usuarios de uma unica regional, usa somente ela. Para MG/SPN, tenta
+    primeiro inferir a regional operacional pelo nome da unidade; se a unidade
+    nao tiver sufixo identificavel, consulta ambas para nao ocultar produtos que
+    possuem saldo. Cadastros legados sem o campo regional tambem usam o sufixo
+    da unidade e, em ultimo caso, ambas as regionais apenas para visualizacao.
+    """
+    if user is None:
+        return []
+    operational = request_regional_for_user(user)
+    if operational in REQUEST_REGIONAL_VALUES:
+        return [operational]
+    explicit = selectable_regionals_for_user(user)
+    if explicit:
+        return explicit
+    inferred = request_regional_for_unit_name(user.organization_name or user.franchise_name)
+    if inferred in REQUEST_REGIONAL_VALUES:
+        return [inferred]
+    # Nao derrube o catalogo inteiro por causa de um cadastro legado sem
+    # regional. A validacao do envio continua exigindo uma regional operacional.
+    return [option["value"] for option in REQUEST_REGIONAL_OPTIONS]
+
+
+def normalized_stock_regional_sql(column: str = "regional") -> str:
+    """Normaliza aliases antigos de regional dentro do SQL (SP/SN -> SPN)."""
+    safe_column = column if re.fullmatch(r"[A-Za-z0-9_.]+", column or "") else "regional"
+    return (
+        "CASE "
+        f"WHEN UPPER(REPLACE(TRIM(COALESCE({safe_column}, '')), ' ', '')) = 'MG' THEN 'MG' "
+        f"WHEN UPPER(REPLACE(TRIM(COALESCE({safe_column}, '')), ' ', '')) IN ('SP', 'SPN', 'SN') THEN 'SPN' "
+        f"ELSE UPPER(REPLACE(TRIM(COALESCE({safe_column}, '')), ' ', '')) END"
+    )
+
+
+def regional_stock_totals_for_products(
+    conn: Any,
+    product_ids: list[int] | set[int] | tuple[int, ...],
+    regionals: list[str] | set[str] | tuple[str, ...],
+) -> dict[int, int]:
+    ids = sorted({int(value) for value in product_ids if int(value) > 0})
+    normalized_regionals = [
+        option["value"]
+        for option in REQUEST_REGIONAL_OPTIONS
+        if option["value"] in {normalize_request_regional(value) for value in regionals}
+    ]
+    if not ids or not normalized_regionals:
+        return {}
+    id_placeholders = ",".join("?" for _ in ids)
+    regional_placeholders = ",".join("?" for _ in normalized_regionals)
+    rows = conn.execute(
+        f"""
+        SELECT product_id, COALESCE(SUM(quantity), 0) AS total
+          FROM regional_stock_balances
+         WHERE product_id IN ({id_placeholders})
+           AND {normalized_stock_regional_sql('regional')} IN ({regional_placeholders})
+         GROUP BY product_id
+        """,
+        [*ids, *normalized_regionals],
+    ).fetchall()
+    return {int(row["product_id"]): int(row["total"] or 0) for row in rows}
 
 
 def selected_operational_regional_for_user(user: User | None, requested: Any = "", *, default_first: bool = True) -> str:
@@ -4695,9 +4788,9 @@ def regional_stock_total_for_product(
 ) -> int:
     clauses = ["product_id = ?"]
     params: list[Any] = [int(product_id)]
-    normalized = normalize_user_regional(regional)
+    normalized = normalize_request_regional(regional)
     if normalized:
-        clauses.append("regional = ?")
+        clauses.append(f"{normalized_stock_regional_sql('regional')} = ?")
         params.append(normalized)
     if stock_owner_user_id is not None:
         clauses.append("stock_owner_user_id = ?")
@@ -5672,39 +5765,36 @@ def list_product_categories(user: User | None = None, stock_tag: str = "") -> li
     tag_filter = normalize_stock_tag_slug(stock_tag, "") if stock_tag else ""
     if user is not None:
         tag_filter = SUPPLY_STOCK_TAG
-        request_regional = request_regional_for_user(user)
-        regional_stock_clause = "stock_quantity > 0"
-        if request_regional:
-            regional_stock_clause = "EXISTS (SELECT 1 FROM regional_stock_balances rsb WHERE rsb.product_id = products.id AND rsb.regional = ? AND rsb.quantity > 0)"
-            params.append(request_regional)
         if user.role == "base":
             clauses.extend(["visible_base = 1", "COALESCE(internal, 0) = 0", "active = 1"])
         elif user.role == "franchise":
-            clauses.extend(["visible_franchise = 1", "COALESCE(internal, 0) = 0", "active = 1", regional_stock_clause])
+            clauses.extend(["visible_franchise = 1", "COALESCE(internal, 0) = 0", "active = 1"])
     if tag_filter:
         clauses.append("stock_tag = ?")
         params.append(tag_filter)
     where_sql = " AND ".join(clauses)
     with db_connect() as conn:
         rows = conn.execute(
-            """
-            SELECT TRIM(category) AS category,
-                   MAX(NULLIF(TRIM(category_emoji), '')) AS category_emoji
-             FROM products
-             WHERE """ + where_sql + """
-             GROUP BY LOWER(TRIM(category))
-             ORDER BY category COLLATE NOCASE ASC
-            """,
+            "SELECT id, category, category_emoji FROM products WHERE " + where_sql + " ORDER BY category COLLATE NOCASE ASC",
             params,
         ).fetchall()
-    return [
-        {
-            "name": str(row["category"]).strip(),
-            "emoji": clean_category_emoji(row["category_emoji"], str(row["category"])),
-        }
-        for row in rows
-        if row["category"]
-    ]
+        if user is not None and not user.is_admin and user.role != "base":
+            regionals = catalog_regionals_for_user(user)
+            totals = regional_stock_totals_for_products(conn, [int(row["id"]) for row in rows], regionals)
+            rows = [row for row in rows if totals.get(int(row["id"]), 0) > 0]
+
+    categories: dict[str, dict[str, str]] = {}
+    for row in rows:
+        name = str(row["category"] or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        if key not in categories:
+            categories[key] = {
+                "name": name,
+                "emoji": clean_category_emoji(row["category_emoji"], name),
+            }
+    return sorted(categories.values(), key=lambda item: item["name"].casefold())
 
 
 def product_to_api(product: Product, user: User) -> dict[str, Any]:
@@ -8777,54 +8867,62 @@ def api_products():
     category = request.args.get("category", "").strip()
     sort = request.args.get("sort", "name").strip().lower()
     limit = api_page_limit(default=120, maximum=250)
-    regional = request_regional_for_user(user)
-    stock_expression = "stock_quantity"
-    params: list[Any] = []
-    if regional:
-        stock_expression = "COALESCE((SELECT SUM(rsb.quantity) FROM regional_stock_balances rsb WHERE rsb.product_id = products.id AND rsb.regional = ?), 0)"
-        params.append(regional)
-    sql = f"""
-        SELECT id, name, category, category_emoji, image_name, image_key, image_content_type,
-               unit_measure, is_kit, kit_quantity, description, {stock_expression} AS stock_quantity, price_cents,
-               limit_base, limit_franchise, limit_block_days, min_order_quantity, min_stock, max_stock,
-               active, visible_base, visible_franchise, internal, catalog_archived, stock_tag, created_at, updated_at
-         FROM products
-         WHERE active = 1 AND catalog_archived = 0
-           AND stock_tag = ?
-    """
-    params.append(SUPPLY_STOCK_TAG)
+
+    clauses = [
+        "active = 1",
+        "catalog_archived = 0",
+        "stock_tag = ?",
+    ]
+    params: list[Any] = [SUPPLY_STOCK_TAG]
     if not user.is_admin:
-        if user.role != "base":
-            if regional:
-                sql += " AND " + stock_expression + " > 0"
-                params.append(regional)
-            else:
-                sql += " AND 1 = 0"
-        sql += " AND COALESCE(internal, 0) = 0"
+        clauses.append("COALESCE(internal, 0) = 0")
     if user.role == "base":
-        sql += " AND visible_base = 1"
+        clauses.append("visible_base = 1")
     elif user.role == "franchise":
-        sql += " AND visible_franchise = 1"
+        clauses.append("visible_franchise = 1")
     if q:
         like = like_term(q)
-        sql += " AND (name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)"
+        clauses.append("(name LIKE ? OR category LIKE ? OR description LIKE ? OR unit_measure LIKE ?)")
         params.extend([like, like, like, like])
     if category:
-        sql += " AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))"
+        clauses.append("LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))")
         params.append(category)
-    sort_map = {
-        "name": "name COLLATE NOCASE ASC",
-        "stock_desc": "stock_quantity DESC, name COLLATE NOCASE ASC",
-        "price_asc": "price_cents ASC, name COLLATE NOCASE ASC",
-        "price_desc": "price_cents DESC, name COLLATE NOCASE ASC",
-    }
-    sql += " ORDER BY " + sort_map.get(sort, sort_map["name"])
-    sql += " LIMIT ?"
-    params.append(limit)
+
+    # Busca os produtos primeiro e o estoque regional em UMA consulta separada.
+    # Isso evita o catalogo depender de subconsultas correlacionadas do D1 e
+    # elimina divergencias entre dispositivos/usuarios de cadastros antigos.
+    sql = "SELECT * FROM products WHERE " + " AND ".join(clauses) + " ORDER BY name COLLATE NOCASE ASC LIMIT ?"
+    params.append(max(limit, 250 if sort == "stock_desc" else limit))
     with db_connect() as conn:
         rows = conn.execute(sql, params).fetchall()
-    products = [product for row in rows if (product := row_to_product(row)) is not None]
-    return jsonify([product_to_api(product, user) for product in products])
+        products = [product for row in rows if (product := row_to_product(row)) is not None]
+        regionals = catalog_regionals_for_user(user)
+        regional_totals = regional_stock_totals_for_products(conn, [product.id for product in products], regionals)
+
+    for product in products:
+        # Para o catalogo, o saldo apresentado/considerado e o saldo da(s)
+        # regional(is) do usuario. Base continua vendo todos os itens, mesmo sem
+        # saldo, conforme a regra do portal.
+        if regionals:
+            product.stock_quantity = regional_totals.get(product.id, 0)
+
+    if not user.is_admin and user.role != "base":
+        products = [product for product in products if int(product.stock_quantity or 0) > 0]
+
+    if sort == "stock_desc":
+        products.sort(key=lambda product: (-int(product.stock_quantity or 0), (product.name or "").casefold()))
+    elif sort == "price_asc":
+        products.sort(key=lambda product: (int(product.price_cents or 0), (product.name or "").casefold()))
+    elif sort == "price_desc":
+        products.sort(key=lambda product: (-int(product.price_cents or 0), (product.name or "").casefold()))
+    else:
+        products.sort(key=lambda product: (product.name or "").casefold())
+    products = products[:limit]
+
+    response = jsonify([product_to_api(product, user) for product in products])
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 @app.get("/products/<int:product_id>/image")
