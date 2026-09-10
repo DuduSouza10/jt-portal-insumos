@@ -2933,6 +2933,119 @@ def regional_stock_totals_for_products(
     return {product_id: total for product_id, total in totals.items() if total > 0}
 
 
+def catalog_stock_totals_for_products(
+    conn: Any,
+    products: list[Any] | tuple[Any, ...],
+    regionals: list[str] | set[str] | tuple[str, ...],
+) -> dict[int, int]:
+    """Saldo realmente disponível no catálogo por regional.
+
+    O sistema passou a separar estoque por regional/responsável depois de já
+    existir estoque global em ``products.stock_quantity``. Por isso podem
+    existir produtos com saldo global legítimo que ainda não possuem uma linha
+    em ``regional_stock_balances``. Esse saldo antigo é tratado como estoque
+    legado não atribuído e continua disponível até ser consumido/migrado.
+
+    Quando há saldo regional atribuído, ele continua respeitando a regional do
+    usuário. Estoque atribuído exclusivamente a MG não aparece para SPN e vice-
+    versa. Somente a diferença ainda não atribuída é compartilhada como legado.
+
+    A consulta deliberadamente evita GROUP BY/IN grande para funcionar de forma
+    estável no Cloudflare D1. Se a tabela regional estiver temporariamente
+    indisponível, usa o saldo global apenas como fallback de disponibilidade,
+    evitando derrubar todo o catálogo.
+    """
+    product_map: dict[int, Any] = {}
+    for product in products:
+        if product is None:
+            continue
+        try:
+            product_id = int(product.id if hasattr(product, "id") else product["id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if product_id > 0:
+            product_map[product_id] = product
+    if not product_map:
+        return {}
+
+    normalized_regionals = {
+        normalize_request_regional(value)
+        for value in regionals
+        if normalize_request_regional(value)
+    }
+    if not normalized_regionals:
+        return {}
+
+    scoped: dict[int, int] = {}
+    allocated_all: dict[int, int] = {}
+    regional_read_ok = True
+    try:
+        rows = conn.execute(
+            "SELECT product_id, regional, quantity FROM regional_stock_balances WHERE quantity <> 0"
+        ).fetchall()
+        for row in rows:
+            product_id = int(row["product_id"] or 0)
+            if product_id not in product_map:
+                continue
+            quantity = max(0, int(row["quantity"] or 0))
+            if quantity <= 0:
+                continue
+            row_regional = normalize_request_regional(row["regional"] if "regional" in row.keys() else "")
+            if row_regional not in REQUEST_REGIONAL_VALUES:
+                continue
+            allocated_all[product_id] = allocated_all.get(product_id, 0) + quantity
+            if row_regional in normalized_regionals:
+                scoped[product_id] = scoped.get(product_id, 0) + quantity
+    except Exception as exc:
+        regional_read_ok = False
+        print(f"[CATALOGO] Falha ao ler saldos regionais; usando saldo global como fallback: {type(exc).__name__}: {exc}")
+
+    totals: dict[int, int] = {}
+    for product_id, product in product_map.items():
+        try:
+            raw_global_stock = product.stock_quantity if hasattr(product, "stock_quantity") else product["stock_quantity"]
+        except (KeyError, TypeError):
+            raw_global_stock = 0
+        global_stock = max(0, int(raw_global_stock or 0))
+        if not regional_read_ok:
+            if global_stock > 0:
+                totals[product_id] = global_stock
+            continue
+
+        regional_stock = max(0, scoped.get(product_id, 0))
+        allocated_stock = max(0, allocated_all.get(product_id, 0))
+        legacy_unassigned = max(0, global_stock - allocated_stock)
+        available = regional_stock + legacy_unassigned
+        if available > 0:
+            totals[product_id] = available
+    return totals
+
+
+def legacy_unassigned_stock_for_product(conn: Any, product: Product) -> int:
+    """Retorna apenas o saldo global ainda não atribuído a regional/responsável."""
+    global_stock = max(0, int(product.stock_quantity or 0))
+    if global_stock <= 0:
+        return 0
+    try:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(quantity), 0) AS total FROM regional_stock_balances WHERE product_id = ?",
+            (int(product.id),),
+        ).fetchone()
+        allocated = max(0, int(row["total"] or 0)) if row is not None else 0
+    except Exception as exc:
+        print(f"[ESTOQUE LEGADO] Falha ao calcular saldo atribuído do produto {product.id}: {type(exc).__name__}: {exc}")
+        allocated = 0
+    return max(0, global_stock - allocated)
+
+
+def available_stock_for_product_and_regional(conn: Any, product: Product, regional: str) -> int:
+    normalized = normalize_request_regional(regional)
+    if not normalized:
+        return 0
+    totals = catalog_stock_totals_for_products(conn, [product], [normalized])
+    return max(0, int(totals.get(int(product.id), 0)))
+
+
 def selected_operational_regional_for_user(user: User | None, requested: Any = "", *, default_first: bool = True) -> str:
     allowed = selectable_regionals_for_user(user)
     requested_regional = normalize_request_regional(requested)
@@ -5725,9 +5838,9 @@ def validate_items_for_user(items_payload: Any, user: User) -> tuple[list[tuple[
         user_regional = request_regional_for_user(user)
         if user_regional:
             with db_connect() as stock_conn:
-                regional_available = regional_stock_total_for_product(
+                regional_available = available_stock_for_product_and_regional(
                     stock_conn,
-                    product.id,
+                    product,
                     user_regional,
                 )
         else:
@@ -5851,19 +5964,20 @@ def list_product_categories(user: User | None = None, stock_tag: str = "") -> li
     where_sql = " AND ".join(clauses)
     with db_connect() as conn:
         rows = conn.execute(
-            "SELECT id, category, category_emoji FROM products WHERE " + where_sql + " ORDER BY category COLLATE NOCASE ASC",
+            "SELECT id, category, category_emoji, stock_quantity FROM products WHERE " + where_sql + " ORDER BY category COLLATE NOCASE ASC",
             params,
         ).fetchall()
         if user is not None:
-            # O catálogo só deve oferecer categorias que tenham pelo menos um
-            # produto com saldo positivo na(s) regional(is) do usuário.
-            # Não existe exceção para Base: produto sem estoque não aparece.
+            # Só oferece categorias que tenham produto realmente disponível.
+            # Saldo legado ainda não atribuído a uma regional também conta,
+            # preservando o estoque existente antes da separação MG/SPN.
             regionals = catalog_regionals_for_user(user)
             if not regionals:
                 rows = []
             else:
-                totals = regional_stock_totals_for_products(conn, [int(row["id"]) for row in rows], regionals)
-                rows = [row for row in rows if totals.get(int(row["id"]), 0) > 0]
+                row_by_id = {int(row["id"]): row for row in rows}
+                totals = catalog_stock_totals_for_products(conn, rows, regionals)
+                rows = [row_by_id[product_id] for product_id in row_by_id if totals.get(product_id, 0) > 0]
 
     categories: dict[str, dict[str, str]] = {}
     for row in rows:
@@ -8990,17 +9104,10 @@ def api_products():
         product_ids = [product.id for product in products]
         regionals = catalog_regionals_for_user(user)
 
-        try:
-            regional_totals = regional_stock_totals_for_products(conn, product_ids, regionals)
-        except Exception as exc:
-            # Falha fechada: nunca use o estoque global como fallback no catálogo,
-            # pois isso faria produtos sem saldo regional aparecerem para o usuário.
-            print(f"[CATALOGO] Falha ao carregar estoque regional para usuario {user.id}: {type(exc).__name__}: {exc}")
-            response = jsonify({"message": "Não foi possível consultar o estoque da sua regional agora."})
-            response.status_code = 503
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-            response.headers["Pragma"] = "no-cache"
-            return response
+        # Usa estoque regional atribuído + eventual saldo legado ainda não
+        # distribuído. Assim produtos com estoque real não somem do catálogo
+        # apenas porque foram cadastrados antes da separação MG/SPN.
+        regional_totals = catalog_stock_totals_for_products(conn, products, regionals)
 
         if not user.is_admin:
             try:
@@ -12715,8 +12822,11 @@ def admin_request_approve(request_id: int):
             owner_stock = get_regional_stock_quantity(check_conn, item.product_id, current.id, regional)
             if product is None or not product.active:
                 insufficient.append(item.product_name_snapshot)
-            elif item.quantity > owner_stock:
-                insufficient.append(f"{product.name} (solicitado {item.quantity}, seu estoque {owner_stock})")
+            else:
+                legacy_stock = legacy_unassigned_stock_for_product(check_conn, product)
+                available_to_owner = owner_stock + legacy_stock
+                if item.quantity > available_to_owner:
+                    insufficient.append(f"{product.name} (solicitado {item.quantity}, disponível {available_to_owner})")
 
     if insufficient:
         flash("Estoque individual insuficiente para aprovar: " + "; ".join(insufficient), "danger")
@@ -12729,10 +12839,26 @@ def admin_request_approve(request_id: int):
             product = row_to_product(product_row)
             if product is None:
                 raise ValueError(f"Produto #{item.product_id} não encontrado.")
-            owner_before, owner_after = apply_regional_stock_delta(conn, item.product_id, current.id, regional, -item.quantity)
+            owner_before = get_regional_stock_quantity(conn, item.product_id, current.id, regional)
+            legacy_available = legacy_unassigned_stock_for_product(conn, product)
+            owner_consumed = min(int(item.quantity), max(0, int(owner_before)))
+            legacy_consumed = max(0, int(item.quantity) - owner_consumed)
+            if legacy_consumed > legacy_available:
+                raise ValueError(f"Estoque insuficiente para {product.name}.")
+
+            if owner_consumed > 0:
+                _, owner_after = apply_regional_stock_delta(
+                    conn, item.product_id, current.id, regional, -owner_consumed
+                )
+            else:
+                owner_after = owner_before
+
             global_before = int(product.stock_quantity or 0)
             global_after = max(0, global_before - item.quantity)
             conn.execute("UPDATE products SET stock_quantity = ?, updated_at = ? WHERE id = ?", (global_after, now_iso(), item.product_id))
+            movement_note = f"Solicitação #{request_id} aprovada para {supply_request.user.organization_name if supply_request.user else 'unidade'}."
+            if legacy_consumed > 0:
+                movement_note += f" {legacy_consumed} unidade(s) vieram do estoque legado ainda não atribuído."
             record_stock_movement(
                 conn,
                 product_id=item.product_id,
@@ -12742,9 +12868,9 @@ def admin_request_approve(request_id: int):
                 regional=regional,
                 movement_type="request_approved",
                 quantity_delta=-item.quantity,
-                stock_before=owner_before,
+                stock_before=owner_before + legacy_consumed,
                 stock_after=owner_after,
-                note=f"Solicitação #{request_id} aprovada para {supply_request.user.organization_name if supply_request.user else 'unidade'}.",
+                note=movement_note,
             )
         conn.execute(
             """

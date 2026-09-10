@@ -407,3 +407,11 @@ MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
 - O tipo de acesso customizado "Gestão de Franquias" passa a visualizar todas as solicitações originadas por usuários do acesso padrão "Franquia".
 - A regra vale para listas de solicitações, dashboard geral, pedidos confirmados, PDFs e relatórios que reutilizam o controle de visibilidade das solicitações.
 - A ampliação é somente de visualização. Aprovar, recusar, confirmar envio ou executar outras ações continua dependendo das permissões de ação e do direcionamento configurado.
+
+## v234 - Compatibilidade de estoque legado no catálogo
+
+- Catálogo usa saldo regional atribuído e também a diferença de estoque global ainda não atribuída a regional/responsável.
+- Produtos com estoque real anterior à separação MG/SPN não desaparecem.
+- Produto com estoque global e regional zerados continua oculto.
+- Estoque já atribuído somente a MG não é exibido para SPN e vice-versa.
+- Aprovação pode consumir o saldo legado não atribuído quando o estoque individual do aprovador não for suficiente, mantendo a baixa global e o histórico.
