@@ -8306,7 +8306,15 @@ def list_products_for_material_entry_options(
     regional: str = "",
     stock_owner_user_id: int | None = None,
 ) -> list[Product]:
+    """Lista produtos para a tela de entrada sem fazer uma consulta D1 por produto.
+
+    Antes, cada produto disparava get_regional_stock_quantity(), o que no
+    Cloudflare D1 podia gerar centenas de chamadas HTTP e estourar o timeout da
+    rota /admin/material-entries. Agora os saldos do responsável/regional são
+    carregados em uma única consulta e aplicados em memória.
+    """
     normalized = normalize_user_regional(regional)
+    owner_id = int(stock_owner_user_id) if stock_owner_user_id is not None else None
     with db_connect() as conn:
         rows = conn.execute(
             """
@@ -8321,9 +8329,47 @@ def list_products_for_material_entry_options(
             (SUPPLY_STOCK_TAG, bounded_int(limit, 1200, 50, 3000)),
         ).fetchall()
         products = [product for row in rows if (product := row_to_product(row)) is not None]
-        if normalized and stock_owner_user_id is not None:
+
+        if normalized and owner_id is not None and products:
+            stock_by_product: dict[int, int] = {}
+            try:
+                stock_rows = conn.execute(
+                    """
+                    SELECT product_id, regional, quantity
+                      FROM regional_stock_balances
+                     WHERE stock_owner_user_id = ?
+                       AND quantity <> 0
+                    """,
+                    (owner_id,),
+                ).fetchall()
+                for stock_row in stock_rows:
+                    row_regional = normalize_user_regional(stock_row["regional"] if "regional" in stock_row.keys() else "")
+                    # Compatibilidade com saldos antigos gravados como SP/SN.
+                    if normalized == USER_REGIONAL_SPN:
+                        raw_regional = str(stock_row["regional"] if "regional" in stock_row.keys() else "").strip().upper()
+                        regional_matches = row_regional == USER_REGIONAL_SPN or raw_regional in {"SP", "SN", "SPN"}
+                    else:
+                        regional_matches = row_regional == normalized
+                    if not regional_matches:
+                        continue
+                    product_id = int(stock_row["product_id"] or 0)
+                    if product_id <= 0:
+                        continue
+                    stock_by_product[product_id] = stock_by_product.get(product_id, 0) + max(0, int(stock_row["quantity"] or 0))
+            except Exception as exc:
+                app.logger.exception(
+                    "Falha ao carregar estoque em lote na entrada de materiais; exibindo a tela com saldo zero",
+                    exc_info=exc,
+                )
+                # Se o deploy pegou um banco anterior às colunas de estoque
+                # regional, tenta reparar o schema para a próxima requisição.
+                try:
+                    ensure_request_runtime_schema()
+                except Exception:
+                    app.logger.exception("Falha ao reparar schema da entrada de materiais")
+
             for product in products:
-                product.stock_quantity = get_regional_stock_quantity(conn, product.id, int(stock_owner_user_id), normalized)
+                product.stock_quantity = int(stock_by_product.get(int(product.id), 0))
     return products
 
 
@@ -11816,7 +11862,13 @@ def admin_material_entries():
         flash("Seu tipo de acesso não pode acessar entrada de materiais.", "warning")
         return redirect(url_for("admin_stock"))
     current = require_current_user()
-    available_stock_regionals = stock_regionals_for_user(current)
+    try:
+        available_stock_regionals = stock_regionals_for_user(current)
+    except Exception as exc:
+        app.logger.exception("Falha ao resolver regionais da entrada de materiais", exc_info=exc)
+        # Não derruba a página por falha momentânea no D1. Usa apenas as
+        # regionais explicitamente liberadas no cadastro do usuário.
+        available_stock_regionals = selectable_regionals_for_user(current)
     requested_stock_regional = request.form.get("regional", "") if request.method == "POST" else request.args.get("regional", "")
     stock_regional = normalize_request_regional(requested_stock_regional)
     if stock_regional not in available_stock_regionals:
@@ -11895,8 +11947,36 @@ def admin_material_entries():
             app.logger.exception("Falha ao registrar entrada de materiais")
             flash(f"Não consegui registrar a entrada. Erro: {type(exc).__name__}.", "danger")
         return redirect(url_for("admin_material_entries", regional=stock_regional))
-    entries = list_material_entries(limit=DEFAULT_TABLE_PAGE_SIZE, regional=stock_regional, stock_owner_user_id=current.id)
-    material_product_options = list_products_for_material_entry_options(regional=stock_regional, stock_owner_user_id=current.id)
+    # Carregamentos da tela são independentes. Uma falha de histórico ou de
+    # estoque não deve resultar em Internal Server Error na página inteira.
+    try:
+        entries = list_material_entries(
+            limit=DEFAULT_TABLE_PAGE_SIZE,
+            regional=stock_regional,
+            stock_owner_user_id=current.id,
+        )
+    except Exception as exc:
+        app.logger.exception("Falha ao carregar histórico de entrada de materiais", exc_info=exc)
+        entries = []
+        try:
+            ensure_request_runtime_schema()
+        except Exception:
+            app.logger.exception("Falha ao reparar schema do histórico de entrada de materiais")
+
+    try:
+        material_product_options = list_products_for_material_entry_options(
+            regional=stock_regional,
+            stock_owner_user_id=current.id,
+        )
+    except Exception as exc:
+        app.logger.exception("Falha ao carregar produtos da entrada de materiais", exc_info=exc)
+        material_product_options = []
+        try:
+            ensure_request_runtime_schema()
+        except Exception:
+            app.logger.exception("Falha ao reparar schema dos produtos da entrada de materiais")
+        flash("A página abriu, mas não foi possível carregar a lista de produtos. Atualize para tentar novamente.", "warning")
+
     return render_template(
         "admin/material_entries.html",
         entries=entries,
