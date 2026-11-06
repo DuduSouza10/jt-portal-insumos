@@ -5,6 +5,8 @@
   let isApplying = false;
   const zh = {
 
+  "Administração": "管理后台",
+  "Ir para o conteúdo": "跳到内容",
   "Troca de Insumos": "耗材更换",
   "Troca de Insumos - Bases": "基地耗材更换",
   "Troca de Insumos - ciclo de 3 meses": "耗材更换 - 三个月周期",
@@ -2663,6 +2665,15 @@
       '.stock-suggestion-item strong',
       '.stock-suggestion-item span',
       '.hero-card h2',
+      '.page-head h1',
+      '.page-head p',
+      '.guest-head h1',
+      '.guest-head p',
+      '.sb-section-label',
+      '.sb-nav a span',
+      '.sb-nav button span.sb-label',
+      '.sb-sub a',
+      '.sb-user small',
       '.hero-card p',
       '.hero-card .eyebrow',
       '.auth-card label',
@@ -2672,6 +2683,10 @@
       '.auth-card span',
       '.public-actions a',
       '.dev-credit strong',
+      '.sb-credit strong',
+      '.sb-credit small',
+      '.guest-name',
+      '.guest-sub',
       '.dev-credit small',
       '.language-toggle-text',
       '.theme-toggle-text'

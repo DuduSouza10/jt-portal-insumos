@@ -1,3 +1,19 @@
+{% set ICONS = {
+  'package': '<path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  'list': '<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  'repeat': '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+  'grid': '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+  'chart': '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  'bag': '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  'warehouse': '<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12M6 14h12"/>',
+  'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  'inbox': '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  'chevron': '<path d="m6 9 6 6 6-6"/>',
+  'logout': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  'menu': '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  'shield': '<path d="M12 2.75 20 6.1v5.95c0 5.05-3.4 8.95-8 10.2-4.6-1.25-8-5.15-8-10.2V6.1l8-3.35Z"/><path d="m9.35 12.15 1.75 1.75 3.7-4.05"/>'
+} %}
+{% macro ico(name) -%}<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{{ ICONS[name]|safe }}</svg>{%- endmacro %}
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -7,136 +23,186 @@
   <title>{% block title %}Portal de Insumos J&T{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/browser-favicon.svg') }}?v=112">
   <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('favicon_ico') }}?v=112">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=227">
+  <link rel="preload" href="{{ url_for('static', filename='fonts/Barlow-Regular.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/jt-ui.css') }}?v=300">
+  <script>
+    /* aplica o tema antes de pintar a página (evita piscar) */
+    (function () {
+      try {
+        var saved = localStorage.getItem('jt-insumos-theme');
+        var light = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+        document.documentElement.setAttribute('data-theme', saved || (light ? 'light' : 'dark'));
+      } catch (e) {}
+    })();
+  </script>
 </head>
-<body class="{% block body_class %}{% endblock %}">
-  <div class="bg-orb orb-one"></div>
-  <div class="bg-orb orb-two"></div>
-
-  <div class="page-shell">
-    <header class="site-header compact-header">
-      {% if current_user %}
-      <div class="nav-header premium-topbar {% if current_user and not current_user.is_admin %}compact-user-topbar{% endif %}">
-        <a class="brand-top" href="{{ url_for('home') if current_user else url_for('login') }}" aria-label="Portal de Insumos J&T Express">
-          <img
-            id="brandLogoTheme"
-            src="{{ url_for('static', filename='img/logo-jt-white.svg') }}"
-            data-dark-src="{{ url_for('static', filename='img/logo-jt-white.svg') }}"
-            data-light-src="{{ url_for('static', filename='img/logo-jt-red.svg') }}"
-            alt="J&T Express"
-            class="brand-logo-top"
-          >
-          <span class="brand-top-copy">
-            <strong>Portal de Insumos</strong>
-            <small>J&T Express Brazil</small>
-          </span>
+<body class="{% block body_class %}{% endblock %} {{ 'is-auth' if current_user else 'is-guest' }}">
+{% if current_user %}
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <div class="app">
+    <aside class="sb" id="sidebar" aria-label="Menu lateral">
+      <div class="sb-brand">
+        <a class="sb-logo" href="{{ url_for('home') }}" aria-label="Portal de Insumos J&T Express">
+          <img src="{{ url_for('static', filename='img/logo-jt-mono-white.svg') }}" alt="J&T Express" width="96" height="33">
+          <span><strong>Portal de Insumos</strong><small>J&T Express Brazil</small></span>
         </a>
+        <button class="sb-close" type="button" data-sb-close aria-label="Fechar menu">&times;</button>
+      </div>
 
-        <div class="nav-center-group">
-        {% if current_user %}
-        <nav class="top-nav" aria-label="Navegação principal">
+      <nav class="sb-nav" aria-label="Navegação principal">
+        {% set is_admin = current_user.is_admin %}
+        {% if can_access('home') or can_access('my_requests') or (current_user.role == 'base' and can_access('exchange_supplies')) %}
+        <div class="sb-section">
           {% if can_access('home') %}
-            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' else '' }}">Solicitar insumos</a>
+            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' else '' }}">{{ ico('package') }}<span>Solicitar insumos</span></a>
           {% endif %}
           {% if can_access('my_requests') %}
-            <a href="{{ url_for('my_requests') }}" class="{{ 'active' if request.endpoint == 'my_requests' else '' }}">Minhas solicitações</a>
+            <a href="{{ url_for('my_requests') }}" class="{{ 'active' if request.endpoint == 'my_requests' else '' }}">{{ ico('list') }}<span>Minhas solicitações</span></a>
           {% endif %}
           {% if current_user.role == 'base' and can_access('exchange_supplies') %}
-            <a href="{{ url_for('exchange_supplies') }}" class="{{ 'active' if request.endpoint == 'exchange_supplies' else '' }}">Troca de Insumos</a>
+            <a href="{{ url_for('exchange_supplies') }}" class="{{ 'active' if request.endpoint == 'exchange_supplies' else '' }}">{{ ico('repeat') }}<span>Troca de Insumos</span></a>
           {% endif %}
-          {% if current_user.is_admin %}
-            {% if can_access('admin_dashboard') %}<a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' else '' }}">Painel admin</a>{% endif %}
-            {% if can_access('orders_dashboard') %}<a href="{{ url_for('admin_orders_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_orders_dashboard' else '' }}">Dashboard Geral</a>{% endif %}
-            {% if can_access('admin_products') %}<a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint in ['admin_products','admin_product_new','admin_product_edit'] else '' }}">Produtos</a>{% endif %}
-            {% if can_access('admin_stock') %}
-              <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_assets','admin_asset_new','admin_stock','admin_material_entries','admin_stock_confirmed_orders','admin_base_cycles'] else '' }}">
-                <button class="nav-drop-toggle" type="button" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle>
-                  Gestão <span aria-hidden="true">▾</span>
-                </button>
-                <div class="nav-drop-menu" role="menu">
-                  <a role="menuitem" href="{{ url_for('admin_assets') }}" class="{{ 'active' if request.endpoint in ['admin_assets','admin_asset_new'] else '' }}">Gestão de Ativos</a>
-                  <a role="menuitem" href="{{ url_for('admin_stock') }}" class="{{ 'active' if request.endpoint == 'admin_stock' else '' }}">Gestão de Insumos</a>
-                  <a role="menuitem" href="{{ url_for('admin_stock_confirmed_orders') }}" class="{{ 'active' if request.endpoint == 'admin_stock_confirmed_orders' else '' }}" target="_blank" rel="noopener">Pedidos Confirmados</a>
-                  {% if can_access('base_cycles') %}<a role="menuitem" href="{{ url_for('admin_base_cycles') }}" class="{{ 'active' if request.endpoint == 'admin_base_cycles' else '' }}">Troca de Insumos - Bases</a>{% endif %}
-                  {% if can_do('stock_material_entries') %}
-                    <a role="menuitem" href="{{ url_for('admin_material_entries') }}" class="{{ 'active' if request.endpoint == 'admin_material_entries' else '' }}">Entrada de Materiais</a>
-                  {% endif %}
-                </div>
-              </div>
-            {% endif %}
-            {% if can_access('admin_users') %}<a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint in ['admin_users','admin_user_new','admin_user_edit','admin_access_types','admin_access_type_edit'] else '' }}">Usuários</a>{% endif %}
-            {% if can_access_any(['admin_requests','admin_requests_attended']) %}
-              <div class="nav-dropdown {{ 'active' if request.endpoint in ['admin_requests','admin_request_detail','admin_requests_attended'] else '' }}">
-                <button class="nav-drop-toggle" type="button" aria-haspopup="true" aria-expanded="false" data-dropdown-toggle>
-                  Solicitações <span aria-hidden="true">▾</span>
-                </button>
-                <div class="nav-drop-menu" role="menu">
-                  {% if can_access('admin_requests') %}<a role="menuitem" href="{{ url_for('admin_requests', status='pending') }}" class="{{ 'active' if request.endpoint in ['admin_requests','admin_request_detail'] else '' }}">Pendentes</a>{% endif %}
-                  {% if can_access('admin_requests_attended') %}<a role="menuitem" href="{{ url_for('admin_requests_attended') }}" class="{{ 'active' if request.endpoint == 'admin_requests_attended' else '' }}">Aguardando envio / Enviadas</a>{% endif %}
-                </div>
-              </div>
-            {% endif %}
-          {% endif %}
-        </nav>
+        </div>
         {% endif %}
 
-        </div>
+        {% if is_admin %}
+        <div class="sb-section">
+          <p class="sb-section-label">Administração</p>
+          {% if can_access('admin_dashboard') %}<a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' else '' }}">{{ ico('grid') }}<span>Painel admin</span></a>{% endif %}
+          {% if can_access('orders_dashboard') %}<a href="{{ url_for('admin_orders_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_orders_dashboard' else '' }}">{{ ico('chart') }}<span>Dashboard Geral</span></a>{% endif %}
+          {% if can_access('admin_products') %}<a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint in ['admin_products','admin_product_new','admin_product_edit'] else '' }}">{{ ico('bag') }}<span>Produtos</span></a>{% endif %}
 
-        {% if current_user %}
-        <div class="header-tools account-area">
-          <div class="user-pill compact user-pill-simple">
-            <span>
-              <strong>{{ current_user.responsible_name }}</strong>
-              <small data-i18n-sector data-i18n-sector-original="{{ user_role_label(current_user.role) }} • {{ current_user.organization_name|e }}">{{ user_role_label(current_user.role) }} • {{ current_user.organization_name }}</small>
-            </span>
-          </div>
-          <a class="logout" href="{{ url_for('logout') }}">Sair</a>
-        </div>
-        {% else %}
-        <div class="public-actions account-area">
-          <a class="btn ghost" href="{{ url_for('login') }}">Entrar</a>
+          {% if can_access('admin_stock') %}
+            {% set gestao_on = request.endpoint in ['admin_assets','admin_asset_new','admin_stock','admin_material_entries','admin_stock_confirmed_orders','admin_base_cycles'] %}
+            <div class="sb-group {{ 'open active' if gestao_on else '' }}">
+              <button class="sb-group-toggle" type="button" aria-expanded="{{ 'true' if gestao_on else 'false' }}" data-sb-toggle>
+                {{ ico('warehouse') }}<span class="sb-label">Gestão</span>{{ ico('chevron') }}
+              </button>
+              <div class="sb-sub">
+                <a href="{{ url_for('admin_assets') }}" class="{{ 'active' if request.endpoint in ['admin_assets','admin_asset_new'] else '' }}">Gestão de Ativos</a>
+                <a href="{{ url_for('admin_stock') }}" class="{{ 'active' if request.endpoint == 'admin_stock' else '' }}">Gestão de Insumos</a>
+                <a href="{{ url_for('admin_stock_confirmed_orders') }}" class="{{ 'active' if request.endpoint == 'admin_stock_confirmed_orders' else '' }}" target="_blank" rel="noopener">Pedidos Confirmados</a>
+                {% if can_access('base_cycles') %}<a href="{{ url_for('admin_base_cycles') }}" class="{{ 'active' if request.endpoint == 'admin_base_cycles' else '' }}">Troca de Insumos - Bases</a>{% endif %}
+                {% if can_do('stock_material_entries') %}<a href="{{ url_for('admin_material_entries') }}" class="{{ 'active' if request.endpoint == 'admin_material_entries' else '' }}">Entrada de Materiais</a>{% endif %}
+              </div>
+            </div>
+          {% endif %}
+
+          {% if can_access('admin_users') %}<a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint in ['admin_users','admin_user_new','admin_user_edit','admin_access_types','admin_access_type_edit'] else '' }}">{{ ico('users') }}<span>Usuários</span></a>{% endif %}
+
+          {% if can_access_any(['admin_requests','admin_requests_attended']) %}
+            {% set sol_on = request.endpoint in ['admin_requests','admin_request_detail','admin_requests_attended'] %}
+            <div class="sb-group {{ 'open active' if sol_on else '' }}">
+              <button class="sb-group-toggle" type="button" aria-expanded="{{ 'true' if sol_on else 'false' }}" data-sb-toggle>
+                {{ ico('inbox') }}<span class="sb-label">Solicitações</span>{{ ico('chevron') }}
+              </button>
+              <div class="sb-sub">
+                {% if can_access('admin_requests') %}<a href="{{ url_for('admin_requests', status='pending') }}" class="{{ 'active' if request.endpoint in ['admin_requests','admin_request_detail'] else '' }}">Pendentes</a>{% endif %}
+                {% if can_access('admin_requests_attended') %}<a href="{{ url_for('admin_requests_attended') }}" class="{{ 'active' if request.endpoint == 'admin_requests_attended' else '' }}">Aguardando envio / Enviadas</a>{% endif %}
+              </div>
+            </div>
+          {% endif %}
         </div>
         {% endif %}
-      </div>
-      {% endif %}
-        <div class="dev-credit" aria-label="Informações de segurança e desenvolvimento">
-          <span class="security-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M12 2.75 20 6.1v5.95c0 5.05-3.4 8.95-8 10.2-4.6-1.25-8-5.15-8-10.2V6.1l8-3.35Z"/>
-              <path d="m9.35 12.15 1.75 1.75 3.7-4.05"/>
-            </svg>
+      </nav>
+
+      <div class="sb-foot">
+        <div class="sb-user">
+          <span class="sb-avatar" aria-hidden="true">{{ (current_user.responsible_name or '?')[:1]|upper }}</span>
+          <span class="sb-user-copy">
+            <strong>{{ current_user.responsible_name }}</strong>
+            <small data-i18n-sector data-i18n-sector-original="{{ user_role_label(current_user.role) }} • {{ current_user.organization_name|e }}">{{ user_role_label(current_user.role) }} • {{ current_user.organization_name }}</small>
           </span>
-          <span class="dev-copy">
+          <a class="sb-logout" href="{{ url_for('logout') }}" title="Sair" aria-label="Sair">{{ ico('logout') }}</a>
+        </div>
+        <div class="sb-credit" aria-label="Informações de segurança e desenvolvimento">
+          {{ ico('shield') }}
+          <span>
             <strong>Developed by: Eduardo Rodrigues &amp; Aleffi Silva</strong>
             <small>J&amp;T Express Brazil • CNPJ: 42.584.754/0092-13</small>
           </span>
         </div>
-    </header>
+      </div>
+    </aside>
+    <div class="sb-scrim" data-sb-close></div>
 
-    <main class="main-content">
-      <section class="hero-card card">
-        <header class="topbar">
-          <div>
-            <span class="eyebrow">J&T Express • Gestão de insumos</span>
-            <h2>{% block page_title %}Portal de Insumos{% endblock %}</h2>
-            <p>{% block page_subtitle %}Solicitação e controle interno de materiais.{% endblock %}</p>
+    <div class="app-main">
+      <div class="mobilebar">
+        <button id="sbOpen" class="mobilebar-btn" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">{{ ico('menu') }}</button>
+        <img src="{{ url_for('static', filename='img/logo-jt-red.svg') }}" alt="J&T Express" height="26">
+      </div>
+
+      <main class="main-content" id="conteudo">
+        <header class="page-head">
+          <div class="page-head-copy">
+            <h1 class="page-title">{% block page_title %}Portal de Insumos{% endblock %}</h1>
+            <p class="page-sub">{% block page_subtitle %}Solicitação e controle interno de materiais.{% endblock %}</p>
           </div>
         </header>
-      </section>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          <div class="flash-stack">
-            {% for category, message in messages %}
-              <div class="flash {{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
 
-      {% block content %}{% endblock %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+{% else %}
+  <div class="guest">
+    <aside class="guest-brand" aria-hidden="false">
+      <div class="guest-brand-inner">
+        <img class="guest-logo" src="{{ url_for('static', filename='img/logo-jt-mono-white.svg') }}" alt="J&T Express" width="260" height="90">
+        <p class="guest-name">Portal de Insumos</p>
+        <p class="guest-sub">J&T Express Brazil</p>
+      </div>
+      <svg class="guest-streaks" viewBox="0 0 600 400" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+        <g fill="none" stroke="#fff" stroke-linecap="round">
+          <path d="M120 120 H600" stroke-width="10" opacity=".16"/>
+          <path d="M40 168 H600" stroke-width="10" opacity=".11"/>
+          <path d="M200 216 H600" stroke-width="10" opacity=".08"/>
+          <path d="M0 292 H600" stroke-width="4" opacity=".10"/>
+          <path d="M260 316 H600" stroke-width="4" opacity=".07"/>
+        </g>
+      </svg>
+      <div class="sb-credit guest-credit" aria-label="Informações de segurança e desenvolvimento">
+        {{ ico('shield') }}
+        <span>
+          <strong>Developed by: Eduardo Rodrigues &amp; Aleffi Silva</strong>
+          <small>J&amp;T Express Brazil • CNPJ: 42.584.754/0092-13</small>
+        </span>
+      </div>
+    </aside>
+
+    <main class="guest-panel" id="conteudo">
+      <div class="guest-panel-inner">
+        <img class="guest-logo-mobile" src="{{ url_for('static', filename='img/logo-jt-red.svg') }}" alt="J&T Express" height="34">
+        <header class="guest-head">
+          <h1 class="page-title">{{ self.page_title() }}</h1>
+          <p class="page-sub">{{ self.page_subtitle() }}</p>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-stack">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {{ self.content() }}
+      </div>
     </main>
   </div>
+{% endif %}
 
   <div id="productImageModal" class="product-image-modal" aria-hidden="true">
     <div class="product-image-modal-backdrop" data-close-image-preview></div>
@@ -176,47 +242,30 @@
   </div>
 <script>
     window.addEventListener('DOMContentLoaded', function () {
-      const closeDropdowns = function () {
-        document.querySelectorAll('.nav-dropdown.open').forEach(function (item) {
-          item.classList.remove('open');
-          const itemButton = item.querySelector('[data-dropdown-toggle]');
-          if (itemButton) itemButton.setAttribute('aria-expanded', 'false');
-        });
-      };
-
-      document.querySelectorAll('.nav-dropdown').forEach(function (dropdown) {
-        const button = dropdown.querySelector('[data-dropdown-toggle]');
-        dropdown.addEventListener('mouseenter', function () {
-          if (button) button.setAttribute('aria-expanded', 'true');
-        });
-        dropdown.addEventListener('mouseleave', function () {
-          if (!dropdown.classList.contains('open') && button) button.setAttribute('aria-expanded', 'false');
-        });
-      });
-
-      document.querySelectorAll('[data-dropdown-toggle]').forEach(function (button) {
+      /* Sidebar: grupos expansíveis + menu mobile */
+      document.querySelectorAll('[data-sb-toggle]').forEach(function (button) {
         button.addEventListener('click', function (event) {
           event.preventDefault();
-          event.stopPropagation();
-          const dropdown = button.closest('.nav-dropdown');
-          const isOpen = dropdown && dropdown.classList.contains('open');
-          closeDropdowns();
-          if (dropdown && !isOpen) {
-            dropdown.classList.add('open');
-            button.setAttribute('aria-expanded', 'true');
-          }
+          const group = button.closest('.sb-group');
+          if (!group) return;
+          const open = !group.classList.contains('open');
+          group.classList.toggle('open', open);
+          button.setAttribute('aria-expanded', String(open));
         });
       });
-
-      document.querySelectorAll('.nav-drop-menu').forEach(function (menu) {
-        menu.addEventListener('click', function (event) {
-          event.stopPropagation();
-        });
+      const body = document.body;
+      const setSidebar = function (open) {
+        body.classList.toggle('sb-open', open);
+        const menuButton = document.getElementById('sbOpen');
+        if (menuButton) menuButton.setAttribute('aria-expanded', String(open));
+      };
+      const openBtn = document.getElementById('sbOpen');
+      if (openBtn) openBtn.addEventListener('click', function () { setSidebar(!body.classList.contains('sb-open')); });
+      document.querySelectorAll('[data-sb-close]').forEach(function (el) {
+        el.addEventListener('click', function () { setSidebar(false); });
       });
-
-      document.addEventListener('click', closeDropdowns);
       document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') closeDropdowns();
+        if (event.key === 'Escape') setSidebar(false);
       });
 
       const imageModal = document.getElementById('productImageModal');
