@@ -1,417 +1,369 @@
-# Update v228
+# Portal de Insumos — J&T Express Brazil
 
-## Performance — Solicitações e Pedidos Processados
+Sistema web interno para **bases e franquias solicitarem insumos** e para a **equipe administrativa aprovar, enviar e controlar estoque, ativos e relatórios**. Funciona em português, com tradução para chinês na interface, e tem tema claro e escuro.
 
-- Eliminado o carregamento N+1 nas listagens de solicitações.
-- Usuários relacionados (solicitante, aprovador e responsável pelo envio) agora são buscados em lote.
-- Itens das solicitações agora são buscados em lote e usam os snapshots já gravados, sem consultar cada produto individualmente.
-- Uma página de 25 solicitações deixa de gerar dezenas/centenas de consultas ao Cloudflare D1 e passa a usar poucas consultas em lote.
-- O adaptador do Cloudflare D1 agora reutiliza a mesma sessão HTTP durante a operação, evitando novos handshakes TLS entre consultas da mesma página.
-- A otimização também beneficia Minhas solicitações, Dashboard Geral e outras listagens que usam o mesmo carregador paginado.
+> O histórico de versões fica em [`CHANGELOG.md`](CHANGELOG.md). Notas sobre o visual e como reconstruir o CSS ficam em [`NOVO_VISUAL.md`](NOVO_VISUAL.md).
 
 ---
 
-# Update v223
+## Sumário
 
-## Correções v223 — confirmação de envio e alinhamento de status
-
-- Corrigido o botão **Confirmar envio dos insumos**: o JavaScript do modal agora é carregado independentemente do escopo do bloco Jinja e usa listener delegado.
-- Mantido o modal visual do portal, com fundo desfocado, número de rastreio obrigatório e observação opcional.
-- Removido o status duplicado no bloco de fluxo.
-- Reorganizado o cabeçalho de dados para alinhar status, título e botão de PDF.
-- Atualizado o cache do CSS para `v223`.
+1. [Visão geral](#1-visão-geral)
+2. [Perfis de acesso e permissões](#2-perfis-de-acesso-e-permissões)
+3. [Para bases e franquias](#3-para-bases-e-franquias)
+4. [Para a administração](#4-para-a-administração)
+5. [Produtos e catálogo](#5-produtos-e-catálogo)
+6. [Estoque, entrada de materiais e ativos](#6-estoque-entrada-de-materiais-e-ativos)
+7. [Usuários e tipos de acesso](#7-usuários-e-tipos-de-acesso)
+8. [PDFs e planilhas](#8-pdfs-e-planilhas)
+9. [Notificações](#9-notificações)
+10. [Interface](#10-interface)
+11. [Tecnologia e estrutura de arquivos](#11-tecnologia-e-estrutura-de-arquivos)
+12. [Rodar no computador](#12-rodar-no-computador)
+13. [Deploy e variáveis de ambiente](#13-deploy-e-variáveis-de-ambiente)
+14. [Segurança e boas práticas](#14-segurança-e-boas-práticas)
 
 ---
 
-# Update v222
+## 1. Visão geral
 
-## Ajuste v222 — modal de rastreio
-
-- A confirmação de envio não usa mais janela nativa do navegador.
-- O número de rastreio é informado em um modal visual do próprio portal, com fundo desfocado.
-- O modal pode ser fechado pelo botão, pelo fundo ou pela tecla Esc.
-- O botão de confirmação é bloqueado durante o envio para evitar registros duplicados.
-
-
-- Página de detalhes da solicitação reorganizada em blocos de resumo e fluxo.
-- Informações, observações, histórico e ações com melhor distribuição e responsividade.
-- Confirmação de envio usa janela nativa do navegador para garantir abertura em diferentes dispositivos.
-- Campo obrigatório para número de rastreio permanece integrado ao fluxo de envio.
-
-# Portal de Insumos J&T — v219
-
-## Rastreio de solicitações
-
-- Ao confirmar o envio, o administrador deve informar o número de rastreio.
-- O código fica registrado na solicitação e no histórico de ações.
-- O solicitante consulta o código pelo botão **Consultar nº de rastreio** em **Minhas solicitações**.
-
-## Rodar local no Windows
-
-1. Extraia o ZIP.
-2. Abra a pasta `jt_insumos_portal` no VS Code.
-3. Dê dois cliques em `instalar_dependencias.bat`.
-4. No VS Code, selecione o interpretador Python da pasta:
+O portal cobre o ciclo completo de um pedido de insumos:
 
 ```text
-.venv\Scripts\python.exe
+Base/Franquia solicita ──► Admin analisa ──► Aprova (baixa o estoque) ──► Confirma envio (rastreio) ──► Solicitante acompanha
+                                   └──► Recusa (com observação)
 ```
 
-5. Para abrir o site local, dê dois cliques em `rodar_local.bat` ou rode:
+Em paralelo, o portal controla o **estoque por regional**, as **entradas de materiais com nota fiscal**, o **cadastro de ativos patrimoniais** e gera **relatórios em PDF e planilhas**.
+
+Principais áreas:
+
+| Área | Quem usa | Para quê |
+|---|---|---|
+| Solicitar insumos | Base, Franquia | Montar o carrinho e enviar o pedido |
+| Minhas solicitações | Base, Franquia | Acompanhar status, rastreio e baixar PDF |
+| Troca de Insumos – 3 meses | Base | Ver o ciclo de 3 meses e a próxima data disponível |
+| Painel admin | Administração | Resumo geral do portal |
+| Dashboard Geral de Pedidos | Administração | Todos os pedidos, filtros e totais |
+| Troca de Insumos – Bases | Administração | Gerir o ciclo de 3 meses das bases |
+| Solicitações pendentes / atendidas | Administração | Analisar, aprovar, recusar e enviar |
+| Produtos | Administração | Catálogo, preços, limites e importação |
+| Gestão de estoque | Administração | Saldos, gráficos, movimentações, entradas e ativos |
+| Usuários e acessos | Administração / Dev | Contas, tipos de acesso e permissões |
+
+---
+
+## 2. Perfis de acesso e permissões
+
+### Tipos padrão
+
+| Tipo | Descrição |
+|---|---|
+| **Base** | Solicita insumos. Informa o número de pessoas da base a cada pedido. Sujeita ao ciclo de 3 meses. |
+| **Franquia** | Solicita insumos. Pode ver valores nos PDFs. Não tem ciclo de 3 meses. |
+| **Administrador** | Acesso às áreas administrativas liberadas para ele. |
+| **Dev** | Controle total do portal, dos tipos de acesso e das permissões. |
+
+Também é possível criar **tipos de acesso personalizados** (veja a [seção 7](#7-usuários-e-tipos-de-acesso)), por exemplo "Gestão de Franquias".
+
+### Permissões em dois níveis
+
+**Por página** — define quais telas o usuário enxerga no menu e quais rotas consegue abrir:
+
+- Solicitar insumos · Minhas solicitações · Troca de Insumos – 3 meses
+- Painel admin · Dashboard Geral de Pedidos · Troca de Insumos – Bases
+- Produtos · Gestão de estoque · Usuários e acessos
+- Solicitações pendentes · Solicitações atendidas
+
+**Por ação** — controle fino dentro de cada página:
+
+| Página | Ações controladas |
+|---|---|
+| Produtos | criar, editar dados principais, categorias, unidade/kit, preço, estoque, limites, visibilidade/status, importar, exportar, excluir |
+| Gestão de estoque | entrada de materiais, criar ativos e baixar estoque, gerar relatórios |
+| Solicitações | editar itens, aprovar/recusar, confirmar envio, excluir |
+| Usuários | criar/editar, importar/exportar, status e exclusão |
+
+Além disso, o tipo de acesso pode limitar **quais campos do cadastro de usuário** o administrador pode alterar (nome, login, senha, tipo de acesso, status, base/setor, franquia, telefone, CNPJ e permissões).
+
+As permissões são aplicadas **no menu e também no bloqueio das rotas** — esconder o botão não é a única proteção.
+
+---
+
+## 3. Para bases e franquias
+
+### 3.1 Solicitar insumos (tela inicial)
+- Catálogo com **busca**, **filtro por categoria** (com ícone/emoji) e **imagem ampliável** do produto.
+- **Carrinho** com quantidades; o pedido é enviado para aprovação.
+- **Observação** opcional para a administração.
+- **Bases** informam o **número de pessoas** na base (obrigatório).
+- Depois de enviar, aparece o botão para **baixar o PDF** da solicitação.
+
+### 3.2 Regras aplicadas automaticamente ao enviar
+O portal valida o pedido no servidor antes de gravar:
+
+- O produto precisa estar **ativo**, ser do estoque de **insumos** e **visível** para o tipo do usuário (base ou franquia). Itens marcados como **internos** não podem ser solicitados.
+- O usuário precisa ter **regional** cadastrada (MG ou SPN) e o produto precisa ter **saldo na regional**.
+- **Limite por produto** (separado para bases e para franquias): se o pedido ultrapassa o limite, ou o limite do período já foi atingido, o envio é recusado informando quanto ainda resta.
+- **Bloqueio automático**: ao atingir o limite, o produto fica bloqueado para aquele usuário por um número configurável de dias (padrão 60).
+- **Quantidade mínima por pedido** configurável por produto.
+- **Kits**: o limite é contado em kits e a quantidade efetiva considera a quantidade por kit.
+- **Estoque insuficiente** na regional impede o pedido de franquias.
+- **Bases**: só podem fazer nova solicitação quando o ciclo de 3 meses terminar.
+
+Administradores podem criar solicitações sem passar pelos limites de bloqueio.
+
+### 3.3 Minhas solicitações
+- Lista paginada das solicitações do próprio usuário, com status colorido e filtros.
+- Botão **Consultar nº de rastreio** quando o pedido já foi enviado.
+- Download do **PDF** de cada solicitação.
+
+### 3.4 Troca de Insumos – 3 meses (somente bases)
+- Mostra o **ciclo de três meses** da base, o **último pedido** e a **próxima data disponível**.
+- O ciclo começa automaticamente quando a base envia uma solicitação.
+- Enquanto o ciclo estiver ativo, a tela de solicitação informa a data em que será liberada.
+
+### Status de uma solicitação
+
+| Status | Significado |
+|---|---|
+| Pendente | Enviada, aguardando análise |
+| Aguardando envio | Aprovada e já descontada do estoque; falta enviar |
+| Enviado | Envio confirmado, com número de rastreio |
+| Recusado | Rejeitada pela administração (com observação) |
+| Excluído | Removida por quem tem permissão |
+
+---
+
+## 4. Para a administração
+
+### 4.1 Painel admin
+Resumo administrativo do portal, ponto de entrada de quem tem acesso administrativo.
+
+### 4.2 Solicitações pendentes
+- Lista com **filtros** (tipo, regional, produto, datas, ordenação por mais recentes/antigas, unidade A–Z, quantidade) e **paginação**.
+- **Detalhe da solicitação** com resumo, fluxo, itens, observações e **histórico completo de ações** (quem criou, aprovou, enviou etc.).
+- **Editar quantidades** dos itens de um pedido pendente.
+- **Aprovar**: confere o estoque do responsável na regional, **baixa o saldo**, registra a movimentação e muda o status para *Aguardando envio*. A observação do administrador é opcional.
+- **Recusar**: registra a observação no histórico e envia aviso ao Feishu; o status passa para *Recusado*.
+  Bloqueios por limite já criados continuam valendo e podem ser revogados na edição do usuário.
+- **Confirmar envio**: abre um modal do portal exigindo o **número de rastreio** (observação opcional). O código fica na solicitação e no histórico, e o solicitante consulta em *Minhas solicitações*.
+- **Excluir** solicitação (permissão própria).
+- **Designação por regional**: a administração define quais usuários aprovam as solicitações de cada regional, e é possível direcionar uma base a administradores específicos. Quem não foi designado não consegue aprovar.
+
+### 4.3 Solicitações atendidas
+Pedidos já aprovados, enviados ou recusados, com os mesmos filtros e a possibilidade de confirmar o envio pendente.
+
+### 4.4 Dashboard Geral de Pedidos
+- Todos os pedidos de bases e franquias, com filtros e **totais**.
+- **Indicadores** e **totais de pedidos confirmados** por produto.
+- Respeita a visibilidade por designação de regional.
+
+### 4.5 Troca de Insumos – Bases
+- Acompanha o **ciclo automático de 3 meses** de cada base.
+- Permite ajustar o ciclo de uma base específica.
+
+---
+
+## 5. Produtos e catálogo
+
+Cadastro completo de cada produto:
+
+- **Dados**: nome, descrição, imagem, categoria e ícone da categoria.
+- **Unidade de medida** e **kit** (com quantidade por kit).
+- **Preço unitário**.
+- **Estoque** disponível, mínimo e máximo.
+- **Limites**: limite para bases, limite para franquias, dias de bloqueio após o limite e quantidade mínima por pedido.
+- **Visibilidade**: ativo/inativo, item interno, visível para bases, visível para franquias.
+- **Tag de estoque**: separa o estoque de *Insumos* (solicitações) do de *Ativos* (patrimônio). Novas tags podem ser criadas.
+
+Recursos da tela de produtos:
+
+- Busca e filtros, ativar/inativar e excluir.
+- **Gerenciar categorias** (nome e ícone) e **tags de estoque**.
+- **Exportar** o catálogo em planilha `.xlsx` (PT ou ZH).
+- **Importar** planilha `.xlsx`: se o `ID` existir o produto é atualizado; sem ID, mas com nome já existente, também atualiza; caso contrário cria um novo.
+
+Colunas da planilha: ID, Nome do produto, Categoria, Ícone da categoria, Unidade de medida, Kit, Quantidade por kit, Descrição, Estoque disponível, Valor unitário, Limite para bases, Limite para franquias, Dias de bloqueio após limite, Quantidade mínima por pedido, Estoque mínimo, Estoque máximo, Tag de estoque, Ativo.
+
+---
+
+## 6. Estoque, entrada de materiais e ativos
+
+### 6.1 Gestão de estoque
+- Saldos **por regional (MG e SPN)** e **por responsável pelo estoque** — cada administrador tem o seu estoque individual.
+- **Gráfico por categoria** (padrão), busca por produto/categoria e filtro por tipo de solicitante.
+- **Lista de produtos** e **histórico de movimentações** (aprovações de pedidos, entradas, baixas de ativos), filtrados por clique ou pesquisa.
+- **Pedidos confirmados**: visão de totais por produto, com filtros de tipo, regional, produto e datas.
+- Estoque legado ainda não atribuído a um responsável continua sendo consumido pelas aprovações.
+
+### 6.2 Entrada de materiais
+- Cadastro manual: produto existente (ou item novo), quantidade, unidade, valor unitário e observações.
+- **Nota fiscal opcional**: número, data, valor e arquivo anexado (guardado no Cloudflare R2 quando configurado).
+- A entrada **soma ao estoque** da regional escolhida.
+- **Importação por planilha** `.xlsx` (modelo para download).
+- **Relatório PDF** de entradas por período.
+- Cada administrador só sobe estoque nas regionais liberadas para ele.
+
+### 6.3 Ativos patrimoniais
+- Cadastro de ativo: nome, **base/franquia**, **regional** (MG, SPN, Matriz, SC CGE, SC RAO), setor, gestor responsável e **itens vinculados** com patrimônio/série.
+- Os itens podem ser ligados a produtos do estoque de *Ativos* e **dar baixa no estoque**.
+- **Importação por planilha** `.xlsx` (modelo para download).
+- **Ficha do ativo em PDF** com linhas de assinatura.
+- **Relatório de ativos por período** em PDF, filtrável por unidade.
+
+### 6.4 Relatórios de estoque
+- **Relatório de solicitações por período** (PDF): indicadores por status, resumo dos produtos mais pedidos e lista detalhada.
+- **Relatório de ativos por período** (PDF).
+- **Relatório de entrada de materiais por período** (PDF).
+
+---
+
+## 7. Usuários e tipos de acesso
+
+### Usuários
+- **Criação manual** de usuários dentro da plataforma (o cadastro público está desativado).
+- Edição de dados, senha individual, regional, base/setor, franquia, telefone e CNPJ.
+- **Status**: ativo ou inativo (usuário inativo não consegue entrar).
+- **Regional**: MG, SPN ou ambas (MG/SPN); opção, só para Dev, de permitir a uma base ser **atendida por outra regional**.
+- **Bloqueios por produto**: a administração vê e pode revogar bloqueios automáticos de limite de cada usuário.
+- **Ações em lote**: definir regional e designar administradores de base para vários usuários de uma vez.
+- **Exportar** a tabela de usuários, baixar o **modelo** e **importar** usuários por planilha.
+- O administrador logado não pode remover o próprio acesso administrativo.
+
+### Tipos de acesso personalizados
+- Crie tipos além de Base/Franquia/Administrador (por exemplo, "Gestão de Franquias").
+- Para cada tipo, defina **páginas**, **ações** e **campos de usuário** liberados.
+- **Troca de senha em lote** para todos os usuários de um tipo.
+- Permissões também podem ser ajustadas **individualmente** por usuário, num modal com fundo desfocado.
+
+---
+
+## 8. PDFs e planilhas
+
+### PDFs
+
+| Documento | Onde gerar |
+|---|---|
+| Solicitação de insumos | Após enviar o pedido, em *Minhas solicitações* e no detalhe admin |
+| Relatório de solicitações por período | Gestão de estoque → relatórios |
+| Relatório de entrada de materiais | Entrada de materiais |
+| Relatório de ativos por período | Ativos |
+| Ficha de ativo | Ativos |
+
+Todos usam o mesmo tema (`pdf_theme.py`): fonte Barlow embutida, logo J&T, faixa vermelha, cartões de indicadores, tabelas limpas, rodapé com "Página X de Y" e cabeçalho corrido nas páginas seguintes. Ideogramas chineses são suportados.
+
+Os **valores** aparecem no PDF da solicitação apenas para administradores e franquias.
+
+### Planilhas `.xlsx`
+Produtos, usuários, entradas de materiais e ativos têm **modelo para download**, **importação** e (quando aplicável) **exportação**.
+
+---
+
+## 9. Notificações
+
+- **Feishu** (webhook): avisos de solicitação criada, aprovada/recusada/enviada, nova solicitação de acesso, ativo criado e movimentações de estoque.
+- **E-mail (SMTP)**: usado para o código de verificação administrativo (suporta TLS na porta 587 e SSL na 465).
+- Se uma notificação falhar, a operação principal **não é interrompida**.
+
+---
+
+## 10. Interface
+
+- **Visual J&T**: vermelho `#e60012`, tipografia Barlow, cartões e tabelas limpos.
+- **Menu lateral** nas telas logadas e **painel de marca** na tela de login.
+- **Tema claro e escuro**, salvo no navegador.
+- **Idioma**: português com tradução da interface para chinês (`static/js/i18n.js`).
+- Botão flutuante de configurações (tema e idioma) e créditos de desenvolvimento.
+- Responsivo para celular e tablet.
+
+---
+
+## 11. Tecnologia e estrutura de arquivos
+
+**Stack**: Python 3 · Flask · SQLite (local) ou Cloudflare D1 (produção) · Cloudflare R2 (arquivos) · ReportLab + svglib (PDFs) · openpyxl (planilhas) · Gunicorn.
+
+```text
+app.py                      Aplicação Flask (rotas, regras de negócio, banco, PDFs, planilhas)
+pdf_theme.py                Tema visual compartilhado dos PDFs
+cloudflare_d1.py            Adaptador do banco Cloudflare D1
+cloudflare_r2.py            Envio/leitura de arquivos no Cloudflare R2
+cloudflare_d1_schema.sql    Esquema do banco para o D1
+requirements.txt            Dependências Python
+render.yaml                 Configuração de deploy no Render
+templates/                  Páginas HTML (Jinja)
+  admin/                    Telas administrativas
+static/css/                 jt-ui.css (gerado) e styles.css (legado)
+static/css/src/             jt-ui.src.css (fonte do CSS novo)
+static/js/                  main.js, theme.js, i18n.js, file-inputs.js
+static/fonts/               Fontes do site (woff2) e dos PDFs (fonts/pdf/*.ttf)
+static/img/                 Logos e ícones
+tools/build_css.py          Gera jt-ui.css a partir do jt-ui.src.css
+instance/jt_insumos.db      Banco SQLite local
+*.bat                       Atalhos para Windows (veja a seção 12)
+```
+
+---
+
+## 12. Rodar no computador
+
+Requisito: **Python 3.10 ou superior** instalado e no PATH.
+
+| Arquivo | Para quê |
+|---|---|
+| `ABRIR_PORTAL.bat` | Cria o ambiente `.venv`, instala as dependências, inicia o portal e abre o navegador |
+| `TESTAR_NOVO_VISUAL.bat` | Testa localmente com SQLite, sem instalação automática e sem tocar no ambiente de produção |
+| `instalar_dependencias.bat` | Só instala as dependências |
+| `rodar_local.bat` | Só inicia o portal (dependências já instaladas) |
+| `corrigir_ambiente_vscode.bat` | Recria o `.venv` e configura o VS Code para usá-lo |
+
+Ou manualmente:
 
 ```bash
-.venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
 python app.py
 ```
 
-Acesse no navegador:
-
-```text
-http://localhost:5000
-```
-
-Se aparecer `ModuleNotFoundError: No module named 'flask_mail'`, `flask_sqlalchemy` ou `sqlalchemy`, significa que o VS Code/terminal ainda não está usando o ambiente `.venv` ou que o `requirements.txt` não foi instalado.
-
-
-## Corrigir erros do Pylance no VS Code
-
-Se o VS Code mostrar erros como:
-
-- `Import "flask_mail" could not be resolved`
-- `Import "flask_sqlalchemy" could not be resolved`
-- `Import "sqlalchemy" could not be resolved`
-
-rode o arquivo:
-
-```text
-corrigir_ambiente_vscode.bat
-```
-
-Ele cria o ambiente `.venv`, instala todas as dependências e configura o VS Code para usar:
-
-```text
-.venv\Scripts\python.exe
-```
-
-Depois disso, feche e abra o VS Code novamente na pasta do projeto. Se ainda aparecer alerta, use `Ctrl+Shift+P` → `Python: Select Interpreter` → selecione `.venv\Scripts\python.exe`.
-
-## Atualização visual v4
-
-- Design reformulado com layout glassmorphism, tema J&T vermelho/preto e versão clara.
-- Logo oficial adicionada em `static/img/logo-jt.svg`.
-- Switch fixo no canto inferior direito para alternar tema claro/escuro.
-- Créditos fixos no canto inferior esquerdo: `Developed by: Eduardo Rodrigues & Aleffi Silva`.
-- Preferência de tema salva no navegador via `localStorage`.
-
-
-
-## Update visual v6
-
-- Logo branca no tema escuro e vermelha no tema claro.
-- Rodapé de desenvolvimento redesenhado, com ícone de segurança, J&T Express Brazil e CNPJ.
-- Mantido layout sem sidebar, com navegação superior.
-
-
-## Atualização v8
-
-- Animações adicionadas aos cards, tabelas, botões, logo, fundo, carrinho e navegação.
-- Correção reforçada do tema claro para manter textos neutros em preto/cinza escuro.
-
-
-## v9 - Ajustes visuais
-
-- Botões da barra superior: selecionado em vermelho com texto branco; não selecionado em branco com texto vermelho.
-- Bloco Developed by convertido para card quadrado lateral esquerdo.
-- Ajuste para evitar sobreposição do crédito lateral com os elementos principais em telas médias.
-
-
-## v10
-- Crédito `Developed by` reposicionado para o canto inferior esquerdo em formato quadrado.
-- Barra superior reforçada: botão ativo vermelho/branco e botões inativos branco/vermelho.
-
-
-## Atualização v14
-- Adicionada criação manual de usuários pelo painel de usuários.
-- Tipo de acesso agora permite Base, Franquia e Administrador.
-- Edição de acesso permite trocar usuário para administrador.
-- Admin logado não pode remover o próprio acesso administrativo.
-
-
-## Atualização v15
-
-- Exportação de PDF da solicitação com logo J&T, solicitante, base/franquia, status atual, itens solicitados, observações e total quando permitido pelo perfil.
-- Botão de PDF aparece após enviar uma solicitação na tela Solicitar Insumos.
-- Também há download de PDF em Minhas Solicitações e no detalhe admin da solicitação.
-- Página Produtos ganhou exportação de planilha `.xlsx`.
-- Página Produtos ganhou importação de planilha `.xlsx` para criar ou atualizar produtos.
-
-### Colunas aceitas na importação de produtos
-
-`ID`, `Nome do produto`, `Categoria`, `Descrição`, `Estoque disponível`, `Valor unitário`, `Limite para bases`, `Limite para franquias`, `Ativo`.
-
-Se o `ID` existir, o produto é atualizado. Se não houver ID, mas o nome já existir, o produto também é atualizado. Caso contrário, um novo produto é criado.
-
-
-## Versão v17
-- Corrigida duplicidade da logo no tema escuro.
-- Barra superior redesenhada com layout mais profissional, responsivo e organizado.
-
-
-## Abrir sem VS Code
-
-Para abrir fora do VS Code, use `ABRIR_PORTAL.bat`. Ele cria o ambiente local, instala as dependências e abre o navegador automaticamente. Também é possível executar `app.py` diretamente; se faltar alguma dependência, ele tentará instalar automaticamente.
-
-
-## Atualização v23
-
-- Gestão de Estoque: gráfico padrão agrupado por categoria.
-- Pesquisa de produto/categoria acima do gráfico.
-- Filtro das listas e movimentações somente por clique ou pesquisa, sem ativar ao passar o mouse.
-- Correção visual dos artefatos escuros nos cards de estoque.
-
-
-## Atualização v25
-
-- Barra superior de bases/franquias ajustada para adaptar largura conforme quantidade de botões.
-- Administradores podem definir permissões por página ao criar ou editar usuários.
-- Card de permissões abre em modal com blur no fundo.
-- Permissões são aplicadas também na exibição do menu e no bloqueio das rotas.
-
-
-## v26
-- Correção visual: animação de brilho dos botões da barra superior agora fica presa dentro dos botões, sem vazar por trás ou para fora.
-
-
-## v27
-
-- Corrigido brilho dos botões da barra superior para ficar dentro dos botões.
-- Corrigido brilho dos itens do submenu para não vazar.
-- Adicionadas animações faltantes nos cards da Gestão de Estoque.
-
-
-## Deploy Cloudflare + Render
-
-Esta versão possui integração com Cloudflare D1 e R2. Veja o arquivo `DEPLOY_CLOUDFLARE_RENDER.md` para o passo a passo resumido.
-
-
-## v31 - Correção SMTP Feishu
-
-- Adicionado suporte a `MAIL_USE_SSL=true` para SMTP na porta 465.
-- Corrigido erro 500 quando o envio do código admin por e-mail falha.
-- Agora o erro SMTP aparece nos Logs do Render com servidor, porta, TLS/SSL e mensagem da exceção.
-
-Configuração recomendada para Feishu/Lark com SSL:
-
-```env
-MAIL_SERVER=smtp.feishu.cn
-MAIL_PORT=465
-MAIL_USE_TLS=false
-MAIL_USE_SSL=true
-MAIL_USERNAME=portal.insumos@seudominio.com
-MAIL_PASSWORD=sua_senha_ou_codigo_de_autorizacao
-MAIL_DEFAULT_SENDER=portal.insumos@seudominio.com
-```
-
-
-## Atualização v32
-
-- Mensagens do código alteradas para confirmação de login.
-- Logo do topo substituída pelo SVG enviado.
-
-
-## v33
-- Removido o aviso duplicado de envio de código por e-mail na confirmação de login.
-- Mensagem de modo dev alterada para: “Insira o código para confirmar o seu login”.
-
-
-## v47 - Lista oficial de bases/franquias
-
-- Cadastro de usuário passou a selecionar a base/franquia em lista oficial.
-- Administração de usuários também usa a mesma lista para criação/edição.
-- Bases e franquias só podem ser salvas com unidades válidas da lista.
-
-
-## v50.1 - Inativar produtos
-
-- Produtos voltaram a ter a ação **Inativar/Ativar** na listagem administrativa.
-- Inativar remove o produto das solicitações, mas mantém o registro salvo no banco de dados.
-- A ação **Excluir** continua disponível apenas para remoção definitiva.
-
-
-## v50.2 - Cards responsivos sem rolagem interna
-
-- Listas dentro dos cards agora crescem junto com o conteúdo em vez de criar rolagem interna.
-- Tabelas administrativas viram cartões responsivos em telas menores.
-- Carrinho, cards de estoque, permissões e movimentações foram ajustados para quebrar linha sem esconder conteúdo.
-
-
-## v50.3 - Linhas contidas nos cards
-
-- Tabelas compactas do painel administrativo agora respeitam a largura do card.
-- Linhas e divisórias não vazam para fora da borda arredondada.
-
-
-## v51 - Gestão de Ativos
-
-- Gestão de Estoque ganhou submenu com **Gestão de Ativos** e **Gestão de Insumos**.
-- Gestão de Insumos mantém a tela atual de estoque, gráficos e movimentações.
-- Gestão de Ativos permite adicionar ativos em modal com Nome, Base, Regional, Setor, Gestor e múltiplos itens.
-- Relatórios de ativos aparecem na própria tela e podem ser filtrados por base ou regional.
-
-
-## v51.1 - Ajustes da Gestão de Ativos
-
-- Corrigido o card de Itens cadastrados.
-- Lista de bases agora acompanha o filtro regional: MG mostra bases `-MG`, SPN mostra bases `-SP`.
-- Quando a regional não possui bases correspondentes, a lista exibe **Sem Dados**.
-
-## v68 - Cadastro em massa de usuários
-
-- Administradores podem baixar um modelo XLSX e importar vários usuários pela página de Usuários.
-- Cadastros de franquia possuem nome, número e CNPJ opcional; o CNPJ só aparece para esse tipo de acesso.
-- Bases e franquias usam as páginas Solicitar insumos e Minhas solicitações por padrão; administradores recebem todas as páginas.
-- Produtos com estoque zerado ficam ocultos para bases e franquias até uma nova entrada de estoque.
-
-## v69 - Favicon oficial J&T
-
-- O favicon usa diretamente o SVG oficial branco da J&T enviado pelo usuário.
-- Foram removidas do HTML as referências aos favicons PNG e ICO gerados anteriormente.
-
-## v70 - PDF e pessoas na base
-
-- O PDF de solicitação usa Helvetica nos textos em português e fonte CJK apenas nos trechos chineses, sem espaçamento artificial entre letras.
-- O cabeçalho, dados da solicitação e tabela de itens receberam um layout mais limpo.
-- O número de pessoas na base é solicitado e exibido somente para usuários do tipo Base.
-
-## v71 - Responsável pelas movimentações
-
-- O histórico de estoque mostra quem adicionou, retirou ou ajustou cada produto.
-- São exibidos nome e usuário do responsável.
-- Retiradas antigas por solicitação recuperam o administrador que aprovou o pedido quando possível.
-- Registros iniciais automáticos são identificados como Sistema.
-
-## v72 - Categorias e pesquisa dinâmica
-
-- O cadastro e a edição de produtos permitem pesquisar categorias já existentes.
-- Uma nova categoria pode ser criada pelo botão Nova categoria.
-- A listagem de produtos é filtrada imediatamente enquanto o administrador digita.
-
-
-## v51.2 - Ativos integrados ao estoque
-
-- Itens de ativos agora são selecionados a partir dos produtos cadastrados.
-- Cadastro de ativos ganhou quantidade por item e baixa automaticamente o estoque do produto.
-- A baixa entra no histórico de movimentações como **Saída para ativo**.
-- Regional **Matriz** adicionada; ao selecionar Matriz, o campo Base fica inativo.
-
-
-## v52 - Alertas Feishu
-
-- Ao enviar uma solicitacao de insumos, o portal envia um card para o grupo Feishu com solicitante, base/franquia, itens, quantidades e botao para abrir o detalhe.
-- Ao cadastrar um novo ativo, o portal envia um card para o grupo Feishu com regional, base, setor, gestor, itens, quantidades e botao para abrir o ativo na Gestao de Ativos.
-- Configure `PUBLIC_BASE_URL` no Render para os botoes abrirem o dominio correto do portal.
-- O webhook pode ser trocado pela variavel `FEISHU_STOCK_WEBHOOK_URL`.
-
-## v59 - Horário de Brasília no Feishu
-
-- Mensagens enviadas para o Feishu agora usam o fuso `America/Sao_Paulo`.
-- Datas exibidas nos cards do Feishu aparecem com indicação `(Brasília)`.
-
-
-
-## v60 - Correção de caracteres chineses em PDFs
-
-- PDFs de solicitações e ativos agora usam fonte CJK compatível com chinês simplificado.
-- Corrigido problema de caracteres chineses aparecendo como quadradinhos/caixas pretas no PDF.
-# Atualização v79
-
-- O crédito de desenvolvimento foi movido para um card retangular compacto junto ao menu superior.
-- Produtos podem receber imagem no cadastro ou edição, com miniatura e visualização ampliada em modal com fundo desfocado.
-- Cada produto pode ser disponibilizado separadamente para bases e franquias.
-- As regras de público são aplicadas tanto na listagem quanto na validação do envio da solicitação.
-
-# Atualização v78
-
-- O modo Lista da página Solicitar insumos agora usa uma tabela real, separada do layout em cards.
-- A tabela reúne produto, categoria, preço por unidade, estoque, limites, pedido mínimo, quantidade e ação.
-- Em telas pequenas, cada linha se reorganiza verticalmente sem provocar rolagem horizontal.
-
-# Atualização v77
-
-- Tradução chinesa ampliada para relatórios, entradas de materiais, ativos, usuários, produtos e mensagens administrativas.
-- Datas, botões e instruções agora usam frases completas, evitando textos misturados em português e chinês.
-- Alertas, confirmações e rótulos das tabelas responsivas também respeitam o idioma selecionado.
-
-# Atualização v76
-
-- A importação de produtos permite escolher entre manter os dados atuais ou substituir todo o catálogo.
-- No modo de manutenção, os produtos são comparados pelo nome normalizado e têm estoque e demais dados atualizados sem duplicação.
-- No modo de substituição, somente os produtos da nova planilha permanecem nas telas, sem apagar o histórico de solicitações e movimentações anteriores.
-
-# Atualização v75
-
-- A página **Solicitar insumos** ganhou filtros por categoria, ordenação por nome, estoque ou preço e visualização em cards ou lista.
-- Os cards foram realinhados para manter ícone, categoria, descrição, indicadores e quantidade bem distribuídos.
-- Categorias agora aceitam um emoji próprio; o ícone escolhido é aplicado a todos os produtos da mesma categoria.
-- Produtos podem ter uma quantidade mínima opcional por pedido, validada tanto na tela quanto no servidor.
-- Exportação e importação de produtos incluem o ícone da categoria e a quantidade mínima por pedido.
-
-
-## v107 - Correção final das cores do topo
-- Reforço dos seletores do menu superior para manter vermelho escuro no estado normal e branco apenas no hover/ativo.
-- Aplicação também nos botões superiores de ação das páginas administrativas.
-
-## v203 - Ajustes de solicitações, Feishu e permissões
-
-- Melhorado o layout da área de bloqueios de produtos na edição de usuários.
-- Melhorado o card de detalhes da solicitação para exibir dados, observações e histórico de ações de forma alinhada.
-- Cards de movimentação de estoque no Feishu agora informam a unidade/base, solicitante e motivo da saída quando a baixa vier de aprovação de solicitação.
-- Por padrão, apenas Dev pode alterar nome do responsável e nome de usuário/login em usuários existentes. O Dev pode liberar esses campos para outros cargos na edição do tipo de acesso.
-
-## Atualização 2.13 — fluxo regional, pedidos e troca de insumos
-
-- Estoque de insumos separado por regional e por responsável.
-- Seleção múltipla de responsáveis para aprovação e entrada de estoque em MG e SPN.
-- Atribuição em massa de bases a um ou mais administradores.
-- Regional cadastrada por usuário e opção individual de atendimento cruzado MG/SPN para bases.
-- Fluxo de pedidos: Pendente → Aguardando envio → Enviado, com registro de aprovador e responsável pela confirmação do envio.
-- Página Troca de Insumos com ciclo automático de três meses para bases.
-- Dashboard Geral de Pedidos e página Pedidos Confirmados com totais por produto para planejamento de compra.
-- Catálogo de bases exibe todos os insumos liberados, inclusive sem estoque.
-
-## Atualização v216 — acesso regional MG/SPN
-
-- Adicionada a opção de regional **MG/SPN** no cadastro e na edição de usuários.
-- Somente o usuário Dev pode conceder o acesso combinado, individualmente, em massa ou por importação.
-- Usuários MG/SPN podem ser selecionados como responsáveis de aprovação e estoque nas duas regionais.
-- Gestão de estoque e entrada de materiais permitem alternar entre MG e SPN, mantendo saldos e movimentações separados.
-- Solicitações continuam vinculadas a uma regional operacional única, evitando misturar estoques.
-
-## Atualização v217 — estabilidade da página inicial, envio e status de usuários
-
-- Reparo automático do schema operacional ao iniciar e ao acessar catálogo/pedidos em bancos antigos.
-- Página inicial deixa de cair no erro interno quando tabelas de ciclos, bloqueios ou permissões estão desatualizadas.
-- API de envio de solicitações sempre responde em JSON e apresenta a mensagem real ao usuário.
-- Compatibilidade reforçada com navegadores/dispositivos que mantinham JavaScript antigo em cache.
-- Usuários agora possuem somente os estados **Ativo** e **Inativo**. “Aguardando envio” permanece exclusivo dos pedidos.
-
-## v226 - Importação de ativos e traduções
-
-- A página Gestão de Ativos permite baixar um modelo XLSX e importar vários ativos de uma vez.
-- Cada linha representa um item; linhas com o mesmo Código do ativo são agrupadas.
-- A importação valida unidade, regional, produtos e estoque antes de gravar qualquer dado.
-- O estoque de ativos é baixado automaticamente quando a importação é concluída.
-- Textos estáticos, campos, modais, mensagens e novas funcionalidades receberam traduções complementares para chinês simplificado.
-
-## v227 - Escopo da Gestão de Franquias
-- O tipo de acesso customizado "Gestão de Franquias" passa a visualizar todas as solicitações originadas por usuários do acesso padrão "Franquia".
-- A regra vale para listas de solicitações, dashboard geral, pedidos confirmados, PDFs e relatórios que reutilizam o controle de visibilidade das solicitações.
-- A ampliação é somente de visualização. Aprovar, recusar, confirmar envio ou executar outras ações continua dependendo das permissões de ação e do direcionamento configurado.
-
-## v234 - Compatibilidade de estoque legado no catálogo
-
-- Catálogo usa saldo regional atribuído e também a diferença de estoque global ainda não atribuída a regional/responsável.
-- Produtos com estoque real anterior à separação MG/SPN não desaparecem.
-- Produto com estoque global e regional zerados continua oculto.
-- Estoque já atribuído somente a MG não é exibido para SPN e vice-versa.
-- Aprovação pode consumir o saldo legado não atribuído quando o estoque individual do aprovador não for suficiente, mantendo a baixa global e o histórico.
+Acesse **http://localhost:5000**.
+
+- Localmente o banco é o SQLite em `instance/jt_insumos.db`.
+- Se o VS Code mostrar `Import "flask_mail" could not be resolved` (ou similar), selecione o interpretador `.venv\Scripts\python.exe` em *Python: Select Interpreter*.
+- Se o `.bat` apresentar erro de Python após formatar o PC ou trocar a versão, apague a pasta `.venv` e rode `ABRIR_PORTAL.bat` de novo — ele recria o ambiente sozinho.
+- **Para alterar o CSS**, edite `static/css/src/jt-ui.src.css` e rode `python tools/build_css.py`.
+
+---
+
+## 13. Deploy e variáveis de ambiente
+
+Arquitetura de produção: **GitHub** (código) → **Render** (Flask via `gunicorn app:app`) → **Cloudflare D1** (banco) + **Cloudflare R2** (arquivos) + Cloudflare DNS. Passo a passo em [`DEPLOY_CLOUDFLARE_RENDER.md`](DEPLOY_CLOUDFLARE_RENDER.md) e `render.yaml`.
+
+| Variável | Para que serve |
+|---|---|
+| `SECRET_KEY` | Chave de sessão do Flask (obrigatória em produção) |
+| `DATABASE_DRIVER` | `sqlite` (padrão) ou `cloudflare_d1` |
+| `DATABASE_PATH` | Caminho do SQLite local |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN` | Acesso ao D1 |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` | Cloudflare R2 (sem ele, os arquivos são baixados direto pelo navegador) |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Administrador criado na primeira execução |
+| `DEV_ACCESS_PASSWORD` | Senha de acesso Dev |
+| `PUBLIC_BASE_URL` | URL pública, usada nos links das notificações |
+| `FEISHU_STOCK_WEBHOOK_URL` | Webhook do Feishu |
+| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_DEFAULT_SENDER`, `MAIL_USE_TLS`, `MAIL_USE_SSL` | Envio de e-mail |
+| `ADMIN_CODE_MINUTES` | Validade do código de verificação administrativo |
+| `DISABLE_AUTO_INSTALL` | `1` impede a instalação automática de dependências ao iniciar |
+| `PORT`, `FLASK_DEBUG`, `AUTO_OPEN_BROWSER` | Execução local |
+| `USER_IMPORT_MAX_ROWS`, `ASSET_IMPORT_MAX_BYTES`, `IMPORT_BACKUP_MAX_BYTES` | Limites de importação |
+| `D1_*` | Ajustes de desempenho das consultas no D1 |
+
+---
+
+## 14. Segurança e boas práticas
+
+- **Troque as senhas padrão** do administrador e do acesso Dev antes de publicar (`ADMIN_PASSWORD`, `DEV_ACCESS_PASSWORD`) e use uma `SECRET_KEY` longa e aleatória.
+- Senhas são guardadas como **hash**; nunca em texto puro.
+- O cadastro público de usuários está **desativado** — contas são criadas dentro da plataforma por quem tem permissão.
+- Permissões de página e de ação são **validadas no servidor**, não só escondidas no menu.
+- Cada aprovação, recusa, envio e exclusão fica registrada no **histórico da solicitação**, e cada alteração de estoque no **histórico de movimentações**.
+- Não publique o arquivo `instance/jt_insumos.db` nem tokens do Cloudflare no GitHub.

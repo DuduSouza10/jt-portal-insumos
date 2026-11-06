@@ -100,6 +100,8 @@ from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from svglib.svglib import svg2rlg
 
+import pdf_theme as pdft
+
 from cloudflare_d1 import cloudflare_d1_connect_from_env
 from cloudflare_r2 import download_bytes_from_r2, upload_bytes_to_r2
 
@@ -6148,47 +6150,30 @@ def people_count_label(value: int | None) -> str:
     return f"{number} pessoa" if number == 1 else f"{number} pessoas"
 
 
+def pdf_datetime_markup(value: Any) -> str:
+    """Data em cima, hora em cinza embaixo (para células de tabela)."""
+    formatted = format_sao_paulo_datetime(value)
+    if not formatted:
+        return "-"
+    date_part, _, time_part = formatted.partition(" ")
+    markup = pdft.txt(date_part)
+    if time_part:
+        markup += f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(time_part)}</font>'
+    return markup
+
+def pdf_text_line(st: Any, text: str) -> Any:
+    return Paragraph(pdft.txt(text), st.s("meta"))
+
+
+def pdf_status_markup(status: str) -> str:
+    return pdft.status_markup(status_label(status), status)
+
+def pdf_issued_label() -> str:
+    return format_sao_paulo_datetime(suffix=" GMT-3")
+
+
 def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=15 * mm,
-        rightMargin=15 * mm,
-        topMargin=14 * mm,
-        bottomMargin=17 * mm,
-    )
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="JTEyebrow", fontName=REQUEST_PDF_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
-    styles.add(ParagraphStyle(name="JTTitle", fontName=REQUEST_PDF_FONT_BOLD, fontSize=17, leading=20, textColor=colors.HexColor("#171717"), spaceAfter=2))
-    styles.add(ParagraphStyle(name="JTSubtitle", fontName=REQUEST_PDF_FONT, fontSize=8.3, leading=11.2, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="JTSection", fontName=REQUEST_PDF_FONT_BOLD, fontSize=11.2, leading=14, textColor=colors.HexColor("#171717"), spaceBefore=3, spaceAfter=6))
-    styles.add(ParagraphStyle(name="JTMeta", fontName=REQUEST_PDF_FONT, fontSize=8.4, leading=10.6, textColor=colors.HexColor("#252525")))
-    styles.add(ParagraphStyle(name="JTMetaLabel", fontName=REQUEST_PDF_FONT_BOLD, fontSize=7.0, leading=8.5, textColor=colors.HexColor("#e60012")))
-    styles.add(ParagraphStyle(name="JTCell", fontName=REQUEST_PDF_FONT, fontSize=8.2, leading=10.6, textColor=colors.HexColor("#252525")))
-    styles.add(ParagraphStyle(name="JTCellBold", fontName=REQUEST_PDF_FONT_BOLD, fontSize=8.2, leading=10.6, textColor=colors.HexColor("#151515")))
-    styles.add(ParagraphStyle(name="JTSmall", fontName=REQUEST_PDF_FONT, fontSize=7.7, leading=10.2, textColor=colors.HexColor("#666666")))
-
-    def p(value: Any, style_name: str = "JTCell") -> Paragraph:
-        return Paragraph(pdf_mixed_text(value), styles[style_name])
-
-    story: list[Any] = []
-
-    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
-    logo_cell: Any
-    try:
-        drawing = svg2rlg(str(logo_path))
-        if drawing is not None and drawing.width:
-            scale = (31 * mm) / drawing.width
-            drawing.width *= scale
-            drawing.height *= scale
-            drawing.scale(scale, scale)
-            logo_cell = drawing
-        else:
-            raise ValueError("Logo SVG inválida")
-    except Exception:
-        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="FallbackLogoPDF", fontName=REQUEST_PDF_FONT_BOLD, fontSize=14, textColor=colors.HexColor("#e60012")))
-
+    st = pdft.Styles()
     requester = supply_request.user
     requester_name = requester.responsible_name if requester else "-"
     requester_org = requester.organization_name if requester else "-"
@@ -6197,172 +6182,87 @@ def build_request_pdf(supply_request: SupplyRequest, viewer: User) -> BytesIO:
     show_prices = viewer.is_admin or viewer.role == "franchise"
     role_label = "Administrador" if requester_role == "admin" else ("Base" if requester_role == "base" else "Franquia")
 
-    title_block = [
-        Paragraph("PORTAL DE INSUMOS", styles["JTEyebrow"]),
-        Paragraph(f"Solicitação #{supply_request.id}", styles["JTTitle"]),
-        Paragraph("J&amp;T Express Brazil", styles["JTSubtitle"]),
-    ]
-    status_block = Paragraph(
-        f"<font color='#e60012'><b>{pdf_mixed_text(status_label(supply_request.status))}</b></font>"
-        f"<br/><font color='#777777'>Emitido em {format_sao_paulo_datetime(suffix=' GMT-3')}</font>",
-        styles["JTMeta"],
+    story: list[Any] = pdft.header_block(
+        st,
+        f"Solicitação #{supply_request.id}",
+        "Pedido de insumos registrado no Portal de Insumos J&T Express.",
+        eyebrow="Solicitação de insumos",
+        issued_at=pdf_issued_label(),
+        right_markup=f'<font name="{pdft.SANS_SEMIBOLD}">{pdf_status_markup(supply_request.status)}</font>',
     )
-    header_table = Table(
-        [[
-            logo_cell,
-            title_block,
-            status_block,
-        ]],
-        colWidths=[39 * mm, 86 * mm, 55 * mm],
-    )
-    header_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff7f8")),
-        ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#edcfd3")),
-        ("LINEBELOW", (0, 0), (-1, -1), 2.2, colors.HexColor("#e60012")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 9),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-        ("TOPPADDING", (0, 0), (-1, -1), 9),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
-    ]))
-    story.append(header_table)
-    story.append(Spacer(1, 5 * mm))
 
-    primary_meta = Table(
-        [
-            [Paragraph("SOLICITANTE", styles["JTMetaLabel"]), Paragraph("BASE / FRANQUIA", styles["JTMetaLabel"]), Paragraph("TIPO", styles["JTMetaLabel"])],
-            [p(requester_name, "JTMeta"), p(requester_org, "JTMeta"), p(role_label, "JTMeta")],
-        ],
-        colWidths=[60 * mm, 60 * mm, 60 * mm],
-    )
-    primary_meta.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fcfcfc")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(primary_meta)
-    story.append(Spacer(1, 2 * mm))
-
-    secondary_fields = [
-        ("USUÁRIO", requester_username),
-        ("DATA DA SOLICITAÇÃO", format_sao_paulo_datetime(supply_request.created_at)),
+    fields: list[tuple[str, Any]] = [
+        ("Solicitante", requester_name),
+        ("Base / Franquia", requester_org),
+        ("Tipo", role_label),
+        ("Usuário", requester_username),
     ]
     if requester_role == "base":
-        secondary_fields.insert(1, ("PESSOAS NA BASE", people_count_label(supply_request.people_count)))
-    secondary_width = 180 * mm / len(secondary_fields)
-    secondary_meta = Table(
-        [
-            [Paragraph(label, styles["JTMetaLabel"]) for label, _value in secondary_fields],
-            [p(value, "JTMeta") for _label, value in secondary_fields],
-        ],
-        colWidths=[secondary_width] * len(secondary_fields),
-    )
-    secondary_meta.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fcfcfc")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(secondary_meta)
-    story.append(Spacer(1, 7 * mm))
+        fields.append(("Pessoas na base", people_count_label(supply_request.people_count)))
+    elif supply_request.regional:
+        fields.append(("Regional", supply_request.regional))
+    fields.append(("Data da solicitação", format_sao_paulo_datetime(supply_request.created_at)))
+    story.append(pdft.info_grid(st, fields, cols=3))
+    story.append(pdft.spacer(8))
 
-    headers = [p("Produto solicitado", "JTCellBold"), p("Qtd.", "JTCellBold")]
-    col_widths = [126 * mm, 28 * mm]
-    if show_prices:
-        headers.extend([p("Valor unit.", "JTCellBold"), p("Subtotal", "JTCellBold")])
-        col_widths = [86 * mm, 23 * mm, 30 * mm, 35 * mm]
-
-    item_rows: list[list[Any]] = [headers]
+    total_units = sum(int(item.quantity or 0) for item in supply_request.items)
+    story.extend(pdft.section_title(st, "Itens solicitados", f"{len(supply_request.items)} item(ns) • {total_units} unidade(s)"))
+    rows: list[list[Any]] = []
     for item in supply_request.items:
         unit_label = item.product.unit_measure if item.product and item.product.unit_measure else "un"
         row: list[Any] = [
-            p(item.product_name_snapshot),
-            p(f"{item.quantity} {unit_label}", "JTCellBold"),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(item.product_name_snapshot)}</font>'),
+            f"{pdft.num(item.quantity)} {unit_label}",
         ]
         if show_prices:
             row.extend([
-                p(format_brl(item.price_cents_snapshot)),
-                p(format_brl(item.price_cents_snapshot * item.quantity), "JTCellBold"),
+                format_brl(item.price_cents_snapshot),
+                pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(format_brl(item.price_cents_snapshot * item.quantity))}</font>'),
             ])
-        item_rows.append(row)
-
+        rows.append(row)
     if show_prices:
-        item_rows.append(["", "", p("TOTAL", "JTCellBold"), p(format_brl(supply_request.total_cents), "JTCellBold")])
+        story.append(pdft.data_table(
+            st, ["Produto", "Qtd.", "Valor unit.", "Subtotal"], rows,
+            [90 * mm, 24 * mm, 30 * mm, 34 * mm], align=["L", "R", "R", "R"],
+            total=["", "", "Total", format_brl(supply_request.total_cents)],
+            empty_message="Nenhum item nesta solicitação.",
+        ))
+    else:
+        story.append(pdft.data_table(
+            st, ["Produto", "Qtd."], rows, [138 * mm, 40 * mm], align=["L", "R"],
+            empty_message="Nenhum item nesta solicitação.",
+        ))
+    story.append(pdft.spacer(8))
 
-    story.append(Paragraph("Itens solicitados", styles["JTSection"]))
-    items_table = Table(item_rows, colWidths=col_widths, repeatRows=1)
-    style_commands = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#d90012")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e8e8e8")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6.5),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 1), (1, -1), "CENTER"),
-    ]
-    if show_prices:
-        style_commands.extend([
-            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-            ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#fff3f4")),
-            ("SPAN", (0, -1), (1, -1)),
-        ])
-    style_commands.append(("ROWBACKGROUNDS", (0, 1), (-1, -2 if show_prices else -1), [colors.white, colors.HexColor("#fafafa")]))
-    items_table.setStyle(TableStyle(style_commands))
-    story.append(items_table)
-    story.append(Spacer(1, 8 * mm))
-
-    info_blocks: list[list[Any]] = []
-    if supply_request.user_note:
-        info_blocks.append([p("Observação do solicitante", "JTCellBold"), p(supply_request.user_note, "JTSmall")])
-    if supply_request.admin_note:
-        info_blocks.append([p("Observação administrativa", "JTCellBold"), p(supply_request.admin_note, "JTSmall")])
+    progress: list[tuple[str, Any]] = []
     if supply_request.reviewed_at:
-        info_blocks.append([p("Revisão", "JTCellBold"), p(f"Revisado em {format_sao_paulo_datetime(supply_request.reviewed_at)}", "JTSmall")])
-    if info_blocks:
-        story.append(Paragraph("Informações complementares", styles["JTSection"]))
-        info_table = Table(info_blocks, colWidths=[52 * mm, 122 * mm])
-        info_table.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#fff8f8")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 8),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        story.append(info_table)
+        progress.append(("Revisado em", format_sao_paulo_datetime(supply_request.reviewed_at)))
+        if supply_request.reviewed_by:
+            progress.append(("Revisado por", supply_request.reviewed_by.responsible_name))
+    if supply_request.shipped_at:
+        progress.append(("Enviado em", format_sao_paulo_datetime(supply_request.shipped_at)))
+    if supply_request.tracking_number:
+        progress.append(("Rastreio", supply_request.tracking_number))
+    notes: list[Any] = []
+    if supply_request.user_note:
+        notes.append(pdft.note_box(st, "Observação do solicitante", supply_request.user_note))
+    if supply_request.admin_note:
+        notes.append(pdft.note_box(st, "Observação administrativa", supply_request.admin_note))
+    if progress or notes:
+        story.extend(pdft.section_title(st, "Informações complementares"))
+        if progress:
+            story.append(pdft.info_grid(st, progress, cols=min(len(progress), 4), width=pdft.CONTENT_W * min(len(progress), 3) / 3 if len(progress) < 4 else pdft.CONTENT_W))
+            story.append(pdft.spacer(3))
+        for note in notes:
+            story.append(note)
+            story.append(pdft.spacer(2.5))
 
-    def footer(canvas, document):
-        canvas.saveState()
-        width, _height = A4
-        canvas.setStrokeColor(colors.HexColor("#e60012"))
-        canvas.setLineWidth(0.7)
-        canvas.line(16 * mm, 14 * mm, width - 16 * mm, 14 * mm)
-        canvas.setFont(REQUEST_PDF_FONT, 7.5)
-        canvas.setFillColor(colors.HexColor("#777777"))
-        canvas.drawString(16 * mm, 9 * mm, "J&T Express Brazil • CNPJ: 42.584.754/0092-13")
-        canvas.drawRightString(width - 16 * mm, 9 * mm, f"Página {document.page}")
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
-    buffer.seek(0)
-    return buffer
+    return pdft.build_document(
+        story,
+        footer_left="J&T Express Brazil • CNPJ: 42.584.754/0092-13",
+        running_title=f"Solicitação #{supply_request.id}",
+        title=f"Solicitação #{supply_request.id}",
+    )
 
 
 
@@ -6435,73 +6335,12 @@ def build_supply_requests_period_report_pdf(
     unit_name: str = "",
     unit_kind: str = "",
 ) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
-        topMargin=16 * mm,
-        bottomMargin=18 * mm,
-    )
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="ReportTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=18.5, leading=22.5, textColor=colors.HexColor("#151515"), spaceAfter=3))
-    styles.add(ParagraphStyle(name="ReportSubtitle", fontName=PDF_TEXT_FONT, fontSize=9.0, leading=12.2, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="ReportSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=12.0, leading=15, textColor=colors.HexColor("#151515"), spaceBefore=6, spaceAfter=7))
-    styles.add(ParagraphStyle(name="ReportLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
-    styles.add(ParagraphStyle(name="ReportMeta", fontName=PDF_TEXT_FONT, fontSize=8.0, leading=10.2, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="ReportCell", fontName=PDF_TEXT_FONT, fontSize=7.4, leading=9.5, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="ReportCellBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.4, leading=9.5, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="ReportSmall", fontName=PDF_TEXT_FONT, fontSize=6.8, leading=8.6, textColor=colors.HexColor("#666666")))
-
-    def p(value: Any, style_name: str = "ReportCell") -> Paragraph:
-        return Paragraph(pdf_clean_text(value), styles[style_name])
-
-    def status_name(status: str) -> str:
-        return status_label(status)
-
-    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
-    try:
-        drawing = svg2rlg(str(logo_path))
-        if drawing is not None and drawing.width:
-            scale = (34 * mm) / drawing.width
-            drawing.width *= scale
-            drawing.height *= scale
-            drawing.scale(scale, scale)
-            logo_cell: Any = drawing
-        else:
-            raise ValueError("Logo SVG inválida")
-    except Exception:
-        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="ReportFallbackLogo", fontName=PDF_TEXT_FONT_BOLD, fontSize=13, textColor=colors.HexColor("#e60012")))
-
+    st = pdft.Styles()
     period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
     unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
-    generated_label = format_sao_paulo_datetime(suffix=" GMT-3")
-    story: list[Any] = []
-    header = Table(
-        [[
-            logo_cell,
-            Paragraph("Relatório de Solicitações de Insumos", styles["ReportTitle"]),
-            Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><b>Unidade</b><br/>{pdf_clean_text(unit_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["ReportMeta"]),
-        ]],
-        colWidths=[36 * mm, 92 * mm, 50 * mm],
-    )
-    header.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("LINEBELOW", (0, 0), (-1, -1), 2.0, colors.HexColor("#e60012")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(header)
-    story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph(f"Relatório consolidado das solicitações registradas no intervalo selecionado para {pdf_clean_text(unit_label)}, incluindo solicitante, status, pessoas das bases, itens, quantidades, valores e observações.", styles["ReportSubtitle"]))
-    story.append(Spacer(1, 6 * mm))
 
     status_counts: dict[str, int] = {}
-    total_items = 0
+    total_lines = 0
     total_units = 0
     total_people = 0
     total_value = 0
@@ -6514,7 +6353,7 @@ def build_supply_requests_period_report_pdf(
         if req.user and req.user.organization_name:
             requester_units.add(pdf_clean_plain_text(req.user.organization_name))
         for item in req.items:
-            total_items += 1
+            total_lines += 1
             total_units += int(item.quantity or 0)
             total_value += int(item.price_cents_snapshot or 0) * int(item.quantity or 0)
             product_key = item.product_name_snapshot or f"Produto #{item.product_id}"
@@ -6524,133 +6363,101 @@ def build_supply_requests_period_report_pdf(
             if item.product and item.product.unit_measure:
                 bucket["unit"] = item.product.unit_measure
 
-    summary_data = [
-        [Paragraph("SOLICITAÇÕES", styles["ReportLabel"]), Paragraph("BASES/FRANQUIAS", styles["ReportLabel"]), Paragraph("ITENS", styles["ReportLabel"]), Paragraph("VALOR TOTAL", styles["ReportLabel"])],
-        [p(len(requests_list), "ReportMeta"), p(len(requester_units), "ReportMeta"), p(f"{total_items} linhas / {total_units} un.", "ReportMeta"), p(format_brl(total_value), "ReportMeta")],
-        [Paragraph("PENDENTES", styles["ReportLabel"]), Paragraph("APROVADAS", styles["ReportLabel"]), Paragraph("REJEITADAS", styles["ReportLabel"]), Paragraph("PESSOAS NAS BASES", styles["ReportLabel"])],
-        [p(status_counts.get("pending", 0), "ReportMeta"), p(status_counts.get("awaiting_shipment", 0) + status_counts.get("shipped", 0), "ReportMeta"), p(status_counts.get("rejected", 0), "ReportMeta"), p(total_people if total_people else "-", "ReportMeta")],
-    ]
-    summary_table = Table(summary_data, colWidths=[44.5 * mm, 44.5 * mm, 44.5 * mm, 44.5 * mm])
-    summary_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#fff3f4")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 9),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 9),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    story: list[Any] = pdft.header_block(
+        st,
+        "Relatório de Solicitações de Insumos",
+        "Solicitações registradas no intervalo selecionado, com solicitante, status, itens, quantidades, valores e observações.",
+        eyebrow="Relatório",
+        issued_at=pdf_issued_label(),
+    )
+    story.append(pdft.info_grid(st, [
+        ("Período", period_label),
+        ("Unidade", unit_label),
+        ("Emitido por", viewer.responsible_name),
+    ], cols=3))
+    story.append(pdft.spacer(5))
+    story.append(pdft.kpi_row(st, [
+        ("Solicitações", len(requests_list)),
+        ("Bases e franquias", len(requester_units)),
+        ("Unidades solicitadas", total_units),
+        ("Valor total", format_brl(total_value)),
     ]))
-    story.append(summary_table)
-    story.append(Spacer(1, 6 * mm))
+    story.append(pdft.spacer(2.4))
+    story.append(pdft.kpi_row(st, [
+        ("Pendentes", status_counts.get("pending", 0)),
+        ("Aguardando envio", status_counts.get("awaiting_shipment", 0) + status_counts.get("approved", 0)),
+        ("Enviadas", status_counts.get("shipped", 0)),
+        ("Recusadas", status_counts.get("rejected", 0)),
+    ]))
+    if total_people:
+        story.append(pdft.spacer(2.6))
+        story.append(pdf_text_line(st, f"Pessoas nas bases (soma das solicitações do período): {pdft.num(total_people)}"))
+    story.append(pdft.spacer(8))
 
     if product_totals:
         top_products = sorted(product_totals.values(), key=lambda row: row["quantity"], reverse=True)[:12]
-        story.append(Paragraph("Resumo por produto", styles["ReportSection"]))
-        product_rows = [[p("Produto", "ReportCellBold"), p("Quantidade", "ReportCellBold"), p("Valor", "ReportCellBold")]]
-        for product in top_products:
-            product_rows.append([
-                p(product["name"]),
-                p(f"{product['quantity']} {product.get('unit') or 'un'}", "ReportCellBold"),
-                p(format_brl(product["value"]), "ReportCellBold"),
-            ])
-        product_table = Table(product_rows, colWidths=[108 * mm, 34 * mm, 36 * mm], repeatRows=1)
-        product_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e60012")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fff8f8")]),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 7),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
-        ]))
-        story.append(product_table)
-        story.append(Spacer(1, 6 * mm))
+        story.extend(pdft.section_title(st, "Resumo por produto", "12 mais solicitados"))
+        product_rows = [
+            [product["name"], f"{pdft.num(product['quantity'])} {product.get('unit') or 'un'}", format_brl(product["value"])]
+            for product in top_products
+        ]
+        story.append(pdft.data_table(
+            st, ["Produto", "Quantidade", "Valor"], product_rows,
+            [108 * mm, 34 * mm, 36 * mm], align=["L", "R", "R"],
+        ))
+        story.append(pdft.spacer(8))
 
-    story.append(Paragraph("Solicitações do período", styles["ReportSection"]))
-    if not requests_list:
-        empty = Table([[Paragraph("Nenhuma solicitação encontrada para o período selecionado.", styles["ReportMeta"])]], colWidths=[178 * mm])
-        empty.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff8f8")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ("TOPPADDING", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ]))
-        story.append(empty)
-    else:
-        for req in requests_list:
-            requester = req.user
-            requester_name = requester.responsible_name if requester else "-"
-            requester_org = requester.organization_name if requester else "-"
-            requester_username = requester.username if requester else "-"
-            requester_role = user_role_label(requester.role if requester else "")
-            requester_role_value = requester_role
-            requester_role_label = "Tipo"
-            if requester and requester.role == "base":
-                requester_role_label = "Tipo / Pessoas"
-                requester_role_value = f"{requester_role} • {people_count_label(req.people_count)}"
-            item_text_parts = []
-            for item in req.items:
-                unit = item.product.unit_measure if item.product and item.product.unit_measure else "un"
-                subtotal = int(item.price_cents_snapshot or 0) * int(item.quantity or 0)
-                item_text_parts.append(f"{item.quantity} {unit} - {item.product_name_snapshot} ({format_brl(subtotal)})")
-            if not item_text_parts:
-                item_text_parts.append("Sem itens")
-            notes_html = "-"
-            if req.user_note and req.admin_note:
-                notes_html = f"Solicitante: {pdf_clean_text(req.user_note)}<br/>Admin: {pdf_clean_text(req.admin_note)}"
-            elif req.user_note:
-                notes_html = pdf_clean_text(req.user_note)
-            elif req.admin_note:
-                notes_html = pdf_clean_text(req.admin_note)
+    story.extend(pdft.section_title(st, "Solicitações do período", f"{len(requests_list)} registro(s)"))
+    rows: list[list[Any]] = []
+    for req in requests_list:
+        requester = req.user
+        requester_name = requester.responsible_name if requester else "-"
+        requester_org = requester.organization_name if requester else "-"
+        requester_role = user_role_label(requester.role if requester else "")
+        who = (
+            f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(requester_name)}</font>'
+            f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(requester_org)}</font>'
+        )
+        if requester and requester.role == "base" and people_count_label(req.people_count) != "-":
+            who += f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(requester_role)} • {pdft.txt(people_count_label(req.people_count))}</font>'
+        else:
+            who += f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(requester_role)}</font>'
 
-            detail_rows = [
-                [Paragraph(f"Solicitação #{req.id}", styles["ReportCellBold"]), Paragraph(pdf_clean_text(status_name(req.status)), styles["ReportCellBold"]), Paragraph(format_sao_paulo_datetime(req.created_at), styles["ReportCellBold"])],
-                [Paragraph("Solicitante", styles["ReportLabel"]), Paragraph("Setor", styles["ReportLabel"]), Paragraph(requester_role_label, styles["ReportLabel"])],
-                [p(f"{requester_name} ({requester_username})"), p(requester_org), p(requester_role_value)],
-                [Paragraph("Itens", styles["ReportLabel"]), Paragraph("Observações", styles["ReportLabel"]), Paragraph("Total", styles["ReportLabel"])],
-                [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_text_parts), styles["ReportSmall"]), Paragraph(notes_html, styles["ReportSmall"]), p(format_brl(req.total_cents), "ReportCellBold")],
-            ]
-            if req.reviewed_at:
-                detail_rows.append([Paragraph("Revisão", styles["ReportLabel"]), Paragraph(format_sao_paulo_datetime(req.reviewed_at), styles["ReportSmall"]), Paragraph("", styles["ReportSmall"])])
-            detail = Table(detail_rows, colWidths=[68 * mm, 66 * mm, 44 * mm], repeatRows=0)
-            detail.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fffafa")),
-                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#fffafa")),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6d6d8")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#eeeeee")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]))
-            story.append(detail)
-            story.append(Spacer(1, 3.5 * mm))
+        item_lines = []
+        for item in req.items:
+            unit = item.product.unit_measure if item.product and item.product.unit_measure else "un"
+            subtotal = int(item.price_cents_snapshot or 0) * int(item.quantity or 0)
+            item_lines.append(
+                f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{item.quantity} {pdft.txt(unit)}</font> '
+                f'{pdft.txt(item.product_name_snapshot)} '
+                f'<font color="#a0a0a9">({pdft.txt(format_brl(subtotal)).replace(" ", "&nbsp;")})</font>'
+            )
+        items_markup = "<br/>".join(item_lines) if item_lines else '<font color="#a0a0a9">Sem itens</font>'
+        if req.user_note:
+            items_markup += f'<br/><font color="#6c6c75" size="7.4">Solicitante: {pdft.txt(req.user_note)}</font>'
+        if req.admin_note:
+            items_markup += f'<br/><font color="#6c6c75" size="7.4">Admin: {pdft.txt(req.admin_note)}</font>'
 
-    def footer(canvas, document):
-        canvas.saveState()
-        width, _height = A4
-        canvas.setStrokeColor(colors.HexColor("#e60012"))
-        canvas.setLineWidth(0.7)
-        canvas.line(16 * mm, 13 * mm, width - 16 * mm, 13 * mm)
-        canvas.setFont(PDF_TEXT_FONT, 7.2)
-        canvas.setFillColor(colors.HexColor("#777777"))
-        canvas.drawString(16 * mm, 8.5 * mm, "J&T Express Brazil • Relatório mensal de solicitações")
-        canvas.drawRightString(width - 16 * mm, 8.5 * mm, f"Página {document.page}")
-        canvas.restoreState()
+        rows.append([
+            pdft.markup(f'<font name="{pdft.SANS_BOLD}" color="#17171a">#{req.id}</font><br/>{pdf_datetime_markup(req.created_at)}'),
+            pdft.markup(who),
+            pdft.markup(pdf_status_markup(req.status)),
+            pdft.markup(items_markup),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(format_brl(req.total_cents))}</font>'),
+        ])
+    story.append(pdft.data_table(
+        st, ["Solicitação", "Solicitante", "Status", "Itens", "Total"], rows,
+        [20 * mm, 38 * mm, 22 * mm, 76 * mm, 22 * mm], align=["L", "L", "L", "L", "R"],
+        empty_message="Nenhuma solicitação encontrada para o período selecionado.",
+        total=None,
+    ))
 
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
-    buffer.seek(0)
-    return buffer
+    return pdft.build_document(
+        story,
+        footer_left="J&T Express Brazil • Relatório de solicitações",
+        running_title=f"Relatório de solicitações • {period_label}",
+        title="Relatório de Solicitações de Insumos",
+    )
 
 def build_assets_period_report_pdf(
     assets: list[AssetRecord],
@@ -6660,318 +6467,131 @@ def build_assets_period_report_pdf(
     unit_name: str,
     unit_kind: str,
 ) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=16 * mm,
-        rightMargin=16 * mm,
-        topMargin=16 * mm,
-        bottomMargin=18 * mm,
-    )
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="AssetReportTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=18.5, leading=22, textColor=colors.HexColor("#141414"), spaceAfter=2))
-    styles.add(ParagraphStyle(name="AssetReportSubtitle", fontName=PDF_TEXT_FONT, fontSize=8.8, leading=12, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="AssetReportLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.2, leading=9, textColor=colors.HexColor("#e60012")))
-    styles.add(ParagraphStyle(name="AssetReportCell", fontName=PDF_TEXT_FONT, fontSize=7.5, leading=9.8, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="AssetReportCellBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.6, leading=9.8, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="AssetReportSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=12.0, leading=15, textColor=colors.HexColor("#111111"), spaceBefore=7, spaceAfter=7))
-    styles.add(ParagraphStyle(name="AssetReportSmall", fontName=PDF_TEXT_FONT, fontSize=6.8, leading=8.8, textColor=colors.HexColor("#666666")))
-
-    def p(value: Any, style_name: str = "AssetReportCell") -> Paragraph:
-        return Paragraph(pdf_clean_text(value), styles[style_name])
-
-    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
-    try:
-        drawing = svg2rlg(str(logo_path))
-        if drawing is not None and drawing.width:
-            scale = (34 * mm) / drawing.width
-            drawing.width *= scale
-            drawing.height *= scale
-            drawing.scale(scale, scale)
-            logo_cell: Any = drawing
-        else:
-            raise ValueError("Logo SVG inválida")
-    except Exception:
-        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="AssetReportFallbackLogo", fontName=PDF_TEXT_FONT_BOLD, fontSize=13, textColor=colors.HexColor("#e60012")))
-
+    st = pdft.Styles()
     period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
     unit_label = f"{unit_kind_label(unit_kind)}: {unit_name}" if unit_name else "Todas as unidades"
-    generated_label = format_sao_paulo_datetime(suffix=" GMT-3")
-    total_assets = len(assets)
     total_item_lines = sum(len(asset.items) for asset in assets)
     total_quantity = sum(sum(max(0, int(item.quantity or 0)) for item in asset.items) for asset in assets)
     sectors = len({asset.sector for asset in assets if asset.sector})
     managers = len({asset.manager for asset in assets if asset.manager})
 
-    story: list[Any] = []
-    header = Table(
-        [[
-            logo_cell,
-            Paragraph("Relatório de Ativos", styles["AssetReportTitle"]),
-            Paragraph(f"<b>Período</b><br/>{pdf_clean_text(period_label)}<br/><b>Unidade</b><br/>{pdf_clean_text(unit_label)}<br/><font color='#777777'>Gerado em {generated_label}</font>", styles["AssetReportCell"]),
-        ]],
-        colWidths=[36 * mm, 90 * mm, 52 * mm],
+    story: list[Any] = pdft.header_block(
+        st,
+        "Relatório de Ativos",
+        "Ativos cadastrados no período selecionado, com unidade, setor, gestor e itens vinculados.",
+        eyebrow="Relatório",
+        issued_at=pdf_issued_label(),
     )
-    header.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("LINEBELOW", (0, 0), (-1, -1), 2.0, colors.HexColor("#e60012")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    story.append(pdft.info_grid(st, [
+        ("Período", period_label),
+        ("Unidade", unit_label),
+        ("Emitido por", viewer.responsible_name),
+    ], cols=3))
+    story.append(pdft.spacer(5))
+    story.append(pdft.kpi_row(st, [
+        ("Ativos", len(assets)),
+        ("Linhas de itens", total_item_lines),
+        ("Quantidade total", total_quantity),
+        ("Setores", sectors),
+        ("Gestores", managers),
     ]))
-    story.append(header)
-    story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph("Relatório consolidado dos ativos cadastrados no período selecionado, com dados da unidade, setor, gestor e itens vinculados.", styles["AssetReportSubtitle"]))
-    story.append(Spacer(1, 6 * mm))
+    story.append(pdft.spacer(8))
 
-    summary = Table([
-        [p("ATIVOS", "AssetReportLabel"), p("LINHAS DE ITENS", "AssetReportLabel"), p("QUANTIDADE TOTAL", "AssetReportLabel"), p("SETORES", "AssetReportLabel"), p("GESTORES", "AssetReportLabel")],
-        [p(total_assets, "AssetReportCellBold"), p(total_item_lines, "AssetReportCellBold"), p(total_quantity, "AssetReportCellBold"), p(sectors, "AssetReportCellBold"), p(managers, "AssetReportCellBold")],
-    ], colWidths=[35.6 * mm] * 5)
-    summary.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#eeeeee")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(summary)
-    story.append(Spacer(1, 7 * mm))
+    story.extend(pdft.section_title(st, "Ativos do período", f"{len(assets)} registro(s)"))
+    rows: list[list[Any]] = []
+    for asset in assets:
+        item_lines = []
+        for item in asset.items:
+            product = get_product(item.product_id) if item.product_id else None
+            unit = product.unit_measure if product and product.unit_measure else "un"
+            serial = item.serial_number or "Sem patrimônio/série"
+            item_lines.append(
+                f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{item.quantity} {pdft.txt(unit)}</font> '
+                f'{pdft.txt(item.item_name)} '
+                f'<font color="#a0a0a9">• {pdft.txt(serial)}</font>'
+            )
+        items_markup = "<br/>".join(item_lines) if item_lines else '<font color="#a0a0a9">Sem itens</font>'
+        asset_total = sum(max(0, int(item.quantity or 0)) for item in asset.items)
+        rows.append([
+            pdft.markup(f'<font name="{pdft.SANS_BOLD}" color="#17171a">#{asset.id}</font><br/>{pdf_datetime_markup(asset.created_at)}'),
+            pdft.markup(
+                f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(asset.name)}</font>'
+                f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(asset.base)}</font>'
+                f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(asset.regional)}</font>'
+            ),
+            pdft.markup(
+                f'{pdft.txt(asset.sector)}'
+                f'<br/><font color="#6c6c75" size="7.4">{pdft.txt(asset.manager)}</font>'
+            ),
+            pdft.markup(items_markup),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{asset_total}</font>'),
+        ])
+    story.append(pdft.data_table(
+        st, ["Ativo", "Descrição / Unidade", "Setor / Gestor", "Itens vinculados", "Qtd."], rows,
+        [22 * mm, 48 * mm, 34 * mm, 62 * mm, 12 * mm], align=["L", "L", "L", "L", "R"],
+        empty_message="Nenhum ativo encontrado para o período e unidade selecionados.",
+    ))
 
-    story.append(Paragraph("Ativos do período", styles["AssetReportSection"]))
-    if not assets:
-        empty = Table([[Paragraph("Nenhum ativo encontrado para o período e unidade selecionados.", styles["AssetReportCell"])]], colWidths=[178 * mm])
-        empty.setStyle(TableStyle([
-            ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#eeeeee")),
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fff8f8")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-            ("TOPPADDING", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-        ]))
-        story.append(empty)
-    else:
-        for asset in assets:
-            item_parts = []
-            for item in asset.items:
-                product = get_product(item.product_id) if item.product_id else None
-                unit = product.unit_measure if product and product.unit_measure else "un"
-                serial = item.serial_number or "Sem patrimônio/série"
-                item_parts.append(f"{item.quantity} {unit} - {item.item_name} • {serial}")
-            if not item_parts:
-                item_parts.append("Sem itens")
-            detail_rows = [
-                [p(f"Ativo #{asset.id}", "AssetReportCellBold"), p(asset.name, "AssetReportCellBold"), p(format_sao_paulo_datetime(asset.created_at), "AssetReportCellBold")],
-                [p("Setor", "AssetReportLabel"), p("Setor", "AssetReportLabel"), p("Gestor", "AssetReportLabel")],
-                [p(asset.base), p(asset.sector), p(asset.manager)],
-                [p("Itens vinculados", "AssetReportLabel"), p("Regional", "AssetReportLabel"), p("Total do ativo", "AssetReportLabel")],
-                [Paragraph("<br/>".join(pdf_clean_text(part) for part in item_parts), styles["AssetReportSmall"]), p(asset.regional), p(str(sum(max(0, int(item.quantity or 0)) for item in asset.items)), "AssetReportCellBold")],
-            ]
-            detail = Table(detail_rows, colWidths=[82 * mm, 54 * mm, 42 * mm])
-            detail.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff3f4")),
-                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#fffafa")),
-                ("BACKGROUND", (0, 3), (-1, 3), colors.HexColor("#fffafa")),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6d6d8")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#eeeeee")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ]))
-            story.append(detail)
-            story.append(Spacer(1, 3.5 * mm))
-
-    def footer(canvas, document):
-        canvas.saveState()
-        width, _height = A4
-        canvas.setStrokeColor(colors.HexColor("#e60012"))
-        canvas.setLineWidth(0.7)
-        canvas.line(16 * mm, 13 * mm, width - 16 * mm, 13 * mm)
-        canvas.setFont(PDF_TEXT_FONT, 7.2)
-        canvas.setFillColor(colors.HexColor("#777777"))
-        canvas.drawString(16 * mm, 8.5 * mm, "J&T Express Brazil • Relatório mensal de ativos")
-        canvas.drawRightString(width - 16 * mm, 8.5 * mm, f"Página {document.page}")
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
-    buffer.seek(0)
-    return buffer
+    return pdft.build_document(
+        story,
+        footer_left="J&T Express Brazil • Relatório de ativos",
+        running_title=f"Relatório de ativos • {period_label}",
+        title="Relatório de Ativos",
+    )
 
 
 def build_asset_pdf(asset: AssetRecord, viewer: User) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        leftMargin=15 * mm,
-        rightMargin=15 * mm,
-        topMargin=14 * mm,
-        bottomMargin=18 * mm,
-    )
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="AssetTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=20, leading=24, textColor=colors.HexColor("#111111"), spaceAfter=2))
-    styles.add(ParagraphStyle(name="AssetSubtitle", fontName=PDF_TEXT_FONT, fontSize=8.7, leading=11.5, textColor=colors.HexColor("#666666")))
-    styles.add(ParagraphStyle(name="AssetLabel", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.2, leading=8.6, textColor=colors.HexColor("#e60012"), uppercase=True))
-    styles.add(ParagraphStyle(name="AssetValue", fontName=PDF_TEXT_FONT_BOLD, fontSize=9.4, leading=12, textColor=colors.HexColor("#141414")))
-    styles.add(ParagraphStyle(name="AssetCell", fontName=PDF_TEXT_FONT, fontSize=8.6, leading=11.2, textColor=colors.HexColor("#252525")))
-    styles.add(ParagraphStyle(name="AssetCellBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=8.6, leading=11.2, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="AssetSmall", fontName=PDF_TEXT_FONT, fontSize=7.5, leading=9.6, textColor=colors.HexColor("#777777")))
-    styles.add(ParagraphStyle(name="AssetSection", fontName=PDF_TEXT_FONT_BOLD, fontSize=12, leading=14.5, textColor=colors.HexColor("#111111"), spaceBefore=2, spaceAfter=6))
-
-    story: list[Any] = []
-
-    logo_path = BASE_DIR / "static" / "img" / "logo-jt-red.svg"
-    try:
-        drawing = svg2rlg(str(logo_path))
-        if drawing is None or not drawing.width:
-            raise ValueError("Logo SVG invalida")
-        scale = (38 * mm) / drawing.width
-        drawing.width *= scale
-        drawing.height *= scale
-        drawing.scale(scale, scale)
-        logo_cell: Any = drawing
-    except Exception:
-        logo_cell = Paragraph("J&amp;T EXPRESS", ParagraphStyle(name="AssetFallbackLogo", fontName=PDF_TEXT_FONT_BOLD, fontSize=15, textColor=colors.HexColor("#e60012")))
-
+    st = pdft.Styles()
     total_quantity = sum(max(0, int(item.quantity or 0)) for item in asset.items)
     total_lines = len(asset.items)
     created_by = get_user(asset.created_by_id) if asset.created_by_id else None
     created_by_name = created_by.responsible_name if created_by else "Portal de Insumos"
-    generated_at = format_sao_paulo_datetime(suffix=" GMT-3")
 
-    header = Table(
-        [[
-            logo_cell,
-            Paragraph(f"Ficha de Ativo #{asset.id}", styles["AssetTitle"]),
-            Paragraph(f"<b>Gerado em</b><br/>{generated_at}<br/><font color='#777777'>Portal de Insumos J&amp;T Express</font>", styles["AssetCell"]),
-        ]],
-        colWidths=[43 * mm, 82 * mm, 55 * mm],
+    story: list[Any] = pdft.header_block(
+        st,
+        f"Ficha de Ativo #{asset.id}",
+        "Documento patrimonial gerado automaticamente para controle interno de ativos vinculados a bases e franquias.",
+        eyebrow="Ficha patrimonial",
+        issued_at=pdf_issued_label(),
     )
-    header.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BOX", (0, 0), (-1, -1), 0.9, colors.HexColor("#eeeeee")),
-        ("LINEBELOW", (0, 0), (-1, -1), 2.2, colors.HexColor("#e60012")),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 9),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
-    ]))
-    story.append(header)
-    story.append(Spacer(1, 5 * mm))
-    story.append(Paragraph("Documento patrimonial gerado automaticamente para controle interno de ativos vinculados a bases e franquias.", styles["AssetSubtitle"]))
-    story.append(Spacer(1, 7 * mm))
+    story.append(pdft.info_grid(st, [
+        ("Ativo", asset.name),
+        ("Base / Franquia", asset.base),
+        ("Regional", asset.regional),
+        ("Setor", asset.sector),
+        ("Gestor responsável", asset.manager),
+        ("Cadastrado por", created_by_name),
+        ("Data do cadastro", format_sao_paulo_datetime(asset.created_at)),
+        ("Total de itens", total_quantity),
+        ("Linhas de itens", total_lines),
+    ], cols=3))
+    story.append(pdft.spacer(8))
 
-    def label_cell(text: str) -> Paragraph:
-        return Paragraph(pdf_clean_text(text), styles["AssetLabel"])
-
-    def value_cell(value: Any) -> Paragraph:
-        return Paragraph(pdf_clean_text(value), styles["AssetValue"])
-
-    info_data = [
-        [label_cell("ATIVO"), label_cell("BASE / FRANQUIA"), label_cell("REGIONAL")],
-        [value_cell(asset.name), value_cell(asset.base), value_cell(asset.regional)],
-        [label_cell("SETOR"), label_cell("GESTOR RESPONSAVEL"), label_cell("CADASTRADO POR")],
-        [value_cell(asset.sector), value_cell(asset.manager), value_cell(created_by_name)],
-        [label_cell("DATA DO CADASTRO"), label_cell("TOTAL DE ITENS"), label_cell("LINHAS DE ITENS")],
-        [value_cell(format_sao_paulo_datetime(asset.created_at)), value_cell(str(total_quantity)), value_cell(str(total_lines))],
-    ]
-    info_table = Table(info_data, colWidths=[60 * mm, 60 * mm, 60 * mm])
-    info_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fcfcfc")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fff1f2")),
-        ("BACKGROUND", (0, 2), (-1, 2), colors.HexColor("#fff1f2")),
-        ("BACKGROUND", (0, 4), (-1, 4), colors.HexColor("#fff1f2")),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#e6e6e6")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e9e9e9")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 6.2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6.2),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
-    story.append(info_table)
-    story.append(Spacer(1, 8 * mm))
-
-    story.append(Paragraph("Itens vinculados ao ativo", styles["AssetSection"]))
-    item_rows: list[list[Any]] = [[
-        Paragraph("#", styles["AssetCellBold"]),
-        Paragraph("Item", styles["AssetCellBold"]),
-        Paragraph("Quantidade", styles["AssetCellBold"]),
-        Paragraph("Patrimonio / Serie", styles["AssetCellBold"]),
-    ]]
+    story.extend(pdft.section_title(st, "Itens vinculados ao ativo", f"{total_lines} linha(s) • {total_quantity} unidade(s)"))
+    rows: list[list[Any]] = []
     for index, item in enumerate(asset.items, start=1):
         product = get_product(item.product_id) if item.product_id else None
         unit = product.unit_measure if product and product.unit_measure else "un"
-        quantity_text = f"{item.quantity} {unit}"
-        item_rows.append([
-            Paragraph(str(index), styles["AssetCellBold"]),
-            Paragraph(pdf_clean_text(item.item_name), styles["AssetCell"]),
-            Paragraph(pdf_clean_text(quantity_text), styles["AssetCellBold"]),
-            Paragraph(pdf_clean_text(item.serial_number or "Sem patrimonio/serie"), styles["AssetCell"]),
+        rows.append([
+            str(index),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(item.item_name)}</font>'),
+            f"{item.quantity} {unit}",
+            item.serial_number or "Sem patrimônio/série",
         ])
-    if len(item_rows) == 1:
-        item_rows.append(["", Paragraph("Nenhum item cadastrado.", styles["AssetCell"]), "", ""])
+    story.append(pdft.data_table(
+        st, ["#", "Item", "Quantidade", "Patrimônio / Série"], rows,
+        [12 * mm, 84 * mm, 30 * mm, 52 * mm], align=["C", "L", "R", "L"],
+        empty_message="Nenhum item cadastrado.",
+    ))
+    story.append(pdft.spacer(10))
+    story.append(pdft.KeepTogether([pdft.signature_block(st, ["Responsável pela unidade", "Conferência administrativa"])]))
 
-    items_table = Table(item_rows, colWidths=[13 * mm, 87 * mm, 29 * mm, 51 * mm], repeatRows=1)
-    item_styles = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e60012")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#dddddd")),
-        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#e8e8e8")),
-        ("LEFTPADDING", (0, 0), (-1, -1), 7),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (0, 1), (0, -1), "CENTER"),
-        ("ALIGN", (2, 1), (2, -1), "CENTER"),
-    ]
-    for row_index in range(1, len(item_rows), 2):
-        item_styles.append(("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#fbfbfb")))
-    items_table.setStyle(TableStyle(item_styles))
-    story.append(items_table)
-    story.append(Spacer(1, 10 * mm))
-
-    signature_table = Table(
-        [[
-            Paragraph("Responsavel pela unidade", styles["AssetSmall"]),
-            Paragraph("Conferencia administrativa", styles["AssetSmall"]),
-        ], [
-            Paragraph("__________________________________________", styles["AssetCell"]),
-            Paragraph("__________________________________________", styles["AssetCell"]),
-        ]],
-        colWidths=[87 * mm, 87 * mm],
+    return pdft.build_document(
+        story,
+        footer_left=f"Ativo #{asset.id} • {pdf_clean_plain_text(asset.base)}",
+        running_title=f"Ficha de Ativo #{asset.id}",
+        title=f"Ficha de Ativo #{asset.id}",
     )
-    signature_table.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]))
-    story.append(signature_table)
-
-    def footer(canvas, document):
-        canvas.saveState()
-        canvas.setStrokeColor(colors.HexColor("#e60012"))
-        canvas.setLineWidth(0.6)
-        canvas.line(15 * mm, 13 * mm, A4[0] - 15 * mm, 13 * mm)
-        canvas.setFillColor(colors.HexColor("#777777"))
-        canvas.setFont(PDF_TEXT_FONT, 7.5)
-        canvas.drawString(15 * mm, 8.7 * mm, f"Ativo #{asset.id} - {pdf_clean_plain_text(asset.base)}")
-        canvas.drawRightString(A4[0] - 15 * mm, 8.7 * mm, f"Pagina {document.page}")
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
-    buffer.seek(0)
-    return buffer
 
 
 PRODUCT_EXPORT_HEADERS_PT = [
@@ -8907,79 +8527,70 @@ def build_assets_import_template() -> BytesIO:
     return buffer
 
 def build_material_entries_report_pdf(entries: list[MaterialEntry], start_dt: datetime, end_dt: datetime, viewer: User) -> BytesIO:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=14*mm, leftMargin=14*mm, topMargin=15*mm, bottomMargin=12*mm)
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="MaterialTitle", fontName=PDF_TEXT_FONT_BOLD, fontSize=17, leading=21, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="MaterialSub", fontName=PDF_TEXT_FONT, fontSize=8.5, leading=11, textColor=colors.HexColor("#555555")))
-    styles.add(ParagraphStyle(name="MaterialCell", fontName=PDF_TEXT_FONT, fontSize=7.4, leading=9.2, textColor=colors.HexColor("#222222")))
-    styles.add(ParagraphStyle(name="MaterialBold", fontName=PDF_TEXT_FONT_BOLD, fontSize=7.6, leading=9.5, textColor=colors.HexColor("#111111")))
-    styles.add(ParagraphStyle(name="MaterialSmall", fontName=PDF_TEXT_FONT, fontSize=6.8, leading=8.2, textColor=colors.HexColor("#666666")))
-    def p(value: Any, style: str = "MaterialCell") -> Paragraph:
-        return Paragraph(pdf_clean_text(value), styles[style])
+    st = pdft.Styles()
+    period_label = f"{start_dt.strftime('%d/%m/%Y')} a {end_dt.strftime('%d/%m/%Y')}"
     total_qty = sum(int(entry.quantity or 0) for entry in entries)
     total_value = sum(entry.total_cents for entry in entries)
     invoices = len([entry for entry in entries if entry.invoice_number or entry.invoice_file_name])
-    story: list[Any] = []
-    story.append(Paragraph("Relatório de Entrada de Materiais", styles["MaterialTitle"]))
-    story.append(Paragraph(f"Período: {start_dt.strftime('%d/%m/%Y')} até {end_dt.strftime('%d/%m/%Y')} • Gerado por {pdf_clean_text(viewer.responsible_name)}", styles["MaterialSub"]))
-    story.append(Spacer(1, 6*mm))
-    summary = Table([
-        [p("Entradas", "MaterialBold"), p("Quantidade total", "MaterialBold"), p("Valor total", "MaterialBold"), p("Notas fiscais", "MaterialBold")],
-        [p(str(len(entries))), p(str(total_qty)), p(format_brl(total_value)), p(str(invoices))],
-    ], colWidths=[42*mm, 42*mm, 42*mm, 42*mm])
-    summary.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#E60012")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("BACKGROUND", (0,1), (-1,-1), colors.HexColor("#F8F8F8")),
-        ("BOX", (0,0), (-1,-1), 0.4, colors.HexColor("#DDDDDD")),
-        ("INNERGRID", (0,0), (-1,-1), 0.3, colors.HexColor("#E5E5E5")),
-        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING", (0,0), (-1,-1), 7),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+
+    story: list[Any] = pdft.header_block(
+        st,
+        "Relatório de Entrada de Materiais",
+        "Entradas de materiais no estoque registradas no período selecionado, com quantidades, valores e notas fiscais.",
+        eyebrow="Relatório",
+        issued_at=pdf_issued_label(),
+    )
+    story.append(pdft.info_grid(st, [
+        ("Período", period_label),
+        ("Emitido por", viewer.responsible_name),
+    ], cols=2))
+    story.append(pdft.spacer(5))
+    story.append(pdft.kpi_row(st, [
+        ("Entradas", len(entries)),
+        ("Quantidade total", total_qty),
+        ("Valor total", format_brl(total_value)),
+        ("Notas fiscais", invoices),
     ]))
-    story.append(summary)
-    story.append(Spacer(1, 7*mm))
-    rows = [[p("Data", "MaterialBold"), p("Item", "MaterialBold"), p("Qtd.", "MaterialBold"), p("Un.", "MaterialBold"), p("Valor unit.", "MaterialBold"), p("Nota fiscal", "MaterialBold"), p("Observações", "MaterialBold")]]
-    if entries:
-        for entry in entries:
-            invoice_parts = []
-            if entry.invoice_number:
-                invoice_parts.append(f"Nº {entry.invoice_number}")
-            if entry.invoice_date:
-                invoice_parts.append(entry.invoice_date.strftime("%d/%m/%Y"))
-            if entry.invoice_value_cents:
-                invoice_parts.append(format_brl(entry.invoice_value_cents))
-            if entry.invoice_file_name:
-                invoice_parts.append(entry.invoice_file_name)
-            rows.append([
-                p(format_sao_paulo_datetime(entry.created_at)),
-                p(entry.item_name, "MaterialBold"),
-                p(str(entry.quantity)),
-                p(entry.unit_measure),
-                p(format_brl(entry.unit_price_cents)),
-                p("<br/>".join(invoice_parts) if invoice_parts else "-"),
-                p(entry.notes or "-"),
-            ])
-    else:
-        rows.append([p("Nenhuma entrada encontrada no período.", "MaterialCell"), "", "", "", "", "", ""])
-    table = Table(rows, colWidths=[23*mm, 44*mm, 15*mm, 16*mm, 25*mm, 37*mm, 30*mm], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#111111")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("BACKGROUND", (0,1), (-1,-1), colors.white),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#FAFAFA")]),
-        ("BOX", (0,0), (-1,-1), 0.4, colors.HexColor("#D9D9D9")),
-        ("INNERGRID", (0,0), (-1,-1), 0.25, colors.HexColor("#E8E8E8")),
-        ("VALIGN", (0,0), (-1,-1), "TOP"),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("SPAN", (0,1), (-1,1)) if not entries else ("LINEBELOW", (0,0), (-1,0), 0.5, colors.HexColor("#E60012")),
-    ]))
-    story.append(table)
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
+    story.append(pdft.spacer(8))
+
+    story.extend(pdft.section_title(st, "Entradas do período", f"{len(entries)} registro(s)"))
+    rows: list[list[Any]] = []
+    for entry in entries:
+        invoice_lines = []
+        if entry.invoice_number:
+            invoice_lines.append(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">Nº {pdft.txt(entry.invoice_number)}</font>')
+        extra = []
+        if entry.invoice_date:
+            extra.append(entry.invoice_date.strftime("%d/%m/%Y"))
+        if entry.invoice_value_cents:
+            extra.append(format_brl(entry.invoice_value_cents).replace(" ", "\u00a0"))
+        if extra:
+            invoice_lines.append(f'<font color="#6c6c75" size="7.4">{pdft.txt(" • ".join(extra))}</font>')
+        if entry.invoice_file_name:
+            invoice_lines.append(f'<font color="#a0a0a9" size="7.2">{pdft.txt(entry.invoice_file_name)}</font>')
+        rows.append([
+            pdft.markup(pdf_datetime_markup(entry.created_at)),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(entry.item_name)}</font>'),
+            f"{pdft.num(entry.quantity)} {entry.unit_measure or 'un'}",
+            format_brl(entry.unit_price_cents),
+            pdft.markup(f'<font name="{pdft.SANS_SEMIBOLD}" color="#17171a">{pdft.txt(format_brl(entry.total_cents))}</font>'),
+            pdft.markup("<br/>".join(invoice_lines) if invoice_lines else "-"),
+            entry.notes or "-",
+        ])
+    story.append(pdft.data_table(
+        st, ["Data", "Item", "Qtd.", "Valor unit.", "Total", "Nota fiscal", "Observações"], rows,
+        [19 * mm, 34 * mm, 17 * mm, 20 * mm, 29 * mm, 33 * mm, 26 * mm],
+        align=["L", "L", "R", "R", "R", "L", "L"],
+        empty_message="Nenhuma entrada encontrada no período.",
+        total=["", "Total do período", pdft.num(total_qty), "", format_brl(total_value), "", ""] if entries else None,
+    ))
+
+    return pdft.build_document(
+        story,
+        footer_left="J&T Express Brazil • Relatório de entrada de materiais",
+        running_title=f"Entrada de materiais • {period_label}",
+        title="Relatório de Entrada de Materiais",
+    )
 
 # ---------- Autenticação ----------
 
